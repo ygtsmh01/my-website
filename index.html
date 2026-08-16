@@ -218,7 +218,7 @@ ${combined}`;
         },
         body: JSON.stringify({
           model: MODEL,
-          max_tokens: 1500,
+          max_tokens: 4000,
           messages: [{ role: 'user', content: prompt }],
         }),
       });
@@ -226,6 +226,7 @@ ${combined}`;
       if (data.error) throw new Error(data.error.message || 'api-error');
       const textBlock = (data.content || []).find(b => b.type === 'text');
       if (!textBlock) throw new Error('no-text');
+      if (data.stop_reason === 'max_tokens') throw new Error('Yanıt çok uzun olduğu için kesildi, daha az link ile tekrar dene');
       const cleaned = textBlock.text.replace(/```json|```/g, '').trim();
       const parsed = JSON.parse(cleaned);
       setWeekData(parsed);
