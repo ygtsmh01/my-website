@@ -150,12 +150,14 @@ function App() {
 
 {
   "week_theme": "haftanın öne çıkan temasını özetleyen tek kısa cümle",
-  "must_reads": [ { "title": "başlık", "url": "kaynağın orijinal linki", "summary": "4-6 cümlelik gerçek bir özet, kaynağı okumadan da ana fikri anlat" } ],
-  "quiz": [ { "source_index": 0, "type": "mc", "bonus": false, "question": "soru metni", "options": ["seçenek1","seçenek2","seçenek3"], "correct_index": 0, "explanation": "kısa açıklama" } ],
-  "number_challenge": { "source_index": 0, "question": "kaynakta geçen bir sayıyı soran soru metni", "correct_value": 42, "tolerance": 5, "explanation": "kısa açıklama" },
-  "matching": { "pairs": [ { "source_index": 0, "detail": "o kaynağa özgü kısa, ayırt edici bir detay/olgu cümlesi" } ] },
-  "risk_question": { "question": "orta-zor bir soru", "options": ["seçenek1","seçenek2","seçenek3"], "correct_index": 0, "explanation": "kısa açıklama" }${isBossWeek ? ',\n  "boss_question": { "question": "birden fazla kaynaktaki bilgiyi birleştirmeyi gerektiren zor bir sentez sorusu", "options": ["seçenek1","seçenek2","seçenek3"], "correct_index": 0, "explanation": "kısa açıklama" }' : ''}
+  "must_reads": [ { "title": "başlık (en fazla 8 kelime)", "url": "kaynağın orijinal linki", "summary": "2-3 KISA cümlelik özet, kaynağı okumadan da ana fikri anlat" } ],
+  "quiz": [ { "source_index": 0, "type": "mc", "bonus": false, "question": "soru metni", "options": ["seçenek1","seçenek2","seçenek3"], "correct_index": 0, "explanation": "TEK kısa cümle" } ],
+  "number_challenge": { "source_index": 0, "question": "kaynakta geçen bir sayıyı soran soru metni", "correct_value": 42, "tolerance": 5, "explanation": "TEK kısa cümle" },
+  "matching": { "pairs": [ { "source_index": 0, "detail": "o kaynağa özgü, en fazla 6 kelimelik ayırt edici bir detay" } ] },
+  "risk_question": { "question": "orta-zor bir soru", "options": ["seçenek1","seçenek2","seçenek3"], "correct_index": 0, "explanation": "TEK kısa cümle" }${isBossWeek ? ',\n  "boss_question": { "question": "birden fazla kaynaktaki bilgiyi birleştirmeyi gerektiren zor bir sentez sorusu", "options": ["seçenek1","seçenek2","seçenek3"], "correct_index": 0, "explanation": "TEK kısa cümle" }' : ''}
 }
+
+ÖNEMLİ: Bu ${urls.length} kaynaklı bir hafta, yanıtın çok uzun olmasın diye TÜM metinleri (özet, soru, açıklama, detay) olabildiğince kısa ve öz tut, gereksiz kelime ekleme, markdown/madde işareti kullanma.
 
 Kurallar:
 - Her kaynak için bir must_reads öğesi oluştur (sırasıyla index 0,1,2,...).
@@ -178,7 +180,7 @@ ${combined}`;
           'anthropic-version': '2023-06-01',
           'anthropic-dangerous-direct-browser-access': 'true',
         },
-        body: JSON.stringify({ model: MODEL, max_tokens: 16000, messages: [{ role: 'user', content: prompt }] }),
+        body: JSON.stringify({ model: MODEL, max_tokens: 32000, messages: [{ role: 'user', content: prompt }] }),
       });
       const data = await response.json();
       if (data.error) throw new Error(data.error.message || 'api-error');
