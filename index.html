@@ -18,6 +18,7 @@
     --brass-dim: #8a744a;
     --coral: #e2604a;
     --azure: #6f97f0;
+    --green: #5fbf7a;
     --mono: 'IBM Plex Mono', monospace;
     --serif: 'Fraunces', Georgia, serif;
     --sans: 'IBM Plex Sans', -apple-system, sans-serif;
@@ -40,10 +41,11 @@
   .xp-fill { height: 100%; background: linear-gradient(90deg, var(--brass-dim), var(--brass)); }
 
   .panel { background: var(--panel); border: 1px solid var(--hairline); padding: 20px; margin-bottom: 18px; }
+  .panel.boss { border-color: var(--coral); }
   .panel-title { font-family: var(--serif); font-size: 17px; font-weight: 600; margin: 0 0 4px; }
   .panel-sub { font-size: 13px; color: var(--paper-dim); margin: 0 0 14px; line-height: 1.5; }
 
-  textarea, input[type=text], input[type=password] {
+  textarea, input[type=text], input[type=password], input[type=number] {
     width: 100%; background: var(--ink); border: 1px solid var(--hairline); color: var(--paper);
     font-family: var(--mono); font-size: 12.5px; padding: 12px; line-height: 1.5;
   }
@@ -55,6 +57,8 @@
   .btn:disabled { opacity: .4; cursor: not-allowed; }
   .btn.secondary { border-color: var(--azure); color: var(--azure); }
   .btn.secondary:hover:not(:disabled) { background: var(--azure); color: var(--ink); }
+  .btn.danger { border-color: var(--coral); color: var(--coral); }
+  .btn.danger:hover:not(:disabled) { background: var(--coral); color: var(--ink); }
   .btn.ghost { border-color: var(--hairline); color: var(--paper-dim); font-size: 10.5px; padding: 6px 10px; }
 
   .read-row { display: flex; gap: 10px; align-items: flex-start; padding: 10px 0; border-bottom: 1px solid var(--hairline-soft); }
@@ -67,10 +71,14 @@
   .quiz-q { font-size: 14px; font-weight: 500; margin-bottom: 10px; }
   .quiz-opt { display: block; width: 100%; text-align: left; background: var(--ink); border: 1px solid var(--hairline); color: var(--paper); padding: 9px 12px; margin-bottom: 6px; font-family: var(--sans); font-size: 13px; cursor: pointer; }
   .quiz-opt:hover:not(:disabled) { border-color: var(--azure); }
-  .quiz-opt.correct { border-color: #5fbf7a; background: rgba(95,191,122,.12); }
+  .quiz-opt.correct { border-color: var(--green); background: rgba(95,191,122,.12); }
   .quiz-opt.wrong { border-color: var(--coral); background: rgba(226,96,74,.12); }
   .quiz-explain { font-size: 12.5px; color: var(--paper-dim); margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--hairline); }
-  .bonus-tag { display: block; font-family: var(--mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--coral); margin-bottom: 6px; }
+  .tag { display: inline-block; font-family: var(--mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; margin-bottom: 6px; margin-right: 6px; padding: 2px 6px; border: 1px solid currentColor; }
+  .tag.bonus { color: var(--coral); }
+  .tag.tf { color: var(--azure); }
+  .tag.risk { color: var(--brass); }
+  .tag.boss { color: var(--coral); }
 
   .badge-wall { display: flex; flex-wrap: wrap; gap: 10px; }
   .badge { display: flex; align-items: center; gap: 8px; border: 1px solid var(--hairline); padding: 8px 12px; font-family: var(--mono); font-size: 11.5px; color: var(--paper-dim); }
@@ -86,6 +94,22 @@
   .loading-line { font-family: var(--mono); font-size: 12px; color: var(--azure); margin-top: 10px; }
   .empty-hint { font-size: 13px; color: var(--paper-dim); font-style: italic; }
   label.field-label { display: block; font-family: var(--mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em; color: var(--paper-dim); margin-bottom: 6px; }
+
+  .match-row { display: flex; gap: 14px; align-items: stretch; margin-bottom: 10px; }
+  .match-source { flex: 1; padding: 10px 12px; border: 1px solid var(--hairline); font-size: 13px; display: flex; align-items: center; }
+  .match-slot { flex: 1; padding: 10px 12px; border: 1px dashed var(--hairline); font-size: 12.5px; color: var(--paper-dim); cursor: pointer; display: flex; align-items: center; }
+  .match-slot.filled { border-style: solid; color: var(--paper); }
+  .match-slot.correct { border-color: var(--green); color: var(--green); }
+  .match-slot.wrong { border-color: var(--coral); color: var(--coral); }
+  .match-pool { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .match-chip { font-family: var(--mono); font-size: 11.5px; border: 1px solid var(--azure); color: var(--azure); padding: 6px 10px; cursor: pointer; }
+  .match-chip.selected { background: var(--azure); color: var(--ink); }
+  .match-chip.used { opacity: .3; cursor: not-allowed; }
+
+  .speed-banner { display: flex; justify-content: space-between; align-items: center; background: var(--coral); color: var(--ink); font-family: var(--mono); font-size: 13px; padding: 10px 14px; margin-bottom: 14px; position: sticky; top: 0; z-index: 5; }
+
+  .risk-choice-row { display: flex; gap: 10px; }
+  .risk-choice-row .btn { margin-top: 0; }
 </style>
 </head>
 <body>
@@ -97,9 +121,11 @@
 <script type="text/babel">
 const { useState, useEffect } = React;
 
-const PROFILE_KEY = 'aitakip_profile_v1';
+const PROFILE_KEY = 'aitakip_profile_v2';
 const APIKEY_KEY = 'aitakip_apikey_v1';
 const MODEL = 'claude-sonnet-5';
+const BOSS_EVERY = 5;
+const SPEED_SECONDS = 45;
 
 const LEVEL_TITLES = [
   { min: 0, name: 'Çırak' },
@@ -121,17 +147,27 @@ const BADGE_DEFS = [
   { id: 'seri-10', label: '10 Hafta Seri', check: p => p.streak >= 10 },
   { id: 'mukemmel', label: 'Mükemmel Skor', check: p => p.history.some(h => h.quizTotal > 0 && h.quizScore === h.quizTotal) },
   { id: 'on-hafta', label: '10 Hafta Tamamlandı', check: p => p.history.length >= 10 },
+  { id: 'kumarbaz', label: 'Kumarbaz', check: p => p.history.some(h => h.riskWon) },
+  { id: 'boss-avcisi', label: 'Boss Avcısı', check: p => p.history.some(h => h.bossCleared) },
 ];
 const EMPTY_PROFILE = { totalXP: 0, streak: 0, lastWeekNumber: 0, history: [], freezes: 0 };
 
 function loadProfile() {
   try {
     const raw = localStorage.getItem(PROFILE_KEY);
-    return raw ? JSON.parse(raw) : EMPTY_PROFILE;
+    return raw ? { ...EMPTY_PROFILE, ...JSON.parse(raw) } : EMPTY_PROFILE;
   } catch (e) { return EMPTY_PROFILE; }
 }
 function saveProfileLS(p) {
   localStorage.setItem(PROFILE_KEY, JSON.stringify(p));
+}
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
 }
 
 async function fetchReadable(url) {
@@ -143,26 +179,23 @@ async function fetchReadable(url) {
 }
 
 const DEMO_WEEK_DATA = {
+  isBoss: false,
   week_theme: 'Bu hafta yapay zeka ajanları ve kurumsal iş akışları öne çıktı (DEMO VERİ)',
   must_reads: [
-    {
-      title: '[Demo] Kurumsal AI Ajanları Nasıl Çalışır',
-      url: 'https://example.com/demo-1',
-      summary: 'Bu demo özet, gerçek bir API çağrısı yapılmadan test amaçlı üretildi. AI ajanları, çok adımlı görevleri araçlar kullanarak otonom şekilde tamamlayabiliyor. Kurumsal kullanımda en büyük risk, yetki sınırlarının net olmamasından kaynaklanıyor. Doğru gözetim mekanizmalarıyla verimlilik belirgin şekilde artıyor.',
-    },
-    {
-      title: '[Demo] Üretkenlik Araçlarında AI Entegrasyonu',
-      url: 'https://example.com/demo-2',
-      summary: 'İkinci demo kaynak da gerçek veri değildir, sadece arayüzü test etmen için var. Ekipler AI destekli araçları benimsedikçe tekrarlayan işler azalıyor, ama eğitim eksikliği benimsemeyi yavaşlatıyor. Başarılı şirketler küçük pilot gruplarla başlayıp kademeli genişliyor.',
-    },
+    { title: '[Demo] Kurumsal AI Ajanları Nasıl Çalışır', url: 'https://example.com/demo-1',
+      summary: 'Bu demo özet, gerçek bir API çağrısı yapılmadan test amaçlı üretildi. AI ajanları, çok adımlı görevleri araçlar kullanarak otonom şekilde tamamlayabiliyor. Kurumsal kullanımda en büyük risk, yetki sınırlarının net olmamasından kaynaklanıyor. Doğru gözetim mekanizmalarıyla verimlilik belirgin şekilde artıyor.' },
+    { title: '[Demo] Üretkenlik Araçlarında AI Entegrasyonu', url: 'https://example.com/demo-2',
+      summary: 'İkinci demo kaynak da gerçek veri değildir, sadece arayüzü test etmen için var. Ekipler AI destekli araçları benimsedikçe tekrarlayan işler azalıyor, ama eğitim eksikliği benimsemeyi yavaşlatıyor. Başarılı şirketler küçük pilot gruplarla başlayıp kademeli genişliyor.' },
   ],
   quiz: [
-    { source_index: 0, bonus: false, question: '[Demo] Metne göre AI ajanlarının kurumsal kullanımdaki en büyük riski nedir?', options: ['Maliyet', 'Yetki sınırlarının net olmaması', 'Yavaş çalışması'], correct_index: 1, explanation: 'Demo açıklama: özet metninde bu doğrudan belirtiliyor.' },
-    { source_index: 0, bonus: true, question: '[Demo-BONUS] Bu soru gerçek bir kaynakta olsaydı, sadece linke tıklayıp okuyarak cevaplanabilirdi.', options: ['Seçenek A', 'Seçenek B', 'Seçenek C'], correct_index: 0, explanation: 'Demo açıklama: bonus sorular özetten değil, kaynağın tam metninden çıkar.' },
-    { source_index: 1, bonus: false, question: '[Demo] İkinci kaynağa göre benimsemeyi ne yavaşlatıyor?', options: ['Bütçe', 'Eğitim eksikliği', 'Donanım'], correct_index: 1, explanation: 'Demo açıklama: özet metninde bu doğrudan belirtiliyor.' },
-    { source_index: 1, bonus: true, question: '[Demo-BONUS] Başarılı şirketler nasıl bir yaklaşım izliyor?', options: ['Büyük ölçekli tek seferlik geçiş', 'Küçük pilot gruplarla kademeli genişleme', 'Hiç pilot yapmadan'], correct_index: 1, explanation: 'Demo açıklama: bu bonus soru gerçek senaryoda detaylı okuma gerektirir.' },
+    { source_index: 0, type: 'mc', bonus: false, question: '[Demo] Metne göre AI ajanlarının kurumsal kullanımdaki en büyük riski nedir?', options: ['Maliyet', 'Yetki sınırlarının net olmaması', 'Yavaş çalışması'], correct_index: 1, explanation: 'Demo açıklama: özet metninde bu doğrudan belirtiliyor.' },
+    { source_index: 0, type: 'tf', bonus: true, question: '[Demo-BONUS] Bu ifade gerçek bir kaynakta olsaydı, sadece linke tıklayıp okuyarak doğrulanabilirdi: "Ajanlar hiçbir gözetim olmadan güvenli çalışır."', options: ['Doğru', 'Yanlış'], correct_index: 1, explanation: 'Demo açıklama: bonus sorular özetten değil, kaynağın tam metninden çıkar.' },
+    { source_index: 1, type: 'mc', bonus: false, question: '[Demo] İkinci kaynağa göre benimsemeyi ne yavaşlatıyor?', options: ['Bütçe', 'Eğitim eksikliği', 'Donanım'], correct_index: 1, explanation: 'Demo açıklama: özet metninde bu doğrudan belirtiliyor.' },
+    { source_index: 1, type: 'tf', bonus: true, question: '[Demo-BONUS] "Başarılı şirketler tek seferde büyük ölçekli geçiş yapıyor." ifadesi doğru mu?', options: ['Doğru', 'Yanlış'], correct_index: 1, explanation: 'Demo açıklama: bu bonus soru gerçek senaryoda detaylı okuma gerektirir.' },
   ],
-  challenge_prompt: '[Demo] Bu haftanın bulgusunu LinkedIn\'e tek cümlede nasıl yazardın?',
+  number_challenge: { source_index: 0, question: '[Demo] Kaynakta örnek olarak verilen verimlilik artışı yüzde kaçtır?', correct_value: 35, tolerance: 5, explanation: 'Demo açıklama: gerçek kaynakta geçen sayı burada sorulur.' },
+  matching: { pairs: [ { source_index: 0, detail: 'Yetki sınırı belirsizliği riski' }, { source_index: 1, detail: 'Eğitim eksikliği nedeniyle yavaş benimseme' } ] },
+  risk_question: { question: '[Demo-RİSK] Bu hafta hangi yaklaşım daha çok önerildi?', options: ['Büyük patlama geçişi', 'Kademeli pilot yaklaşımı', 'Hiç AI kullanmamak'], correct_index: 1, explanation: 'Demo açıklama: risk sorusu bahis mekaniği için örnek.' },
 };
 
 function App() {
@@ -176,11 +209,44 @@ function App() {
   const [weekData, setWeekData] = useState(null);
   const [checkedReads, setCheckedReads] = useState({});
   const [quizAnswers, setQuizAnswers] = useState({});
-  const [challengeAnswer, setChallengeAnswer] = useState('');
   const [weekClosed, setWeekClosed] = useState(false);
   const [lastGain, setLastGain] = useState(null);
   const [lastCritical, setLastCritical] = useState(false);
   const [lastFreezeEarned, setLastFreezeEarned] = useState(false);
+
+  const [numberGuess, setNumberGuess] = useState('');
+  const [shuffledDetails, setShuffledDetails] = useState([]);
+  const [matchSelected, setMatchSelected] = useState(null);
+  const [matchAssignments, setMatchAssignments] = useState({});
+  const [riskChoice, setRiskChoice] = useState(null);
+  const [riskAnswer, setRiskAnswer] = useState(null);
+  const [bossAnswer, setBossAnswer] = useState(null);
+  const [speedActive, setSpeedActive] = useState(false);
+  const [speedTimeLeft, setSpeedTimeLeft] = useState(SPEED_SECONDS);
+  const [speedResult, setSpeedResult] = useState(null);
+  const [lastRiskResult, setLastRiskResult] = useState(null);
+  const [lastBossResult, setLastBossResult] = useState(null);
+
+  useEffect(() => {
+    if (weekData && weekData.matching && weekData.matching.pairs) {
+      setShuffledDetails(shuffle(weekData.matching.pairs.map(p => p.detail)));
+    } else {
+      setShuffledDetails([]);
+    }
+  }, [weekData]);
+
+  useEffect(() => {
+    if (!speedActive || speedTimeLeft <= 0) return;
+    const t = setTimeout(() => setSpeedTimeLeft(s => s - 1), 1000);
+    return () => clearTimeout(t);
+  }, [speedActive, speedTimeLeft]);
+
+  useEffect(() => {
+    if (speedActive && speedTimeLeft <= 0 && speedResult === null) {
+      setSpeedActive(false);
+      setSpeedResult(false);
+    }
+  }, [speedActive, speedTimeLeft, speedResult]);
 
   function saveProfile(next) { setProfile(next); saveProfileLS(next); }
 
@@ -198,25 +264,43 @@ function App() {
     setBuildError('');
   }
 
-  function loadDemoWeek() {
-    setBuildError('');
+  function resetWeekState() {
     setWeekClosed(false);
     setCheckedReads({});
     setQuizAnswers({});
-    setChallengeAnswer('');
+    setNumberGuess('');
+    setMatchSelected(null);
+    setMatchAssignments({});
+    setRiskChoice(null);
+    setRiskAnswer(null);
+    setBossAnswer(null);
+    setSpeedActive(false);
+    setSpeedTimeLeft(SPEED_SECONDS);
+    setSpeedResult(null);
+    setLastRiskResult(null);
+    setLastBossResult(null);
+  }
+
+  function loadDemoWeek() {
+    setBuildError('');
+    resetWeekState();
     setWeekData(DEMO_WEEK_DATA);
+  }
+
+  function startSpeedRound() {
+    setSpeedActive(true);
+    setSpeedTimeLeft(SPEED_SECONDS);
+    setSpeedResult(null);
   }
 
   async function buildWeek() {
     const urls = linksText.split('\n').map(s => s.trim()).filter(Boolean);
     if (urls.length === 0 || !apiKey) return;
+    const isBossWeek = (profile.lastWeekNumber + 1) % BOSS_EVERY === 0;
     setBuilding(true);
     setBuildError('');
     setWeekData(null);
-    setWeekClosed(false);
-    setCheckedReads({});
-    setQuizAnswers({});
-    setChallengeAnswer('');
+    resetWeekState();
 
     let combined = '';
     for (let i = 0; i < urls.length; i++) {
@@ -236,16 +320,21 @@ function App() {
 {
   "week_theme": "haftanın öne çıkan temasını özetleyen tek kısa cümle",
   "must_reads": [ { "title": "başlık", "url": "kaynağın orijinal linki", "summary": "4-6 cümlelik gerçek bir özet, kaynağı okumadan da ana fikri anlat" } ],
-  "quiz": [ { "source_index": 0, "bonus": false, "question": "soru metni", "options": ["seçenek1","seçenek2","seçenek3"], "correct_index": 0, "explanation": "kısa açıklama" } ],
-  "challenge_prompt": "haftanın en çarpıcı bulgusunu LinkedIn'e tek cümlede nasıl yazardın tarzında bir mikro görev cümlesi"
+  "quiz": [ { "source_index": 0, "type": "mc", "bonus": false, "question": "soru metni", "options": ["seçenek1","seçenek2","seçenek3"], "correct_index": 0, "explanation": "kısa açıklama" } ],
+  "number_challenge": { "source_index": 0, "question": "kaynakta geçen bir sayıyı soran soru metni", "correct_value": 42, "tolerance": 5, "explanation": "kısa açıklama" },
+  "matching": { "pairs": [ { "source_index": 0, "detail": "o kaynağa özgü kısa, ayırt edici bir detay/olgu cümlesi" } ] },
+  "risk_question": { "question": "orta-zor bir soru", "options": ["seçenek1","seçenek2","seçenek3"], "correct_index": 0, "explanation": "kısa açıklama" }${isBossWeek ? ',\n  "boss_question": { "question": "birden fazla kaynaktaki bilgiyi birleştirmeyi gerektiren zor bir sentez sorusu", "options": ["seçenek1","seçenek2","seçenek3"], "correct_index": 0, "explanation": "kısa açıklama" }' : ''}
 }
 
 Kurallar:
 - Her kaynak için bir must_reads öğesi oluştur (sırasıyla index 0,1,2,...).
 - Her kaynak için quiz'de "source_index" o kaynağın must_reads içindeki index'ine eşit olan tam olarak 2 soru olsun:
-  - 1 tanesi "bonus": false — cevabı yukarıdaki summary'den çıkarılabilecek, genel anlama sorusu.
-  - 1 tanesi "bonus": true — SADECE kaynağın tam metnindeki spesifik bir detaya (bir sayı, örnek, isim, alıntı, küçük bir nüans) dayanmalı; summary'yi okuyarak cevaplanamamalı, gerçekten linke girip okumayı gerektirmeli.
-- Toplam quiz uzunluğu kaynak sayısının 2 katı olmalı.
+  - 1 tanesi "type": "mc", "bonus": false — cevabı summary'den çıkarılabilecek, genel anlama sorusu, 3 seçenekli.
+  - 1 tanesi "type": "tf", "bonus": true — Doğru/Yanlış formatında bir ifade, SADECE kaynağın tam metnindeki spesifik bir detaya dayanmalı, summary'den cevaplanamamalı; "options" tam olarak ["Doğru","Yanlış"] olmalı, "correct_index" 0 (Doğru) veya 1 (Yanlış).
+- "number_challenge": haftada sadece 1 tane, kaynaklardan birinde geçen somut bir sayıyı/istatistiği sorsun, makul bir "tolerance" belirle.
+- "matching": kaynak sayısı 2 veya daha fazlaysa doldur, "pairs" uzunluğu kaynak sayısına eşit olsun, her "detail" sadece o kaynağa ait, kısa ve ayırt edici olsun (başlığın tekrarı olmasın). Kaynak sayısı 1 ise "pairs": [] olarak boş bırak.
+- "risk_question": kaynaklardan herhangi birine dayanan, normal sorulardan biraz daha zor, 3 seçenekli tek bir soru.
+${isBossWeek ? '- "boss_question": bu bir BOSS HAFTASI, birden fazla kaynaktaki bilgiyi birlikte kullanmayı gerektiren en zor soruyu üret.' : ''}
 
 Ham içerik:
 ${combined}`;
@@ -260,7 +349,7 @@ ${combined}`;
         },
         body: JSON.stringify({
           model: MODEL,
-          max_tokens: 4000,
+          max_tokens: 6000,
           messages: [{ role: 'user', content: prompt }],
         }),
       });
@@ -280,6 +369,7 @@ ${combined}`;
       if (start !== -1 && end !== -1) cleaned = cleaned.slice(start, end + 1);
       cleaned = cleaned.replace(/,(\s*[}\]])/g, '$1');
       const parsed = JSON.parse(cleaned);
+      parsed.isBoss = isBossWeek;
       setWeekData(parsed);
     } catch (e) {
       if (e.isAuthError) {
@@ -296,10 +386,35 @@ ${combined}`;
   function selectQuizAnswer(qIdx, optIdx) {
     if (quizAnswers[qIdx] !== undefined) return;
     setQuizAnswers(prev => ({ ...prev, [qIdx]: optIdx }));
+    checkSpeedDone();
+  }
+
+  function selectMatchDetail(detail, used) {
+    if (weekClosed || used) return;
+    setMatchSelected(detail);
+  }
+  function assignMatch(sourceIndex) {
+    if (weekClosed || !matchSelected) return;
+    setMatchAssignments(prev => ({ ...prev, [sourceIndex]: matchSelected }));
+    setMatchSelected(null);
+    checkSpeedDone();
+  }
+
+  function checkSpeedDone() {
+    if (!speedActive || !weekData) return;
+    setTimeout(() => {
+      const allQuizAnswered = weekData.quiz.every((_, i) => quizAnswers[i] !== undefined);
+      if (allQuizAnswered && speedActive && speedTimeLeft > 0) {
+        setSpeedActive(false);
+        setSpeedResult(true);
+      }
+    }, 0);
   }
 
   function closeWeek() {
     if (!weekData) return;
+    if (riskChoice === 'bet' && riskAnswer === null) return;
+
     const quizTotal = weekData.quiz.length;
     const quizScore = weekData.quiz.reduce((acc, q, i) => acc + (quizAnswers[i] === q.correct_index ? 1 : 0), 0);
     const quizXP = weekData.quiz.reduce((acc, q, i) => {
@@ -307,14 +422,43 @@ ${combined}`;
       return acc + (q.bonus ? 20 : 10);
     }, 0);
     const allReadChecked = weekData.must_reads.every((_, i) => checkedReads[i]);
-    let xpGain = 20;
-    xpGain += quizXP;
-    if (allReadChecked) xpGain += 15;
-    if (challengeAnswer.trim()) xpGain += 10;
-    if (profile.streak > 0) xpGain += 20;
+
+    let numberCorrect = false;
+    if (weekData.number_challenge && numberGuess.trim() !== '') {
+      const g = parseFloat(numberGuess);
+      const nc = weekData.number_challenge;
+      if (!isNaN(g) && Math.abs(g - nc.correct_value) <= (nc.tolerance || 0)) numberCorrect = true;
+    }
+
+    let matchCorrectCount = 0;
+    const matchPairs = (weekData.matching && weekData.matching.pairs) || [];
+    matchPairs.forEach(p => { if (matchAssignments[p.source_index] === p.detail) matchCorrectCount++; });
+
+    let xpBeforeRisk = 20;
+    xpBeforeRisk += quizXP;
+    if (allReadChecked) xpBeforeRisk += 15;
+    if (profile.streak > 0) xpBeforeRisk += 20;
+    if (numberCorrect) xpBeforeRisk += 15;
+    xpBeforeRisk += matchCorrectCount * 10;
+    if (speedResult === true) xpBeforeRisk += 30;
+
+    let bossCleared = false;
+    if (weekData.isBoss && weekData.boss_question) {
+      bossCleared = bossAnswer === weekData.boss_question.correct_index;
+      if (bossCleared) xpBeforeRisk += 30;
+    }
 
     const isCritical = Math.random() < 0.2;
-    if (isCritical) xpGain = Math.round(xpGain * 1.5);
+    if (isCritical) xpBeforeRisk = Math.round(xpBeforeRisk * 1.5);
+
+    let xpGain = xpBeforeRisk;
+    let riskWon = null;
+    if (riskChoice === 'bet' && weekData.risk_question) {
+      const betAmount = Math.round(xpBeforeRisk / 2);
+      riskWon = riskAnswer === weekData.risk_question.correct_index;
+      xpGain = riskWon ? xpBeforeRisk + betAmount : xpBeforeRisk - betAmount;
+      if (xpGain < 5) xpGain = 5;
+    }
 
     const nextStreak = profile.streak + 1;
     const earnedFreeze = nextStreak > 0 && nextStreak % 3 === 0;
@@ -329,14 +473,16 @@ ${combined}`;
         date: new Date().toISOString().slice(0, 10),
         xpEarned: xpGain,
         quizScore, quizTotal,
-        challengeAnswer: challengeAnswer.trim(),
         weekTheme: weekData.week_theme || '',
         critical: isCritical,
+        riskWon,
+        bossCleared,
       }],
     };
     setLastGain(xpGain);
     setLastCritical(isCritical);
     setLastFreezeEarned(earnedFreeze);
+    setLastRiskResult(riskWon);
     setWeekClosed(true);
     saveProfile(next);
   }
@@ -353,7 +499,6 @@ ${combined}`;
         date: new Date().toISOString().slice(0, 10),
         xpEarned: 0,
         quizScore: 0, quizTotal: 0,
-        challengeAnswer: '',
         weekTheme: '',
         frozen: true,
       }],
@@ -365,7 +510,7 @@ ${combined}`;
     saveProfile(EMPTY_PROFILE);
     setWeekData(null);
     setLinksText('');
-    setWeekClosed(false);
+    resetWeekState();
   }
 
   const lvl = levelFor(profile.totalXP);
@@ -389,8 +534,17 @@ ${combined}`;
     );
   }
 
+  const usedDetails = new Set(Object.values(matchAssignments));
+
   return (
     <div className="root">
+      {speedActive && (
+        <div className="speed-banner">
+          <span>⏱ HIZ TURU — tüm soruları bitir, +30 XP kazan</span>
+          <strong>{speedTimeLeft}s</strong>
+        </div>
+      )}
+
       <div className="ledger-head">
         <div>
           <div className="eyebrow">AI Takip Defteri · No. {String(profile.lastWeekNumber + 1).padStart(3, '0')}</div>
@@ -425,7 +579,10 @@ ${combined}`;
 
       <div className="panel">
         <p className="panel-title">Bu Haftanın Linkleri</p>
-        <p className="panel-sub">Bu hafta okuyacağın/dinleyeceğin makale, blog, podcast veya YouTube linklerini alt alta yapıştır. Her 3 haftalık seride bir dondurma hakkı kazanırsın — meşgul bir hafta serini bozmadan atlayabilirsin.</p>
+        <p className="panel-sub">
+          Bu hafta okuyacağın/dinleyeceğin makale, blog, podcast veya YouTube linklerini alt alta yapıştır.
+          Her 3 haftalık seride bir dondurma hakkı kazanırsın. Her {BOSS_EVERY}. hafta BOSS HAFTASI olur — daha zor, daha ödüllü.
+        </p>
         <textarea value={linksText} onChange={e => setLinksText(e.target.value)} placeholder={"https://...\nhttps://...\nhttps://..."} />
         <button className="btn" onClick={buildWeek} disabled={building || !linksText.trim()}>
           {building ? 'İşleniyor…' : 'Haftayı Oluştur'}
@@ -451,6 +608,13 @@ ${combined}`;
 
       {weekData && (
         <React.Fragment>
+          {weekData.isBoss && (
+            <div className="panel boss">
+              <p className="panel-title">👑 BOSS HAFTASI</p>
+              <p className="panel-sub">Bu hafta her şey daha zor ve daha ödüllü. Kaynakları dikkatlice oku.</p>
+            </div>
+          )}
+
           <div className="panel">
             <p className="panel-title">{weekData.week_theme || 'Bu haftanın okumaları'}</p>
             {weekData.must_reads.map((mr, i) => (
@@ -459,11 +623,19 @@ ${combined}`;
                   onChange={() => setCheckedReads(prev => ({ ...prev, [i]: !prev[i] }))} />
                 <div>
                   {mr.url ? <a href={mr.url} target="_blank" rel="noopener noreferrer">{mr.title}</a> : <strong>{mr.title}</strong>}
-                  <div className="one-liner">{mr.summary || mr.one_liner}</div>
+                  <div className="one-liner">{mr.summary}</div>
                 </div>
               </div>
             ))}
           </div>
+
+          {!speedActive && !weekClosed && (
+            <div className="panel">
+              <p className="panel-title">⏱ Hız Turu</p>
+              <p className="panel-sub">{SPEED_SECONDS} saniyede tüm quiz sorularını bitirirsen +30 XP bonus kazanırsın.</p>
+              <button className="btn secondary" onClick={startSpeedRound}>Hız Turunu Başlat</button>
+            </div>
+          )}
 
           {weekData.must_reads.map((mr, si) => {
             const sourceQuiz = weekData.quiz
@@ -476,8 +648,9 @@ ${combined}`;
                 {sourceQuiz.map(({ q, qi }) => (
                   <div className="quiz-card" key={qi}>
                     <div className="quiz-q">
-                      {q.bonus && <span className="bonus-tag">BONUS · +20 XP · linke girmen gerekir</span>}
-                      {q.question}
+                      {q.type === 'tf' && <span className="tag tf">DOĞRU/YANLIŞ</span>}
+                      {q.bonus && <span className="tag bonus">BONUS · +20 XP · linke girmen gerekir</span>}
+                      <div>{q.question}</div>
                     </div>
                     {q.options.map((opt, oi) => {
                       const answered = quizAnswers[qi] !== undefined;
@@ -493,21 +666,102 @@ ${combined}`;
             );
           })}
 
-          <div className="panel">
-            <p className="panel-title">Mikro Görev</p>
-            <p className="panel-sub">{weekData.challenge_prompt}</p>
-            <input type="text" value={challengeAnswer} disabled={weekClosed}
-              onChange={e => setChallengeAnswer(e.target.value)} placeholder="Tek cümlelik LinkedIn çıkarımın…" />
-          </div>
+          {weekData.number_challenge && (
+            <div className="panel">
+              <p className="panel-title">🔢 Sayı Tahmini</p>
+              <p className="panel-sub">{weekData.number_challenge.question}</p>
+              <input type="number" value={numberGuess} disabled={weekClosed}
+                onChange={e => setNumberGuess(e.target.value)} placeholder="Tahminin…" />
+              {weekClosed && (
+                <div className="quiz-explain">
+                  Doğru cevap: {weekData.number_challenge.correct_value} (±{weekData.number_challenge.tolerance}). {weekData.number_challenge.explanation}
+                </div>
+              )}
+            </div>
+          )}
+
+          {weekData.matching && weekData.matching.pairs && weekData.matching.pairs.length > 0 && (
+            <div className="panel">
+              <p className="panel-title">🔗 Eşleştirme</p>
+              <p className="panel-sub">Önce alttaki detay etiketlerinden birini seç, sonra ait olduğunu düşündüğün kaynağa tıkla.</p>
+              {weekData.matching.pairs.map((p, pi) => {
+                const assigned = matchAssignments[p.source_index];
+                let slotCls = 'match-slot' + (assigned ? ' filled' : '');
+                if (weekClosed && assigned) slotCls += assigned === p.detail ? ' correct' : ' wrong';
+                return (
+                  <div className="match-row" key={pi}>
+                    <div className="match-source">{weekData.must_reads[p.source_index] ? weekData.must_reads[p.source_index].title : 'Kaynak ' + p.source_index}</div>
+                    <div className={slotCls} onClick={() => assignMatch(p.source_index)}>
+                      {assigned || 'Buraya eşleştir…'}
+                    </div>
+                  </div>
+                );
+              })}
+              <div className="match-pool">
+                {shuffledDetails.map((d, di) => {
+                  const used = usedDetails.has(d);
+                  const cls = 'match-chip' + (matchSelected === d ? ' selected' : '') + (used ? ' used' : '');
+                  return <span key={di} className={cls} onClick={() => selectMatchDetail(d, used || weekClosed)}>{d}</span>;
+                })}
+              </div>
+            </div>
+          )}
+
+          {weekData.isBoss && weekData.boss_question && (
+            <div className="panel boss">
+              <p className="panel-title">👑 Boss Sorusu · +30 XP</p>
+              <div className="quiz-card">
+                <div className="quiz-q"><span className="tag boss">SENTEZ SORUSU</span><div>{weekData.boss_question.question}</div></div>
+                {weekData.boss_question.options.map((opt, oi) => {
+                  const answered = bossAnswer !== null;
+                  let cls = 'quiz-opt';
+                  if (answered && oi === weekData.boss_question.correct_index) cls += ' correct';
+                  else if (answered && oi === bossAnswer) cls += ' wrong';
+                  return <button key={oi} className={cls} disabled={answered || weekClosed} onClick={() => setBossAnswer(oi)}>{opt}</button>;
+                })}
+                {bossAnswer !== null && <div className="quiz-explain">{weekData.boss_question.explanation}</div>}
+              </div>
+            </div>
+          )}
+
+          {weekData.risk_question && (
+            <div className="panel">
+              <p className="panel-title">🎲 Çift Yap ya da Kaybet</p>
+              <p className="panel-sub">Şu ana kadarki XP kazancının yarısını bahse yatır. Doğru bilirsen bahis miktarın kadar ekstra kazanırsın, yanlış bilirsen o kadar kaybedersin.</p>
+              {riskChoice === null && !weekClosed && (
+                <div className="risk-choice-row">
+                  <button className="btn danger" onClick={() => setRiskChoice('bet')}>Bahse Gir</button>
+                  <button className="btn ghost" onClick={() => setRiskChoice('skip')}>Riske Girme</button>
+                </div>
+              )}
+              {riskChoice === 'bet' && (
+                <div className="quiz-card">
+                  <div className="quiz-q"><span className="tag risk">RİSK SORUSU</span><div>{weekData.risk_question.question}</div></div>
+                  {weekData.risk_question.options.map((opt, oi) => {
+                    const answered = riskAnswer !== null;
+                    let cls = 'quiz-opt';
+                    if (answered && oi === weekData.risk_question.correct_index) cls += ' correct';
+                    else if (answered && oi === riskAnswer) cls += ' wrong';
+                    return <button key={oi} className={cls} disabled={answered || weekClosed} onClick={() => setRiskAnswer(oi)}>{opt}</button>;
+                  })}
+                  {riskAnswer !== null && <div className="quiz-explain">{weekData.risk_question.explanation}</div>}
+                </div>
+              )}
+              {riskChoice === 'skip' && <p className="one-liner">Riske girmedin, bahis mekaniği bu hafta devre dışı.</p>}
+            </div>
+          )}
 
           <div className="panel">
             {!weekClosed ? (
-              <button className="btn secondary" onClick={closeWeek}>Haftayı Kapat ve Damgala</button>
+              <button className="btn secondary" onClick={closeWeek} disabled={riskChoice === 'bet' && riskAnswer === null}>Haftayı Kapat ve Damgala</button>
             ) : (
               <div>
                 <div className="closed-stamp">ONAYLANDI · +{lastGain} XP</div>
                 {lastCritical && <div className="critical-tag">⚡ KRİTİK BAŞARI! 1.5× bonus uygulandı</div>}
                 {lastFreezeEarned && <div className="critical-tag">❄ Yeni dondurma hakkı kazandın!</div>}
+                {lastRiskResult === true && <div className="critical-tag">🎲 Bahsi kazandın!</div>}
+                {lastRiskResult === false && <div className="critical-tag">🎲 Bahsi kaybettin.</div>}
+                {speedResult === true && <div className="critical-tag">⏱ Hız turu bonusu kazandın!</div>}
                 <p className="panel-sub" style={{ marginTop: 10 }}>Gelecek hafta yeni linkleri yapıştırıp tekrar aç.</p>
               </div>
             )}
@@ -533,7 +787,7 @@ ${combined}`;
             <div className="history-row" key={h.weekNumber}>
               <span className="hw">Hafta {h.weekNumber} · {h.date}</span>
               <span>
-                {h.frozen ? '❄ Donduruldu' : `${h.quizScore}/${h.quizTotal} · +${h.xpEarned} XP${h.critical ? ' ⚡' : ''}`}
+                {h.frozen ? '❄ Donduruldu' : `${h.quizScore}/${h.quizTotal} · +${h.xpEarned} XP${h.critical ? ' ⚡' : ''}${h.bossCleared ? ' 👑' : ''}`}
               </span>
             </div>
           ))}
