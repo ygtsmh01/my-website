@@ -165,6 +165,13 @@ function App() {
     setKeyDraft('');
   }
 
+  function changeKey() {
+    localStorage.removeItem(APIKEY_KEY);
+    setApiKey('');
+    setKeyDraft('');
+    setBuildError('');
+  }
+
   async function buildWeek() {
     const urls = linksText.split('\n').map(s => s.trim()).filter(Boolean);
     if (urls.length === 0 || !apiKey) return;
@@ -223,7 +230,12 @@ ${combined}`;
         }),
       });
       const data = await response.json();
-      if (data.error) throw new Error(data.error.message || 'api-error');
+      if (data.error) {
+        if (data.error.type === 'authentication_error') {
+          throw Object.assign(new Error('API anahtarı geçersiz veya süresi dolmuş.'), { isAuthError: true });
+        }
+        throw new Error(data.error.message || 'api-error');
+      }
       const textBlock = (data.content || []).find(b => b.type === 'text');
       if (!textBlock) throw new Error('no-text');
       if (data.stop_reason === 'max_tokens') throw new Error('Yanıt çok uzun olduğu için kesildi, daha az link ile tekrar dene');
@@ -235,7 +247,11 @@ ${combined}`;
       const parsed = JSON.parse(cleaned);
       setWeekData(parsed);
     } catch (e) {
-      setBuildError('Hafta işlenirken bir sorun oldu: ' + e.message + '. API anahtarını ve linkleri kontrol edip tekrar dener misin?');
+      if (e.isAuthError) {
+        setBuildError('AUTH_ERROR:' + e.message);
+      } else {
+        setBuildError('Hafta işlenirken bir sorun oldu: ' + e.message + '. API anahtarını ve linkleri kontrol edip tekrar dener misin?');
+      }
     } finally {
       setBuilding(false);
       setBuildStatus('');
@@ -319,6 +335,10 @@ ${combined}`;
         <div className="level-tag">Seviye {lvl.level}<div className="level-name">{lvl.name}</div></div>
       </div>
 
+      <div style={{ textAlign: 'right', marginBottom: 14 }}>
+        <button className="btn ghost" onClick={changeKey}>API Anahtarını Değiştir</button>
+      </div>
+
       <div className="stat-strip">
         <div className="stat-cell">
           <div className="stat-label">Toplam XP</div>
@@ -343,7 +363,14 @@ ${combined}`;
           {building ? 'İşleniyor…' : 'Haftayı Oluştur'}
         </button>
         {building && <div className="loading-line">{buildStatus}</div>}
-        {buildError && <div className="error-box">{buildError}</div>}
+        {buildError && buildError.startsWith('AUTH_ERROR:') ? (
+          <div className="error-box">
+            {buildError.replace('AUTH_ERROR:', '')} Devam etmek için yeni bir anahtar gir.
+            <div><button className="btn secondary" style={{ marginTop: 10 }} onClick={changeKey}>Anahtarı Değiştir</button></div>
+          </div>
+        ) : (
+          buildError && <div className="error-box">{buildError}</div>
+        )}
       </div>
 
       {weekData && (
