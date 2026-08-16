@@ -227,7 +227,11 @@ ${combined}`;
       const textBlock = (data.content || []).find(b => b.type === 'text');
       if (!textBlock) throw new Error('no-text');
       if (data.stop_reason === 'max_tokens') throw new Error('Yanıt çok uzun olduğu için kesildi, daha az link ile tekrar dene');
-      const cleaned = textBlock.text.replace(/```json|```/g, '').trim();
+      let cleaned = textBlock.text.replace(/```json|```/g, '').trim();
+      const start = cleaned.indexOf('{');
+      const end = cleaned.lastIndexOf('}');
+      if (start !== -1 && end !== -1) cleaned = cleaned.slice(start, end + 1);
+      cleaned = cleaned.replace(/,(\s*[}\]])/g, '$1');
       const parsed = JSON.parse(cleaned);
       setWeekData(parsed);
     } catch (e) {
