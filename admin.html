@@ -124,8 +124,8 @@ function App() {
   async function buildWeek() {
     const urls = linksText.split('\n').map(s => s.trim()).filter(Boolean);
     if (urls.length === 0 || !apiKey) return;
-    if (urls.length > 6) {
-      setBuildError(`En fazla 6 link ekleyebilirsin (şu an ${urls.length} tane var). Her kaynak için ayrı sorular/eşleştirme üretildiğinden daha fazlası modelin yanıtını yarıda kesiyor. Kalanları gelecek haftaya bırak.`);
+    if (urls.length > 10) {
+      setBuildError(`En fazla 10 link ekleyebilirsin (şu an ${urls.length} tane var).`);
       return;
     }
     const isBossWeek = nextWeekNumber % BOSS_EVERY === 0;
@@ -178,7 +178,7 @@ ${combined}`;
           'anthropic-version': '2023-06-01',
           'anthropic-dangerous-direct-browser-access': 'true',
         },
-        body: JSON.stringify({ model: MODEL, max_tokens: 8000, messages: [{ role: 'user', content: prompt }] }),
+        body: JSON.stringify({ model: MODEL, max_tokens: 16000, messages: [{ role: 'user', content: prompt }] }),
       });
       const data = await response.json();
       if (data.error) throw new Error(data.error.message || 'api-error');
