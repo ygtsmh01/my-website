@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AI Takip Defteri</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+  :root {
+    --ink: #14151f;
+    --panel: #1c1e2c;
+    --hairline: #33364c;
+    --hairline-soft: #262838;
+    --paper: #edebe4;
+    --paper-dim: #9698ac;
+    --brass: #c9a34e;
+    --brass-dim: #8a744a;
+    --coral: #e2604a;
+    --azure: #6f97f0;
+    --mono: 'IBM Plex Mono', monospace;
+    --serif: 'Fraunces', Georgia, serif;
+    --sans: 'IBM Plex Sans', -apple-system, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--ink); color: var(--paper); font-family: var(--sans); }
+  .root { max-width: 720px; margin: 0 auto; padding: 28px 20px 60px; }
+
+  .ledger-head { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 1px solid var(--hairline); padding-bottom: 18px; margin-bottom: 22px; }
+  .eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: .14em; color: var(--brass); text-transform: uppercase; margin-bottom: 6px; }
+  h1 { font-family: var(--serif); font-weight: 600; font-size: 26px; margin: 0; }
+  .level-tag { text-align: right; font-family: var(--mono); font-size: 12px; color: var(--paper-dim); }
+  .level-name { font-family: var(--serif); color: var(--brass); font-size: 16px; font-weight: 600; }
+
+  .stat-strip { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1px; background: var(--hairline); border: 1px solid var(--hairline); margin-bottom: 22px; }
+  .stat-cell { background: var(--panel); padding: 14px 16px; }
+  .stat-label { font-family: var(--mono); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--paper-dim); margin-bottom: 6px; }
+  .stat-value { font-family: var(--mono); font-size: 22px; font-weight: 600; }
+  .xp-track { height: 6px; background: var(--hairline-soft); border-radius: 3px; overflow: hidden; margin-top: 8px; }
+  .xp-fill { height: 100%; background: linear-gradient(90deg, var(--brass-dim), var(--brass)); }
+
+  .panel { background: var(--panel); border: 1px solid var(--hairline); padding: 20px; margin-bottom: 18px; }
+  .panel-title { font-family: var(--serif); font-size: 17px; font-weight: 600; margin: 0 0 4px; }
+  .panel-sub { font-size: 13px; color: var(--paper-dim); margin: 0 0 14px; line-height: 1.5; }
+
+  textarea, input[type=text], input[type=password] {
+    width: 100%; background: var(--ink); border: 1px solid var(--hairline); color: var(--paper);
+    font-family: var(--mono); font-size: 12.5px; padding: 12px; line-height: 1.5;
+  }
+  textarea { min-height: 110px; resize: vertical; }
+  textarea:focus, input:focus { outline: 1px solid var(--azure); }
+
+  .btn { font-family: var(--mono); font-size: 12.5px; letter-spacing: .04em; text-transform: uppercase; padding: 10px 18px; border: 1px solid var(--brass); background: transparent; color: var(--brass); cursor: pointer; margin-top: 14px; }
+  .btn:hover:not(:disabled) { background: var(--brass); color: var(--ink); }
+  .btn:disabled { opacity: .4; cursor: not-allowed; }
+  .btn.secondary { border-color: var(--azure); color: var(--azure); }
+  .btn.secondary:hover:not(:disabled) { background: var(--azure); color: var(--ink); }
+  .btn.ghost { border-color: var(--hairline); color: var(--paper-dim); font-size: 10.5px; padding: 6px 10px; }
+
+  .read-row { display: flex; gap: 10px; align-items: flex-start; padding: 10px 0; border-bottom: 1px solid var(--hairline-soft); }
+  .read-row:last-child { border-bottom: none; }
+  .read-row input[type=checkbox] { margin-top: 3px; accent-color: var(--brass); width: 15px; height: 15px; }
+  .read-row a { color: var(--paper); font-weight: 600; text-decoration: none; border-bottom: 1px solid var(--brass-dim); }
+  .one-liner { font-size: 12.5px; color: var(--paper-dim); margin-top: 3px; }
+
+  .quiz-card { border: 1px solid var(--hairline); padding: 14px 16px; margin-bottom: 12px; }
+  .quiz-q { font-size: 14px; font-weight: 500; margin-bottom: 10px; }
+  .quiz-opt { display: block; width: 100%; text-align: left; background: var(--ink); border: 1px solid var(--hairline); color: var(--paper); padding: 9px 12px; margin-bottom: 6px; font-family: var(--sans); font-size: 13px; cursor: pointer; }
+  .quiz-opt:hover:not(:disabled) { border-color: var(--azure); }
+  .quiz-opt.correct { border-color: #5fbf7a; background: rgba(95,191,122,.12); }
+  .quiz-opt.wrong { border-color: var(--coral); background: rgba(226,96,74,.12); }
+  .quiz-explain { font-size: 12.5px; color: var(--paper-dim); margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--hairline); }
+
+  .badge-wall { display: flex; flex-wrap: wrap; gap: 10px; }
+  .badge { display: flex; align-items: center; gap: 8px; border: 1px solid var(--hairline); padding: 8px 12px; font-family: var(--mono); font-size: 11.5px; color: var(--paper-dim); }
+  .badge.earned { border-color: var(--brass); color: var(--brass); }
+  .badge-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+  .history-row { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 12px; padding: 8px 0; border-bottom: 1px solid var(--hairline-soft); color: var(--paper-dim); }
+  .history-row .hw { color: var(--paper); }
+
+  .closed-stamp { display: inline-block; border: 2px solid var(--brass); color: var(--brass); font-family: var(--mono); font-size: 13px; letter-spacing: .1em; padding: 6px 14px; transform: rotate(-4deg); margin-top: 10px; }
+  .error-box { border: 1px solid var(--coral); color: var(--coral); padding: 10px 12px; font-family: var(--mono); font-size: 12px; margin-top: 10px; }
+  .loading-line { font-family: var(--mono); font-size: 12px; color: var(--azure); margin-top: 10px; }
+  .empty-hint { font-size: 13px; color: var(--paper-dim); font-style: italic; }
+  label.field-label { display: block; font-family: var(--mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em; color: var(--paper-dim); margin-bottom: 6px; }
+</style>
+</head>
+<body>
+<div class="root" id="root"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<script type="text/babel">
+const { useState, useEffect } = React;
+
+const PROFILE_KEY = 'aitakip_profile_v1';
+const APIKEY_KEY = 'aitakip_apikey_v1';
+const MODEL = 'claude-sonnet-5';
+
+const LEVEL_TITLES = [
+  { min: 0, name: 'Çırak' },
+  { min: 100, name: 'Pratisyen' },
+  { min: 250, name: 'Kıdemli Pratisyen' },
+  { min: 450, name: 'Uzman' },
+  { min: 700, name: 'Stratejist' },
+  { min: 1000, name: 'Risk + AI Mimarı' },
+];
+function levelFor(xp) {
+  let idx = 0;
+  for (let i = 0; i < LEVEL_TITLES.length; i++) if (xp >= LEVEL_TITLES[i].min) idx = i;
+  return { level: idx + 1, name: LEVEL_TITLES[idx].name, floor: LEVEL_TITLES[idx].min, next: LEVEL_TITLES[idx + 1] };
+}
+const BADGE_DEFS = [
+  { id: 'ilk-hafta', label: 'İlk Hafta', check: p => p.history.length >= 1 },
+  { id: 'seri-3', label: '3 Hafta Seri', check: p => p.streak >= 3 },
+  { id: 'seri-5', label: '5 Hafta Seri', check: p => p.streak >= 5 },
+  { id: 'seri-10', label: '10 Hafta Seri', check: p => p.streak >= 10 },
+  { id: 'mukemmel', label: 'Mükemmel Skor', check: p => p.history.some(h => h.quizTotal > 0 && h.quizScore === h.quizTotal) },
+  { id: 'on-hafta', label: '10 Hafta Tamamlandı', check: p => p.history.length >= 10 },
+];
+const EMPTY_PROFILE = { totalXP: 0, streak: 0, lastWeekNumber: 0, history: [] };
+
+function loadProfile() {
+  try {
+    const raw = localStorage.getItem(PROFILE_KEY);
+    return raw ? JSON.parse(raw) : EMPTY_PROFILE;
+  } catch (e) { return EMPTY_PROFILE; }
+}
+function saveProfileLS(p) {
+  localStorage.setItem(PROFILE_KEY, JSON.stringify(p));
+}
+
+async function fetchReadable(url) {
+  const readerUrl = 'https://r.jina.ai/' + url;
+  const res = await fetch(readerUrl);
+  if (!res.ok) throw new Error('reader-failed:' + url);
+  const text = await res.text();
+  return text.slice(0, 6000);
+}
+
+function App() {
+  const [apiKey, setApiKey] = useState(() => localStorage.getItem(APIKEY_KEY) || '');
+  const [keyDraft, setKeyDraft] = useState('');
+  const [profile, setProfile] = useState(loadProfile());
+  const [linksText, setLinksText] = useState('');
+  const [building, setBuilding] = useState(false);
+  const [buildStatus, setBuildStatus] = useState('');
+  const [buildError, setBuildError] = useState('');
+  const [weekData, setWeekData] = useState(null);
+  const [checkedReads, setCheckedReads] = useState({});
+  const [quizAnswers, setQuizAnswers] = useState({});
+  const [challengeAnswer, setChallengeAnswer] = useState('');
+  const [weekClosed, setWeekClosed] = useState(false);
+  const [lastGain, setLastGain] = useState(null);
+
+  function saveProfile(next) { setProfile(next); saveProfileLS(next); }
+
+  function saveKey() {
+    if (!keyDraft.trim()) return;
+    localStorage.setItem(APIKEY_KEY, keyDraft.trim());
+    setApiKey(keyDraft.trim());
+    setKeyDraft('');
+  }
+
+  async function buildWeek() {
+    const urls = linksText.split('\n').map(s => s.trim()).filter(Boolean);
+    if (urls.length === 0 || !apiKey) return;
+    setBuilding(true);
+    setBuildError('');
+    setWeekData(null);
+    setWeekClosed(false);
+    setCheckedReads({});
+    setQuizAnswers({});
+    setChallengeAnswer('');
+
+    let combined = '';
+    for (let i = 0; i < urls.length; i++) {
+      setBuildStatus(`${i + 1}/${urls.length} okunuyor: ${urls[i]}`);
+      try {
+        const text = await fetchReadable(urls[i]);
+        combined += `\n\n--- Kaynak: ${urls[i]} ---\n${text}`;
+      } catch (e) {
+        combined += `\n\n--- Kaynak: ${urls[i]} (içerik okunamadı, sadece link olarak dahil et) ---`;
+      }
+    }
+
+    setBuildStatus('Quiz ve özet hazırlanıyor…');
+    try {
+      const prompt = `Aşağıda bu haftaki AI/kurumsal dönüşüm kaynaklarının ham metni var (makale, blog, podcast/video sayfası). Bunları işleyip SADECE aşağıdaki şemaya uyan geçerli JSON döndür, başka açıklama, markdown işareti ekleme:
+
+{
+  "week_theme": "haftanın öne çıkan temasını özetleyen tek kısa cümle",
+  "must_reads": [ { "title": "başlık", "url": "kaynağın orijinal linki", "one_liner": "tek cümlelik özet" } ],
+  "quiz": [ { "question": "soru metni", "options": ["seçenek1","seçenek2","seçenek3"], "correct_index": 0, "explanation": "kısa açıklama" } ],
+  "challenge_prompt": "haftanın en çarpıcı bulgusunu LinkedIn'e tek cümlede nasıl yazardın tarzında bir mikro görev cümlesi"
+}
+
+Her kaynak için bir must_reads öğesi oluştur, quiz toplamda 3-4 soru içersin (birden fazla kaynaktan karışık olabilir). Ham içerik:
+${combined}`;
+
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
+        body: JSON.stringify({
+          model: MODEL,
+          max_tokens: 1500,
+          messages: [{ role: 'user', content: prompt }],
+        }),
+      });
+      const data = await response.json();
+      if (data.error) throw new Error(data.error.message || 'api-error');
+      const textBlock = (data.content || []).find(b => b.type === 'text');
+      if (!textBlock) throw new Error('no-text');
+      const cleaned = textBlock.text.replace(/```json|```/g, '').trim();
+      const parsed = JSON.parse(cleaned);
+      setWeekData(parsed);
+    } catch (e) {
+      setBuildError('Hafta işlenirken bir sorun oldu: ' + e.message + '. API anahtarını ve linkleri kontrol edip tekrar dener misin?');
+    } finally {
+      setBuilding(false);
+      setBuildStatus('');
+    }
+  }
+
+  function selectQuizAnswer(qIdx, optIdx) {
+    if (quizAnswers[qIdx] !== undefined) return;
+    setQuizAnswers(prev => ({ ...prev, [qIdx]: optIdx }));
+  }
+
+  function closeWeek() {
+    if (!weekData) return;
+    const quizTotal = weekData.quiz.length;
+    const quizScore = weekData.quiz.reduce((acc, q, i) => acc + (quizAnswers[i] === q.correct_index ? 1 : 0), 0);
+    const allReadChecked = weekData.must_reads.every((_, i) => checkedReads[i]);
+    let xpGain = 20;
+    xpGain += quizScore * 10;
+    if (allReadChecked) xpGain += 15;
+    if (challengeAnswer.trim()) xpGain += 10;
+    if (profile.streak > 0) xpGain += 20;
+
+    const nextWeekNumber = profile.lastWeekNumber + 1;
+    const next = {
+      totalXP: profile.totalXP + xpGain,
+      streak: profile.streak + 1,
+      lastWeekNumber: nextWeekNumber,
+      history: [...profile.history, {
+        weekNumber: nextWeekNumber,
+        date: new Date().toISOString().slice(0, 10),
+        xpEarned: xpGain,
+        quizScore, quizTotal,
+        challengeAnswer: challengeAnswer.trim(),
+        weekTheme: weekData.week_theme || '',
+      }],
+    };
+    setLastGain(xpGain);
+    setWeekClosed(true);
+    saveProfile(next);
+  }
+
+  function resetProfile() {
+    saveProfile(EMPTY_PROFILE);
+    setWeekData(null);
+    setLinksText('');
+    setWeekClosed(false);
+  }
+
+  const lvl = levelFor(profile.totalXP);
+  const xpSpan = lvl.next ? lvl.next.min - lvl.floor : 1;
+  const xpPct = lvl.next ? Math.min(100, Math.round(((profile.totalXP - lvl.floor) / xpSpan) * 100)) : 100;
+
+  if (!apiKey) {
+    return (
+      <div className="root">
+        <div className="ledger-head">
+          <div><div className="eyebrow">AI Takip Defteri</div><h1>Kurulum</h1></div>
+        </div>
+        <div className="panel">
+          <p className="panel-title">Anthropic API anahtarı</p>
+          <p className="panel-sub">console.anthropic.com üzerinden oluşturduğun anahtarı buraya bir kez gir, tarayıcında saklanacak. Bu anahtar sadece senin bu sayfada yaptığın çağrılarda kullanılır, hiçbir sunucuya gitmez.</p>
+          <label className="field-label">API Key</label>
+          <input type="password" value={keyDraft} onChange={e => setKeyDraft(e.target.value)} placeholder="sk-ant-..." />
+          <button className="btn" onClick={saveKey} disabled={!keyDraft.trim()}>Kaydet ve Başla</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="root">
+      <div className="ledger-head">
+        <div>
+          <div className="eyebrow">AI Takip Defteri · No. {String(profile.lastWeekNumber + 1).padStart(3, '0')}</div>
+          <h1>Haftalık Denetim Kaydı</h1>
+        </div>
+        <div className="level-tag">Seviye {lvl.level}<div className="level-name">{lvl.name}</div></div>
+      </div>
+
+      <div className="stat-strip">
+        <div className="stat-cell">
+          <div className="stat-label">Toplam XP</div>
+          <div className="stat-value">{profile.totalXP}</div>
+          <div className="xp-track"><div className="xp-fill" style={{ width: xpPct + '%' }} /></div>
+        </div>
+        <div className="stat-cell">
+          <div className="stat-label">Aktif Seri</div>
+          <div className="stat-value">{profile.streak} hafta</div>
+        </div>
+        <div className="stat-cell">
+          <div className="stat-label">Tamamlanan Hafta</div>
+          <div className="stat-value">{profile.history.length}</div>
+        </div>
+      </div>
+
+      <div className="panel">
+        <p className="panel-title">Bu Haftanın Linkleri</p>
+        <p className="panel-sub">Bu hafta okuyacağın/dinleyeceğin makale, blog, podcast veya YouTube linklerini alt alta yapıştır.</p>
+        <textarea value={linksText} onChange={e => setLinksText(e.target.value)} placeholder={"https://...\nhttps://...\nhttps://..."} />
+        <button className="btn" onClick={buildWeek} disabled={building || !linksText.trim()}>
+          {building ? 'İşleniyor…' : 'Haftayı Oluştur'}
+        </button>
+        {building && <div className="loading-line">{buildStatus}</div>}
+        {buildError && <div className="error-box">{buildError}</div>}
+      </div>
+
+      {weekData && (
+        <React.Fragment>
+          <div className="panel">
+            <p className="panel-title">{weekData.week_theme || 'Bu haftanın okumaları'}</p>
+            {weekData.must_reads.map((mr, i) => (
+              <div className="read-row" key={i}>
+                <input type="checkbox" checked={!!checkedReads[i]} disabled={weekClosed}
+                  onChange={() => setCheckedReads(prev => ({ ...prev, [i]: !prev[i] }))} />
+                <div>
+                  {mr.url ? <a href={mr.url} target="_blank" rel="noopener noreferrer">{mr.title}</a> : <strong>{mr.title}</strong>}
+                  <div className="one-liner">{mr.one_liner}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="panel">
+            <p className="panel-title">Haftalık Sınav</p>
+            {weekData.quiz.map((q, qi) => (
+              <div className="quiz-card" key={qi}>
+                <div className="quiz-q">{qi + 1}. {q.question}</div>
+                {q.options.map((opt, oi) => {
+                  const answered = quizAnswers[qi] !== undefined;
+                  let cls = 'quiz-opt';
+                  if (answered && oi === q.correct_index) cls += ' correct';
+                  else if (answered && oi === quizAnswers[qi]) cls += ' wrong';
+                  return <button key={oi} className={cls} disabled={answered || weekClosed} onClick={() => selectQuizAnswer(qi, oi)}>{opt}</button>;
+                })}
+                {quizAnswers[qi] !== undefined && <div className="quiz-explain">{q.explanation}</div>}
+              </div>
+            ))}
+          </div>
+
+          <div className="panel">
+            <p className="panel-title">Mikro Görev</p>
+            <p className="panel-sub">{weekData.challenge_prompt}</p>
+            <input type="text" value={challengeAnswer} disabled={weekClosed}
+              onChange={e => setChallengeAnswer(e.target.value)} placeholder="Tek cümlelik LinkedIn çıkarımın…" />
+          </div>
+
+          <div className="panel">
+            {!weekClosed ? (
+              <button className="btn secondary" onClick={closeWeek}>Haftayı Kapat ve Damgala</button>
+            ) : (
+              <div>
+                <div className="closed-stamp">ONAYLANDI · +{lastGain} XP</div>
+                <p className="panel-sub" style={{ marginTop: 10 }}>Gelecek hafta yeni linkleri yapıştırıp tekrar aç.</p>
+              </div>
+            )}
+          </div>
+        </React.Fragment>
+      )}
+
+      <div className="panel">
+        <p className="panel-title">Rozet Duvarı</p>
+        <div className="badge-wall">
+          {BADGE_DEFS.map(b => (
+            <div key={b.id} className={'badge' + (b.check(profile) ? ' earned' : '')}>
+              <span className="badge-dot" />{b.label}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {profile.history.length > 0 && (
+        <div className="panel">
+          <p className="panel-title">Geçmiş Kayıtlar</p>
+          {[...profile.history].reverse().map(h => (
+            <div className="history-row" key={h.weekNumber}>
+              <span className="hw">Hafta {h.weekNumber} · {h.date}</span>
+              <span>{h.quizScore}/{h.quizTotal} · +{h.xpEarned} XP</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {profile.history.length === 0 && !weekData && (
+        <p className="empty-hint">Henüz kayıt yok. İlk linklerini yapıştırıp haftayı oluşturduğunda seri burada başlayacak.</p>
+      )}
+
+      <div style={{ textAlign: 'right', marginTop: 10 }}>
+        <button className="btn ghost" onClick={resetProfile}>Defteri Sıfırla</button>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
