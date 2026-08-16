@@ -142,6 +142,29 @@ async function fetchReadable(url) {
   return text.slice(0, 6000);
 }
 
+const DEMO_WEEK_DATA = {
+  week_theme: 'Bu hafta yapay zeka ajanları ve kurumsal iş akışları öne çıktı (DEMO VERİ)',
+  must_reads: [
+    {
+      title: '[Demo] Kurumsal AI Ajanları Nasıl Çalışır',
+      url: 'https://example.com/demo-1',
+      summary: 'Bu demo özet, gerçek bir API çağrısı yapılmadan test amaçlı üretildi. AI ajanları, çok adımlı görevleri araçlar kullanarak otonom şekilde tamamlayabiliyor. Kurumsal kullanımda en büyük risk, yetki sınırlarının net olmamasından kaynaklanıyor. Doğru gözetim mekanizmalarıyla verimlilik belirgin şekilde artıyor.',
+    },
+    {
+      title: '[Demo] Üretkenlik Araçlarında AI Entegrasyonu',
+      url: 'https://example.com/demo-2',
+      summary: 'İkinci demo kaynak da gerçek veri değildir, sadece arayüzü test etmen için var. Ekipler AI destekli araçları benimsedikçe tekrarlayan işler azalıyor, ama eğitim eksikliği benimsemeyi yavaşlatıyor. Başarılı şirketler küçük pilot gruplarla başlayıp kademeli genişliyor.',
+    },
+  ],
+  quiz: [
+    { source_index: 0, bonus: false, question: '[Demo] Metne göre AI ajanlarının kurumsal kullanımdaki en büyük riski nedir?', options: ['Maliyet', 'Yetki sınırlarının net olmaması', 'Yavaş çalışması'], correct_index: 1, explanation: 'Demo açıklama: özet metninde bu doğrudan belirtiliyor.' },
+    { source_index: 0, bonus: true, question: '[Demo-BONUS] Bu soru gerçek bir kaynakta olsaydı, sadece linke tıklayıp okuyarak cevaplanabilirdi.', options: ['Seçenek A', 'Seçenek B', 'Seçenek C'], correct_index: 0, explanation: 'Demo açıklama: bonus sorular özetten değil, kaynağın tam metninden çıkar.' },
+    { source_index: 1, bonus: false, question: '[Demo] İkinci kaynağa göre benimsemeyi ne yavaşlatıyor?', options: ['Bütçe', 'Eğitim eksikliği', 'Donanım'], correct_index: 1, explanation: 'Demo açıklama: özet metninde bu doğrudan belirtiliyor.' },
+    { source_index: 1, bonus: true, question: '[Demo-BONUS] Başarılı şirketler nasıl bir yaklaşım izliyor?', options: ['Büyük ölçekli tek seferlik geçiş', 'Küçük pilot gruplarla kademeli genişleme', 'Hiç pilot yapmadan'], correct_index: 1, explanation: 'Demo açıklama: bu bonus soru gerçek senaryoda detaylı okuma gerektirir.' },
+  ],
+  challenge_prompt: '[Demo] Bu haftanın bulgusunu LinkedIn\'e tek cümlede nasıl yazardın?',
+};
+
 function App() {
   const [apiKey, setApiKey] = useState(() => localStorage.getItem(APIKEY_KEY) || '');
   const [keyDraft, setKeyDraft] = useState('');
@@ -173,6 +196,15 @@ function App() {
     setApiKey('');
     setKeyDraft('');
     setBuildError('');
+  }
+
+  function loadDemoWeek() {
+    setBuildError('');
+    setWeekClosed(false);
+    setCheckedReads({});
+    setQuizAnswers({});
+    setChallengeAnswer('');
+    setWeekData(DEMO_WEEK_DATA);
   }
 
   async function buildWeek() {
@@ -397,6 +429,9 @@ ${combined}`;
         <textarea value={linksText} onChange={e => setLinksText(e.target.value)} placeholder={"https://...\nhttps://...\nhttps://..."} />
         <button className="btn" onClick={buildWeek} disabled={building || !linksText.trim()}>
           {building ? 'İşleniyor…' : 'Haftayı Oluştur'}
+        </button>
+        <button className="btn ghost" style={{ marginLeft: 10 }} onClick={loadDemoWeek} disabled={building}>
+          Demo Verisiyle Test Et (token harcamaz)
         </button>
         {building && <div className="loading-line">{buildStatus}</div>}
         {buildError && buildError.startsWith('AUTH_ERROR:') ? (
