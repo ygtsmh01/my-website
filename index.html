@@ -93,6 +93,7 @@
   .closed-stamp { display: inline-block; border: 2px solid var(--brass); color: var(--brass); font-family: var(--mono); font-size: 13px; letter-spacing: .1em; padding: 6px 14px; transform: rotate(-4deg); margin-top: 10px; }
   .critical-tag { font-family: var(--mono); font-size: 12px; color: var(--azure); margin-top: 8px; }
   .error-box { border: 1px solid var(--coral); color: var(--coral); padding: 10px 12px; font-family: var(--mono); font-size: 12px; margin-top: 10px; }
+  .ok-box { border: 1px solid var(--green); color: var(--green); padding: 10px 12px; font-family: var(--mono); font-size: 12px; margin-top: 10px; }
   .loading-line { font-family: var(--mono); font-size: 12px; color: var(--azure); margin-top: 10px; }
   .empty-hint { font-size: 13px; color: var(--paper-dim); font-style: italic; }
   label.field-label { display: block; font-family: var(--mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em; color: var(--paper-dim); margin-bottom: 6px; }
@@ -131,8 +132,6 @@ const SUPABASE_KEY = 'sb_publishable_ZElENBh86p0cWQDAnSbNWw_EcOQHmDV';
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const BOSS_EVERY = 5;
 const SPEED_SECONDS = 45;
-
-function usernameToEmail(u) { return u.trim().toLowerCase() + '@aitakip-users.com'; }
 
 const LEVEL_TITLES = [
   { min: 0, name: 'Çırak' },
@@ -174,9 +173,12 @@ function App() {
   const [loadingAuth, setLoadingAuth] = useState(true);
 
   const [authMode, setAuthMode] = useState('login');
+  const [emailInput, setEmailInput] = useState('');
   const [usernameInput, setUsernameInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
+  const [marketingConsent, setMarketingConsent] = useState(false);
   const [authError, setAuthError] = useState('');
+  const [authNotice, setAuthNotice] = useState('');
   const [authBusy, setAuthBusy] = useState(false);
 
   const [currentWeek, setCurrentWeek] = useState(null);
@@ -252,20 +254,26 @@ function App() {
   }
 
   async function register() {
-    setAuthBusy(true); setAuthError('');
-    if (!usernameInput.trim() || !passwordInput) { setAuthError('Kullanıcı adı ve şifre gerekli.'); setAuthBusy(false); return; }
+    setAuthBusy(true); setAuthError(''); setAuthNotice('');
+    if (!emailInput.trim() || !usernameInput.trim() || !passwordInput) {
+      setAuthError('E-posta, kullanıcı adı ve şifre gerekli.'); setAuthBusy(false); return;
+    }
     const { error } = await sb.auth.signUp({
-      email: usernameToEmail(usernameInput),
+      email: emailInput.trim(),
       password: passwordInput,
-      options: { data: { username: usernameInput.trim() } },
+      options: { data: { username: usernameInput.trim(), marketing_consent: marketingConsent } },
     });
-    if (error) setAuthError('Kayıt başarısız: ' + error.message);
+    if (error) {
+      setAuthError('Kayıt başarısız: ' + error.message);
+    } else {
+      setAuthNotice('Kayıt alındı! E-postana gelen onay linkine tıkladıktan sonra giriş yapabilirsin.');
+    }
     setAuthBusy(false);
   }
 
   async function login() {
-    setAuthBusy(true); setAuthError('');
-    const { error } = await sb.auth.signInWithPassword({ email: usernameToEmail(usernameInput), password: passwordInput });
+    setAuthBusy(true); setAuthError(''); setAuthNotice('');
+    const { error } = await sb.auth.signInWithPassword({ email: emailInput.trim(), password: passwordInput });
     if (error) setAuthError('Giriş başarısız: ' + error.message);
     setAuthBusy(false);
   }
@@ -428,16 +436,29 @@ function App() {
             <button className={authMode === 'login' ? 'btn secondary' : 'btn ghost'} onClick={() => setAuthMode('login')}>Giriş Yap</button>
             <button className={authMode === 'register' ? 'btn secondary' : 'btn ghost'} onClick={() => setAuthMode('register')}>Kayıt Ol</button>
           </div>
-          <label className="field-label">Kullanıcı Adı</label>
-          <input type="text" value={usernameInput} onChange={e => setUsernameInput(e.target.value)} />
+          <label className="field-label">E-posta</label>
+          <input type="text" value={emailInput} onChange={e => setEmailInput(e.target.value)} placeholder="sen@ornek.com" />
+          {authMode === 'register' && (
+            <React.Fragment>
+              <label className="field-label">Kullanıcı Adı</label>
+              <input type="text" value={usernameInput} onChange={e => setUsernameInput(e.target.value)} placeholder="sıralama tablosunda görünecek isim" />
+            </React.Fragment>
+          )}
           <label className="field-label">Şifre</label>
           <input type="password" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} />
+          {authMode === 'register' && (
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: 'var(--paper-dim)', marginBottom: 10, cursor: 'pointer' }}>
+              <input type="checkbox" style={{ width: 'auto', margin: 0 }} checked={marketingConsent} onChange={e => setMarketingConsent(e.target.checked)} />
+              Kampanya ve duyurularla ilgili e-posta almak istiyorum (isteğe bağlı).
+            </label>
+          )}
           {authMode === 'login' ? (
             <button className="btn" onClick={login} disabled={authBusy}>Giriş Yap</button>
           ) : (
             <button className="btn" onClick={register} disabled={authBusy}>Kayıt Ol</button>
           )}
           {authError && <div className="error-box">{authError}</div>}
+          {authNotice && <div className="ok-box">{authNotice}</div>}
         </div>
       </div>
     );
