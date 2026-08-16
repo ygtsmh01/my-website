@@ -124,6 +124,10 @@ function App() {
   async function buildWeek() {
     const urls = linksText.split('\n').map(s => s.trim()).filter(Boolean);
     if (urls.length === 0 || !apiKey) return;
+    if (urls.length > 6) {
+      setBuildError(`En fazla 6 link ekleyebilirsin (şu an ${urls.length} tane var). Her kaynak için ayrı sorular/eşleştirme üretildiğinden daha fazlası modelin yanıtını yarıda kesiyor. Kalanları gelecek haftaya bırak.`);
+      return;
+    }
     const isBossWeek = nextWeekNumber % BOSS_EVERY === 0;
     setBuilding(true);
     setBuildError('');
@@ -174,13 +178,13 @@ ${combined}`;
           'anthropic-version': '2023-06-01',
           'anthropic-dangerous-direct-browser-access': 'true',
         },
-        body: JSON.stringify({ model: MODEL, max_tokens: 6000, messages: [{ role: 'user', content: prompt }] }),
+        body: JSON.stringify({ model: MODEL, max_tokens: 8000, messages: [{ role: 'user', content: prompt }] }),
       });
       const data = await response.json();
       if (data.error) throw new Error(data.error.message || 'api-error');
-      const textBlock = (data.content || []).find(b => b.type === 'text');
-      if (!textBlock) throw new Error('no-text');
       if (data.stop_reason === 'max_tokens') throw new Error('Yanıt çok uzun olduğu için kesildi, daha az link ile tekrar dene');
+      const textBlock = (data.content || []).find(b => b.type === 'text');
+      if (!textBlock) throw new Error('Model boş yanıt döndürdü (stop_reason: ' + (data.stop_reason || 'bilinmiyor') + ')');
       let cleaned = textBlock.text.replace(/```json|```/g, '').trim();
       const start = cleaned.indexOf('{');
       const end = cleaned.lastIndexOf('}');
