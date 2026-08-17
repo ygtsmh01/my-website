@@ -288,6 +288,7 @@ function App() {
 
   async function leaveRoom() {
     if (room && profile && room.status !== 'finished') {
+      if (!window.confirm('Oyun bitmeden ayrılırsan 15 XP kaybedersin. Emin misin?')) return;
       const PENALTY = 15;
       await sb.from('profiles').update({ total_xp: Math.max(0, profile.total_xp - PENALTY) }).eq('id', profile.id);
       const mine = participants.find(p => p.user_id === profile.id);
