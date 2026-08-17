@@ -23,9 +23,35 @@
     --serif: 'Fraunces', Georgia, serif;
     --sans: 'IBM Plex Sans', -apple-system, sans-serif;
   }
+  :root[data-theme="light"] {
+    --ink: #f3f1e9;
+    --panel: #ffffff;
+    --hairline: #d9d5c6;
+    --hairline-soft: #e9e6da;
+    --paper: #1b1c26;
+    --paper-dim: #6b6d80;
+    --brass: #9c7a2e;
+    --brass-dim: #8a744a;
+    --coral: #c2402b;
+    --azure: #3457c9;
+    --green: #2c8c4f;
+  }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--ink); color: var(--paper); font-family: var(--sans); }
   .root { max-width: 720px; margin: 0 auto; padding: 28px 20px 60px; }
+  .theme-toggle { display: inline-flex; align-items: center; gap: 6px; }
+
+  @media (max-width: 640px) {
+    .root { padding: 16px 12px 48px; }
+    .ledger-head { flex-direction: column; align-items: flex-start; gap: 10px; }
+    .level-tag { text-align: left; }
+    .stat-strip { grid-template-columns: 1fr 1fr; }
+    .top-bar-row { flex-wrap: wrap; justify-content: flex-start !important; gap: 8px; }
+    .btn { white-space: normal; text-align: center; }
+    .risk-choice-row { flex-direction: column; }
+    .match-row { flex-direction: column; gap: 6px; }
+    .history-row, .lb-row { flex-direction: column; gap: 4px; align-items: flex-start; }
+  }
 
   .ledger-head { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 1px solid var(--hairline); padding-bottom: 18px; margin-bottom: 22px; }
   .eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: .14em; color: var(--brass); text-transform: uppercase; margin-bottom: 6px; }
@@ -141,6 +167,8 @@ const SUPABASE_KEY = 'sb_publishable_ZElENBh86p0cWQDAnSbNWw_EcOQHmDV';
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const BOSS_EVERY = 5;
 const SPEED_SECONDS = 45;
+const THEME_KEY = 'aitakip_theme';
+const AVATAR_OPTIONS = ['🙂', '🦊', '🐙', '🐼', '🦉', '🐳', '🦁', '🐸', '🤖', '👾', '🦄', '🐢'];
 
 const LEVEL_TITLES = [
   { min: 0, name: 'Çırak' },
@@ -181,10 +209,14 @@ function App() {
   const [leaderboard, setLeaderboard] = useState([]);
   const [loadingAuth, setLoadingAuth] = useState(true);
 
+  const [theme, setTheme] = useState(() => localStorage.getItem(THEME_KEY) || 'dark');
+
   const [authMode, setAuthMode] = useState('login');
+  const [loginIdentifier, setLoginIdentifier] = useState('');
   const [emailInput, setEmailInput] = useState('');
   const [usernameInput, setUsernameInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
+  const [avatarInput, setAvatarInput] = useState(AVATAR_OPTIONS[0]);
   const [marketingConsent, setMarketingConsent] = useState(false);
   const [authError, setAuthError] = useState('');
   const [authNotice, setAuthNotice] = useState('');
@@ -216,6 +248,11 @@ function App() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem(THEME_KEY, theme);
+  }, [theme]);
+
+  useEffect(() => {
     sb.auth.getSession().then(({ data }) => { setSession(data.session); setLoadingAuth(false); });
     const { data: sub } = sb.auth.onAuthStateChange((_e, s) => setSession(s));
     return () => sub.subscription.unsubscribe();
@@ -224,7 +261,7 @@ function App() {
   useEffect(() => {
     if (!session) { setProfile(null); setHistory([]); return; }
     refreshProfileAndHistory();
-    sb.from('profiles').select('username, total_xp, streak').order('total_xp', { ascending: false }).limit(50)
+    sb.from('profiles').select('username, total_xp, streak, avatar').order('total_xp', { ascending: false }).limit(50)
       .then(({ data }) => setLeaderboard(data || []));
     sb.from('weeks').select('*').order('week_number', { ascending: false }).limit(1)
       .then(({ data }) => setCurrentWeek(data && data[0] ? data[0] : null));
@@ -281,7 +318,7 @@ function App() {
     const { error } = await sb.auth.signUp({
       email: emailInput.trim(),
       password: passwordInput,
-      options: { data: { username: usernameInput.trim(), marketing_consent: marketingConsent } },
+      options: { data: { username: usernameInput.trim(), marketing_consent: marketingConsent, avatar: avatarInput } },
     });
     if (error) {
       setAuthError('Kayıt başarısız: ' + error.message);
@@ -293,7 +330,14 @@ function App() {
 
   async function login() {
     setAuthBusy(true); setAuthError(''); setAuthNotice('');
-    const { error } = await sb.auth.signInWithPassword({ email: emailInput.trim(), password: passwordInput });
+    if (!loginIdentifier.trim() || !passwordInput) {
+      setAuthError('Kullanıcı adı/e-posta ve şifre gerekli.'); setAuthBusy(false); return;
+    }
+    const { data: resolvedEmail, error: lookupError } = await sb.rpc('email_for_login', { identifier: loginIdentifier.trim() });
+    if (lookupError || !resolvedEmail) {
+      setAuthError('Kullanıcı bulunamadı.'); setAuthBusy(false); return;
+    }
+    const { error } = await sb.auth.signInWithPassword({ email: resolvedEmail, password: passwordInput });
     if (error) setAuthError('Giriş başarısız: ' + error.message);
     setAuthBusy(false);
   }
@@ -451,18 +495,33 @@ function App() {
       <div className="root">
         <div className="ledger-head">
           <div><div className="eyebrow">AI Takip Defteri</div><h1>Giriş</h1></div>
+          <button className="btn ghost" onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? '☀ Aydınlık' : '🌙 Karanlık'}</button>
         </div>
         <div className="panel">
           <div className="tabs">
             <button className={authMode === 'login' ? 'btn secondary' : 'btn ghost'} onClick={() => setAuthMode('login')}>Giriş Yap</button>
             <button className={authMode === 'register' ? 'btn secondary' : 'btn ghost'} onClick={() => setAuthMode('register')}>Kayıt Ol</button>
           </div>
-          <label className="field-label">E-posta</label>
-          <input type="text" value={emailInput} onChange={e => setEmailInput(e.target.value)} placeholder="sen@ornek.com" />
-          {authMode === 'register' && (
+          {authMode === 'login' ? (
             <React.Fragment>
+              <label className="field-label">Kullanıcı Adı veya E-posta</label>
+              <input type="text" value={loginIdentifier} onChange={e => setLoginIdentifier(e.target.value)} placeholder="kullanici_adin ya da sen@ornek.com" />
+            </React.Fragment>
+          ) : (
+            <React.Fragment>
+              <label className="field-label">E-posta</label>
+              <input type="text" value={emailInput} onChange={e => setEmailInput(e.target.value)} placeholder="sen@ornek.com" />
               <label className="field-label">Kullanıcı Adı</label>
               <input type="text" value={usernameInput} onChange={e => setUsernameInput(e.target.value)} placeholder="sıralama tablosunda görünecek isim" />
+              <label className="field-label">Avatar Seç</label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
+                {AVATAR_OPTIONS.map(a => (
+                  <button key={a} type="button" onClick={() => setAvatarInput(a)}
+                    className="btn ghost" style={{ fontSize: 20, padding: '6px 10px', marginTop: 0, borderColor: avatarInput === a ? 'var(--brass)' : 'var(--hairline)' }}>
+                    {a}
+                  </button>
+                ))}
+              </div>
             </React.Fragment>
           )}
           <label className="field-label">Şifre</label>
@@ -504,15 +563,16 @@ function App() {
 
       <div className="ledger-head">
         <div>
-          <div className="eyebrow">AI Takip Defteri · {profile.username}</div>
+          <div className="eyebrow">AI Takip Defteri · {profile.avatar || '🙂'} {profile.username}</div>
           <h1>{currentWeek ? `Hafta ${currentWeek.week_number}` : 'Haftalık Denetim Kaydı'}</h1>
         </div>
         <div className="level-tag">Seviye {lvl.level}<div className="level-name">{lvl.name}</div></div>
       </div>
 
-      <div style={{ textAlign: 'right', marginBottom: 14 }}>
+      <div className="top-bar-row" style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 14, gap: 10 }}>
+        <button className="btn ghost" onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? '☀' : '🌙'}</button>
         {profile.is_admin && <a href="admin.html" className="btn ghost" style={{ textDecoration: 'none', display: 'inline-block' }}>Admin Paneli</a>}
-        <button className="btn ghost" style={{ marginLeft: 10 }} onClick={logout}>Çıkış Yap</button>
+        <button className="btn ghost" onClick={logout}>Çıkış Yap</button>
       </div>
 
       <div className="stat-strip">
@@ -759,7 +819,7 @@ function App() {
         <p className="panel-title">🏆 Sıralama Tablosu</p>
         {leaderboard.map((u, i) => (
           <div className={'lb-row' + (u.username === profile.username ? ' me' : '')} key={i}>
-            <span><span className="rank">#{i + 1}</span><span className="hw">{u.username}</span></span>
+            <span><span className="rank">#{i + 1}</span><span className="hw">{u.avatar || '🙂'} {u.username}</span></span>
             <span>{u.total_xp} XP · {u.streak} seri</span>
           </div>
         ))}

@@ -12,9 +12,19 @@
     --coral: #e2604a; --azure: #6f97f0; --green: #5fbf7a;
     --mono: 'IBM Plex Mono', monospace; --serif: 'Fraunces', Georgia, serif; --sans: 'IBM Plex Sans', -apple-system, sans-serif;
   }
+  :root[data-theme="light"] {
+    --ink: #f3f1e9; --panel: #ffffff; --hairline: #d9d5c6; --hairline-soft: #e9e6da;
+    --paper: #1b1c26; --paper-dim: #6b6d80; --brass: #9c7a2e; --brass-dim: #8a744a;
+    --coral: #c2402b; --azure: #3457c9; --green: #2c8c4f;
+  }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--ink); color: var(--paper); font-family: var(--sans); }
   .root { max-width: 720px; margin: 0 auto; padding: 28px 20px 60px; }
+  @media (max-width: 640px) {
+    .root { padding: 16px 12px 48px; }
+    .top-bar-row { flex-wrap: wrap; gap: 8px; }
+    .btn { white-space: normal; text-align: center; }
+  }
   .eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: .14em; color: var(--brass); text-transform: uppercase; margin-bottom: 6px; }
   h1 { font-family: var(--serif); font-weight: 600; font-size: 26px; margin: 0 0 20px; }
   .panel { background: var(--panel); border: 1px solid var(--hairline); padding: 20px; margin-bottom: 18px; }
@@ -87,10 +97,11 @@ function demoWeekPayload(weekNumber, isBossWeek) {
 }
 
 function App() {
+  const [theme, setTheme] = useState(() => localStorage.getItem('aitakip_theme') || 'dark');
   const [session, setSession] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
-  const [emailInput, setEmailInput] = useState('');
+  const [loginIdentifier, setLoginIdentifier] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
   const [authError, setAuthError] = useState('');
 
@@ -103,6 +114,11 @@ function App() {
   const [buildOk, setBuildOk] = useState('');
   const [pastWeeks, setPastWeeks] = useState([]);
   const [nextWeekNumber, setNextWeekNumber] = useState(1);
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('aitakip_theme', theme);
+  }, [theme]);
 
   useEffect(() => {
     sb.auth.getSession().then(({ data }) => {
@@ -130,7 +146,10 @@ function App() {
 
   async function login() {
     setAuthError('');
-    const { error } = await sb.auth.signInWithPassword({ email: emailInput.trim(), password: passwordInput });
+    if (!loginIdentifier.trim() || !passwordInput) { setAuthError('Kullanıcı adı/e-posta ve şifre gerekli.'); return; }
+    const { data: resolvedEmail, error: lookupError } = await sb.rpc('email_for_login', { identifier: loginIdentifier.trim() });
+    if (lookupError || !resolvedEmail) { setAuthError('Kullanıcı bulunamadı.'); return; }
+    const { error } = await sb.auth.signInWithPassword({ email: resolvedEmail, password: passwordInput });
     if (error) setAuthError('Giriş başarısız: ' + error.message);
   }
 
@@ -256,8 +275,8 @@ ${combined}`;
         <div className="eyebrow">AI Takip Defteri</div>
         <h1>Admin Girişi</h1>
         <div className="panel">
-          <label className="field-label">E-posta</label>
-          <input type="text" value={emailInput} onChange={e => setEmailInput(e.target.value)} />
+          <label className="field-label">Kullanıcı Adı veya E-posta</label>
+          <input type="text" value={loginIdentifier} onChange={e => setLoginIdentifier(e.target.value)} />
           <label className="field-label">Şifre</label>
           <input type="password" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} />
           <button className="btn" onClick={login}>Giriş Yap</button>
@@ -287,9 +306,10 @@ ${combined}`;
     <div className="root">
       <div className="eyebrow">AI Takip Defteri · {profile.username}</div>
       <h1>Admin Paneli</h1>
-      <div style={{ textAlign: 'right', marginBottom: 14 }}>
+      <div className="top-bar-row" style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 14, gap: 10 }}>
+        <button className="btn ghost" onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? '☀' : '🌙'}</button>
         <a href="index.html" className="btn ghost" style={{ textDecoration: 'none', display: 'inline-block' }}>Kullanıcı Paneline Dön</a>
-        <button className="btn ghost" style={{ marginLeft: 10 }} onClick={logout}>Çıkış Yap</button>
+        <button className="btn ghost" onClick={logout}>Çıkış Yap</button>
       </div>
 
       <div className="panel">
