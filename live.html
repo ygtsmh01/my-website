@@ -88,6 +88,16 @@ function generateCode() {
   for (let i = 0; i < 5; i++) s += CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)];
   return s;
 }
+function applyLeagueDelta(tier, xp, delta, leagues) {
+  let t = tier, x = xp + delta;
+  while (x < 0 && t > 0) { t -= 1; x = 0; }
+  if (x < 0) x = 0;
+  while (t < leagues.length - 1 && leagues[t] && leagues[t].promote_threshold != null && x >= leagues[t].promote_threshold) {
+    x -= leagues[t].promote_threshold;
+    t += 1;
+  }
+  return { tier: t, xp: x };
+}
 
 function App() {
   const [theme, setTheme] = useState(() => localStorage.getItem('aitakip_theme') || 'dark');
@@ -105,6 +115,7 @@ function App() {
   const [myAnswer, setMyAnswer] = useState(null);
   const [nowTick, setNowTick] = useState(Date.now());
   const [awardedBonus, setAwardedBonus] = useState(null);
+  const [leagueChange, setLeagueChange] = useState(null);
   const [answeredCount, setAnsweredCount] = useState(0);
   const roomRef = useRef(null);
   const advancingRef = useRef(false);
@@ -120,9 +131,12 @@ function App() {
     sb.auth.getSession().then(({ data }) => { setSession(data.session); setLoading(false); });
   }, []);
 
+  const [leagues, setLeagues] = useState([]);
+
   useEffect(() => {
     if (!session) { setProfile(null); return; }
     sb.from('profiles').select('*').eq('id', session.user.id).single().then(({ data }) => setProfile(data));
+    sb.from('leagues').select('*').order('tier_index', { ascending: true }).then(({ data }) => setLeagues(data || []));
   }, [session]);
 
   useEffect(() => {
@@ -212,12 +226,19 @@ function App() {
       }
     }
 
+    let leagueDelta = 0;
+    if (rank === 1) leagueDelta = 15;
+    if (betOutcome === 'lost') leagueDelta = -20;
+
     (async () => {
       const finalXp = Math.max(0, profile.total_xp + bonus + betDelta);
-      await sb.from('profiles').update({ total_xp: finalXp }).eq('id', profile.id);
+      const { tier: newTier, xp: newLeagueXp } = applyLeagueDelta(profile.league_tier, profile.league_xp || 0, leagueDelta, leagues);
+      await sb.from('profiles').update({ total_xp: finalXp, league_tier: newTier, league_xp: newLeagueXp }).eq('id', profile.id);
       await sb.from('live_participants').update({ xp_awarded: true }).eq('id', mine.id);
       setAwardedBonus(bonus);
       setBetResult(betOutcome ? { outcome: betOutcome, amount: room.bet_amount } : null);
+      if (newTier < profile.league_tier) setLeagueChange({ direction: 'down', name: (leagues.find(l => l.tier_index === newTier) || {}).name });
+      else if (newTier > profile.league_tier) setLeagueChange({ direction: 'up', name: (leagues.find(l => l.tier_index === newTier) || {}).name });
     })();
   }, [room && room.status, participants, profile]);
 
@@ -246,7 +267,7 @@ function App() {
     for (let attempt = 0; attempt < 3; attempt++) {
       const code = generateCode();
       const { data, error: insertError } = await sb.from('live_rooms')
-        .insert({ code, mode, host_id: profile.id, questions, status: 'waiting', bet_amount: betAmount })
+        .insert({ code, mode, host_id: profile.id, questions, status: 'waiting', bet_amount: betAmount, league_tier: profile.league_tier })
         .select().single();
       if (!insertError && data) {
         await sb.from('live_participants').insert({ room_id: data.id, user_id: profile.id, username: profile.username, avatar: profile.avatar });
@@ -265,6 +286,10 @@ function App() {
     const { data: r, error: findError } = await sb.from('live_rooms').select('*').eq('code', codeUp).single();
     if (findError || !r) { setError('Oda bulunamadı.'); return; }
     if (r.status !== 'waiting') { setError('Bu oda artık katılıma kapalı.'); return; }
+    if (r.league_tier !== profile.league_tier) {
+      const roomLeagueName = (leagues.find(l => l.tier_index === r.league_tier) || {}).name || ('Lig ' + r.league_tier);
+      setError(`Bu oda ${roomLeagueName} seviyesinde, sen bu ligde değilsin.`); return;
+    }
     if (r.mode === 'duel') {
       const { count } = await sb.from('live_participants').select('*', { count: 'exact', head: true }).eq('room_id', r.id);
       if ((count || 0) >= 2) { setError('Düello odası dolu.'); return; }
@@ -320,6 +345,7 @@ function App() {
     setMyAnswer(null);
     setAwardedBonus(null);
     setBetResult(null);
+    setLeagueChange(null);
     setView('menu');
   }
 
@@ -351,11 +377,12 @@ function App() {
         </div>
         <div className="eyebrow">AI Takip Defteri · {profile.avatar} {profile.username}</div>
         <h1>Canlı Yarışma</h1>
+        <p className="panel-sub">Ligin: <strong>{(leagues.find(l => l.tier_index === profile.league_tier) || {}).name || '—'}</strong>. Oda ve düellolar sadece kendi liginle eşleşir.</p>
 
         <div className="mode-row">
           <div className="panel" onClick={() => createRoom('room')}>
             <p className="panel-title">🎮 Oda Aç</p>
-            <p className="panel-sub">Herkese açık bir oda kur, arkadaşların koduyla katılsın. Geçmiş tüm haftaların sorularından karışık 8 soru.</p>
+            <p className="panel-sub">Kendi liginden arkadaşların koduyla katılsın. Geçmiş tüm haftaların sorularından karışık 8 soru.</p>
           </div>
           <div className="panel" style={{ cursor: 'default' }}>
             <p className="panel-title">⚔ Düello Başlat</p>
@@ -477,6 +504,8 @@ function App() {
         {betResult && betResult.outcome === 'won' && <p className="panel-sub">⚔ Bahsi kazandın! Rakibinden +{betResult.amount} XP aldın.</p>}
         {betResult && betResult.outcome === 'lost' && <p className="panel-sub">⚔ Bahsi kaybettin, rakibine {betResult.amount} XP kaptırdın.</p>}
         {betResult && betResult.outcome === 'tie' && <p className="panel-sub">⚔ Berabere, bahis iade edildi.</p>}
+        {leagueChange && leagueChange.direction === 'up' && <p className="panel-sub">🏆 Lig puanınla terfi ettin: {leagueChange.name}!</p>}
+        {leagueChange && leagueChange.direction === 'down' && <p className="panel-sub">📉 Lig puanın düştü, bir alt lige indin: {leagueChange.name}.</p>}
       </div>
       <button className="btn secondary" onClick={leaveRoom}>Yeni Bir Yarışma Başlat</button>
     </div>

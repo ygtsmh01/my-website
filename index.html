@@ -202,6 +202,17 @@ function shuffle(arr) {
   return a;
 }
 
+function applyLeagueDelta(tier, xp, delta, leagues) {
+  let t = tier, x = xp + delta;
+  while (x < 0 && t > 0) { t -= 1; x = 0; }
+  if (x < 0) x = 0;
+  while (t < leagues.length - 1 && leagues[t] && leagues[t].promote_threshold != null && x >= leagues[t].promote_threshold) {
+    x -= leagues[t].promote_threshold;
+    t += 1;
+  }
+  return { tier: t, xp: x };
+}
+
 function App() {
   const [session, setSession] = useState(null);
   const [profile, setProfile] = useState(null);
@@ -248,6 +259,14 @@ function App() {
   const [lastRiskResult, setLastRiskResult] = useState(null);
   const [saving, setSaving] = useState(false);
 
+  const [leagues, setLeagues] = useState([]);
+  const [leagueProgress, setLeagueProgress] = useState(null);
+  const [showCurriculum, setShowCurriculum] = useState(false);
+  const [curriculumAnswers, setCurriculumAnswers] = useState({});
+  const [curriculumStepIndex, setCurriculumStepIndex] = useState(0);
+  const [curriculumSaving, setCurriculumSaving] = useState(false);
+  const [lastPromotion, setLastPromotion] = useState(null);
+
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem(THEME_KEY, theme);
@@ -266,11 +285,19 @@ function App() {
       .then(({ data }) => setLeaderboard(data || []));
     sb.from('weeks').select('*').order('week_number', { ascending: false }).limit(1)
       .then(({ data }) => setCurrentWeek(data && data[0] ? data[0] : null));
+    sb.from('leagues').select('*').order('tier_index', { ascending: true })
+      .then(({ data }) => setLeagues(data || []));
   }, [session]);
 
   useEffect(() => {
     if (profile && currentWeek) setAlreadyDone(profile.last_week_number >= currentWeek.week_number);
   }, [profile, currentWeek]);
+
+  useEffect(() => {
+    if (!profile) { setLeagueProgress(null); return; }
+    sb.from('league_progress').select('*').eq('user_id', profile.id).eq('tier_index', profile.league_tier).maybeSingle()
+      .then(({ data }) => setLeagueProgress(data));
+  }, [profile && profile.id, profile && profile.league_tier]);
 
   useEffect(() => {
     if (currentWeek && currentWeek.matching && currentWeek.matching.pairs) {
@@ -456,11 +483,21 @@ function App() {
       frozen: false,
     });
     if (!histErr) {
+      const myLeague = leagues.find(l => l.tier_index === profile.league_tier);
+      const mult = myLeague ? Number(myLeague.weekly_multiplier) : 1;
+      const leagueGain = Math.round(xpGain * mult * 0.3);
+      const { tier: newTier, xp: newLeagueXp } = applyLeagueDelta(profile.league_tier, profile.league_xp || 0, leagueGain, leagues);
+      if (newTier > profile.league_tier) {
+        const promotedTo = leagues.find(l => l.tier_index === newTier);
+        setLastPromotion(promotedTo ? promotedTo.name : null);
+      }
       await sb.from('profiles').update({
         total_xp: profile.total_xp + xpGain + streakBonus,
         streak: nextStreak,
         last_week_number: currentWeek.week_number,
         freezes: (profile.freezes || 0) + (earnedFreeze ? 1 : 0),
+        league_tier: newTier,
+        league_xp: newLeagueXp,
       }).eq('id', profile.id);
     }
 
@@ -488,6 +525,38 @@ function App() {
       }).eq('id', profile.id);
     }
     setSaving(false);
+    refreshProfileAndHistory();
+  }
+
+  function selectCurriculumAnswer(qIdx, optIdx) {
+    if (curriculumAnswers[qIdx] !== undefined) return;
+    setCurriculumAnswers(prev => ({ ...prev, [qIdx]: optIdx }));
+  }
+
+  async function finishCurriculum(myLeague) {
+    if (!profile || !myLeague || !myLeague.content) return;
+    setCurriculumSaving(true);
+    const quiz = myLeague.content.quiz || [];
+    const score = quiz.reduce((acc, q, i) => acc + (curriculumAnswers[i] === q.correct_index ? 1 : 0), 0);
+    const completionBonus = myLeague.promote_threshold ? Math.round(myLeague.promote_threshold * 0.6) : 300;
+
+    const { error: progErr } = await sb.from('league_progress').insert({
+      user_id: profile.id, tier_index: myLeague.tier_index, completed: true,
+      quiz_score: score, quiz_total: quiz.length, completed_at: new Date().toISOString(),
+    });
+    if (!progErr) {
+      const { tier: newTier, xp: newLeagueXp } = applyLeagueDelta(profile.league_tier, profile.league_xp || 0, completionBonus, leagues);
+      if (newTier > profile.league_tier) {
+        const promotedTo = leagues.find(l => l.tier_index === newTier);
+        setLastPromotion(promotedTo ? promotedTo.name : null);
+      }
+      await sb.from('profiles').update({ league_tier: newTier, league_xp: newLeagueXp }).eq('id', profile.id);
+      setLeagueProgress({ tier_index: myLeague.tier_index, completed: true, quiz_score: score, quiz_total: quiz.length });
+    }
+    setCurriculumSaving(false);
+    setShowCurriculum(false);
+    setCurriculumAnswers({});
+    setCurriculumStepIndex(0);
     refreshProfileAndHistory();
   }
 
@@ -554,6 +623,9 @@ function App() {
   const xpPct = lvl.next ? Math.min(100, Math.round(((profile.total_xp - lvl.floor) / xpSpan) * 100)) : 100;
   const usedDetails = new Set(Object.values(matchAssignments));
   const showWeek = currentWeek && !alreadyDone;
+  const myLeague = leagues.find(l => l.tier_index === profile.league_tier);
+  const leaguePct = myLeague && myLeague.promote_threshold ? Math.min(100, Math.round(((profile.league_xp || 0) / myLeague.promote_threshold) * 100)) : 100;
+  const curriculumDone = leagueProgress && leagueProgress.completed;
 
   return (
     <div className="root">
@@ -598,6 +670,82 @@ function App() {
           <div className="stat-value">❄ {profile.freezes || 0}</div>
         </div>
       </div>
+
+      {myLeague && (
+        <div className="panel">
+          <p className="panel-title">🏅 {myLeague.name}</p>
+          {myLeague.promote_threshold ? (
+            <React.Fragment>
+              <p className="panel-sub">{profile.league_xp || 0} / {myLeague.promote_threshold} lig puanı — bir üst lige terfi için</p>
+              <div className="xp-track"><div className="xp-fill" style={{ width: leaguePct + '%' }} /></div>
+            </React.Fragment>
+          ) : (
+            <p className="panel-sub">En üst ligdesin, terfi yok — sadece sıralamada kal.</p>
+          )}
+          {myLeague.content ? (
+            curriculumDone ? (
+              <p className="panel-sub" style={{ marginTop: 10 }}>Müfredat tamamlandı ✓ ({leagueProgress.quiz_score}/{leagueProgress.quiz_total})</p>
+            ) : (
+              <button className="btn secondary" onClick={() => setShowCurriculum(true)}>Lig Müfredatını Tamamla</button>
+            )
+          ) : (
+            <p className="panel-sub" style={{ marginTop: 10 }}>Bu lig için müfredat henüz yayınlanmadı.</p>
+          )}
+        </div>
+      )}
+
+      {showCurriculum && myLeague && myLeague.content && (() => {
+        const cq = myLeague.content.quiz || [];
+        const cStepQ = cq[curriculumStepIndex];
+        const cAnswered = cStepQ && curriculumAnswers[curriculumStepIndex] !== undefined;
+        const cAllAnswered = cq.every((_, i) => curriculumAnswers[i] !== undefined);
+        return (
+          <div className="panel">
+            <p className="panel-title">{myLeague.name} Müfredatı</p>
+            {myLeague.content.must_reads && myLeague.content.must_reads.map((mr, i) => (
+              <div className="read-row" key={i}>
+                <div>
+                  {mr.url ? <a href={mr.url} target="_blank" rel="noopener noreferrer">{mr.title}</a> : <strong>{mr.title}</strong>}
+                  <div className="one-liner">{mr.summary}</div>
+                </div>
+              </div>
+            ))}
+            {cStepQ && !cAllAnswered && (
+              <div style={{ marginTop: 14 }}>
+                <div className="quiz-progress">Soru {curriculumStepIndex + 1} / {cq.length}</div>
+                {cAnswered && (
+                  <div className={'feedback-banner ' + (curriculumAnswers[curriculumStepIndex] === cStepQ.correct_index ? 'correct' : 'wrong')}>
+                    {curriculumAnswers[curriculumStepIndex] === cStepQ.correct_index ? '🎉 Harika, doğru bildin!' : '💥 Olmadı, bir dahakine!'}
+                  </div>
+                )}
+                <div className="quiz-card">
+                  <div className="quiz-q">
+                    {cStepQ.type === 'tf' && <span className="tag tf">DOĞRU/YANLIŞ</span>}
+                    <div>{cStepQ.question}</div>
+                  </div>
+                  {cStepQ.options.map((opt, oi) => {
+                    let cls = 'quiz-opt';
+                    if (cAnswered && oi === cStepQ.correct_index) cls += ' correct';
+                    else if (cAnswered && oi === curriculumAnswers[curriculumStepIndex]) cls += ' wrong';
+                    return <button key={oi} className={cls} disabled={cAnswered} onClick={() => selectCurriculumAnswer(curriculumStepIndex, oi)}>{opt}</button>;
+                  })}
+                  {cAnswered && <div className="quiz-explain">{cStepQ.explanation}</div>}
+                </div>
+                {cAnswered && (
+                  <button className="btn secondary" onClick={() => setCurriculumStepIndex(i => i + 1)}>
+                    {curriculumStepIndex + 1 < cq.length ? 'Sonraki Soru' : 'Devam Et'}
+                  </button>
+                )}
+              </div>
+            )}
+            {cAllAnswered && (
+              <button className="btn secondary" style={{ marginTop: 14 }} onClick={() => finishCurriculum(myLeague)} disabled={curriculumSaving}>
+                {curriculumSaving ? 'Kaydediliyor…' : 'Müfredatı Bitir'}
+              </button>
+            )}
+          </div>
+        );
+      })()}
 
       {!currentWeek && (
         <div className="panel">
@@ -808,6 +956,7 @@ function App() {
                   {lastCritical && <div className="critical-tag">⚡ KRİTİK BAŞARI! 1.5× bonus uygulandı</div>}
                   {lastFreezeEarned && <div className="critical-tag">❄ Yeni dondurma hakkı kazandın!</div>}
                   {lastStreakBonus > 0 && <div className="critical-tag">🔥 3 haftalık seri bonusu: +{lastStreakBonus} XP</div>}
+                  {lastPromotion && <div className="critical-tag">🏆 Terfi ettin: {lastPromotion}!</div>}
                   {lastRiskResult === true && <div className="critical-tag">🎲 Bahsi kazandın!</div>}
                   {lastRiskResult === false && <div className="critical-tag">🎲 Bahsi kaybettin.</div>}
                   {speedResult === true && <div className="critical-tag">⏱ Hız turu bonusu kazandın!</div>}

@@ -115,6 +115,14 @@ function App() {
   const [pastWeeks, setPastWeeks] = useState([]);
   const [nextWeekNumber, setNextWeekNumber] = useState(1);
 
+  const [leagues, setLeagues] = useState([]);
+  const [leagueTierChoice, setLeagueTierChoice] = useState(0);
+  const [leagueLinksText, setLeagueLinksText] = useState('');
+  const [leagueBuilding, setLeagueBuilding] = useState(false);
+  const [leagueStatus, setLeagueStatus] = useState('');
+  const [leagueError, setLeagueError] = useState('');
+  const [leagueOk, setLeagueOk] = useState('');
+
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('aitakip_theme', theme);
@@ -143,6 +151,11 @@ function App() {
         setNextWeekNumber(data && data.length > 0 ? data[0].week_number + 1 : 1);
       });
   }, [profile, buildOk]);
+
+  useEffect(() => {
+    if (!profile || !profile.is_admin) return;
+    sb.from('leagues').select('*').order('tier_index', { ascending: true }).then(({ data }) => setLeagues(data || []));
+  }, [profile, leagueOk]);
 
   async function login() {
     setAuthError('');
@@ -267,6 +280,78 @@ ${combined}`;
     setBuildOk(`Hafta ${nextWeekNumber} demo veriyle yayınlandı (token harcanmadı).`);
   }
 
+  async function buildLeagueContent() {
+    const urls = leagueLinksText.split('\n').map(s => s.trim()).filter(Boolean);
+    if (urls.length === 0 || !apiKey) return;
+    if (urls.length > 6) { setLeagueError('En fazla 6 link ekleyebilirsin.'); return; }
+    setLeagueBuilding(true);
+    setLeagueError('');
+    setLeagueOk('');
+
+    let combined = '';
+    for (let i = 0; i < urls.length; i++) {
+      setLeagueStatus(`${i + 1}/${urls.length} okunuyor: ${urls[i]}`);
+      try {
+        const text = await fetchReadable(urls[i]);
+        combined += `\n\n--- Kaynak ${i}: ${urls[i]} ---\n${text}`;
+      } catch (e) {
+        combined += `\n\n--- Kaynak ${i}: ${urls[i]} (içerik okunamadı, sadece link olarak dahil et) ---`;
+      }
+    }
+
+    const leagueName = (leagues.find(l => l.tier_index === leagueTierChoice) || {}).name || ('Lig ' + leagueTierChoice);
+    setLeagueStatus('Müfredat hazırlanıyor…');
+    try {
+      const prompt = `Aşağıda "${leagueName}" ligi için TEMEL/SABİT bir müfredat oluşturacak kaynakların ham metni var, her biri "--- Kaynak N: url ---" başlığıyla ayrılmış. Bu içerik bir kere oluşturulacak ve değişmeyecek (haftalık değil). Bunları işleyip SADECE aşağıdaki şemaya uyan geçerli JSON döndür, başka açıklama, markdown işareti ekleme:
+
+{
+  "must_reads": [ { "title": "başlık", "url": "kaynağın orijinal linki", "summary": "4-6 cümlelik doyurucu bir özet" } ],
+  "quiz": [ { "source_index": 0, "type": "mc", "bonus": false, "question": "soru metni", "options": ["seçenek1","seçenek2","seçenek3"], "correct_index": 0, "explanation": "kısa açıklama" } ]
+}
+
+Kurallar:
+- Her kaynak için bir must_reads öğesi oluştur (sırasıyla index 0,1,2,...).
+- Her kaynak için quiz'de tam olarak 2 soru olsun: 1 "type":"mc" (3 seçenekli, genel anlama), 1 "type":"tf" (Doğru/Yanlış, "options" tam olarak ["Doğru","Yanlış"], "correct_index" 0 veya 1, kaynağın tam metnindeki bir detaya dayanmalı).
+- Bu ligin seviyesine uygun zorlukta sorular üret ("${leagueName}" ne kadar üst seviyeyse o kadar zor olsun).
+
+Ham içerik:
+${combined}`;
+
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
+        body: JSON.stringify({ model: MODEL, max_tokens: 16000, messages: [{ role: 'user', content: prompt }] }),
+      });
+      const data = await response.json();
+      if (data.error) throw new Error(data.error.message || 'api-error');
+      if (data.stop_reason === 'max_tokens') throw new Error('Yanıt çok uzun olduğu için kesildi, daha az link ile tekrar dene');
+      const textBlock = (data.content || []).find(b => b.type === 'text');
+      if (!textBlock) throw new Error('Model boş yanıt döndürdü (stop_reason: ' + (data.stop_reason || 'bilinmiyor') + ')');
+      let cleaned = textBlock.text.replace(/```json|```/g, '').trim();
+      const start = cleaned.indexOf('{');
+      const end = cleaned.lastIndexOf('}');
+      if (start !== -1 && end !== -1) cleaned = cleaned.slice(start, end + 1);
+      cleaned = cleaned.replace(/,(\s*[}\]])/g, '$1');
+      const parsed = JSON.parse(cleaned);
+
+      const { error: updateError } = await sb.from('leagues').update({ content: parsed }).eq('tier_index', leagueTierChoice);
+      if (updateError) throw new Error('Veritabanına yazılamadı: ' + updateError.message);
+
+      setLeagueOk(`${leagueName} müfredatı kaydedildi.`);
+      setLeagueLinksText('');
+    } catch (e) {
+      setLeagueError('Müfredat işlenirken bir sorun oldu: ' + e.message);
+    } finally {
+      setLeagueBuilding(false);
+      setLeagueStatus('');
+    }
+  }
+
   if (loadingAuth) return <div className="root"><p className="panel-sub">Yükleniyor…</p></div>;
 
   if (!session) {
@@ -350,6 +435,27 @@ ${combined}`;
           </div>
         ))}
       </div>
+
+      {apiKey && (
+        <div className="panel">
+          <p className="panel-title">Lig Müfredatı Oluştur</p>
+          <p className="panel-sub">Her lig için bir kere oluşturulan, haftalık değişmeyen sabit içerik. İstediğin zaman üstüne yazıp güncelleyebilirsin.</p>
+          <label className="field-label">Lig Seç</label>
+          <select value={leagueTierChoice} onChange={e => setLeagueTierChoice(Number(e.target.value))}
+            style={{ width: '100%', background: 'var(--ink)', border: '1px solid var(--hairline)', color: 'var(--paper)', fontFamily: 'var(--mono)', fontSize: '12.5px', padding: '12px', marginBottom: 10 }}>
+            {leagues.map(l => (
+              <option key={l.tier_index} value={l.tier_index}>{l.name}{l.content ? ' (dolu — üzerine yazılır)' : ' (boş)'}</option>
+            ))}
+          </select>
+          <textarea value={leagueLinksText} onChange={e => setLeagueLinksText(e.target.value)} placeholder={"https://...\nhttps://...\nhttps://..."} />
+          <button className="btn" onClick={buildLeagueContent} disabled={leagueBuilding || !leagueLinksText.trim()}>
+            {leagueBuilding ? 'İşleniyor…' : 'Lig Müfredatını Oluştur'}
+          </button>
+          {leagueBuilding && <div className="loading-line">{leagueStatus}</div>}
+          {leagueError && <div className="error-box">{leagueError}</div>}
+          {leagueOk && <div className="ok-box">{leagueOk}</div>}
+        </div>
+      )}
     </div>
   );
 }
