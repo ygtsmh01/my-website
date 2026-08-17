@@ -499,8 +499,8 @@ function App() {
         </div>
         <div className="panel">
           <div className="tabs">
-            <button className={authMode === 'login' ? 'btn secondary' : 'btn ghost'} onClick={() => setAuthMode('login')}>Giriş Yap</button>
-            <button className={authMode === 'register' ? 'btn secondary' : 'btn ghost'} onClick={() => setAuthMode('register')}>Kayıt Ol</button>
+            <button className={authMode === 'login' ? 'btn secondary' : 'btn ghost'} onClick={() => { setAuthMode('login'); setAuthError(''); setAuthNotice(''); }}>Giriş Yap</button>
+            <button className={authMode === 'register' ? 'btn secondary' : 'btn ghost'} onClick={() => { setAuthMode('register'); setAuthError(''); setAuthNotice(''); }}>Kayıt Ol</button>
           </div>
           {authMode === 'login' ? (
             <React.Fragment>
