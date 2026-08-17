@@ -571,6 +571,7 @@ function App() {
 
       <div className="top-bar-row" style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 14, gap: 10 }}>
         <button className="btn ghost" onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? '☀' : '🌙'}</button>
+        <a href="live.html" className="btn secondary" style={{ textDecoration: 'none', display: 'inline-block' }}>🎮 Canlı Yarışma</a>
         {profile.is_admin && <a href="admin.html" className="btn ghost" style={{ textDecoration: 'none', display: 'inline-block' }}>Admin Paneli</a>}
         <button className="btn ghost" onClick={logout}>Çıkış Yap</button>
       </div>
