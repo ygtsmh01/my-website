@@ -62,6 +62,30 @@ async function fetchReadable(url) {
   return text.slice(0, 6000);
 }
 
+function demoWeekPayload(weekNumber, isBossWeek) {
+  return {
+    week_number: weekNumber,
+    week_theme: 'Bu hafta yapay zeka ajanları ve kurumsal iş akışları öne çıktı (DEMO VERİ)',
+    must_reads: [
+      { title: '[Demo] Kurumsal AI Ajanları Nasıl Çalışır', url: 'https://example.com/demo-1',
+        summary: 'Bu demo özet, gerçek bir API çağrısı yapılmadan test amaçlı üretildi. AI ajanları, çok adımlı görevleri araçlar kullanarak otonom şekilde tamamlayabiliyor. Kurumsal kullanımda en büyük risk, yetki sınırlarının net olmamasından kaynaklanıyor. Doğru gözetim mekanizmalarıyla verimlilik belirgin şekilde artıyor. Pilot uygulamalar genelde önce düşük riskli süreçlerde başlatılıyor. Sonuçlar olumluysa kapsam kademeli olarak genişletiliyor.' },
+      { title: '[Demo] Üretkenlik Araçlarında AI Entegrasyonu', url: 'https://example.com/demo-2',
+        summary: 'İkinci demo kaynak da gerçek veri değildir, sadece arayüzü test etmen için var. Ekipler AI destekli araçları benimsedikçe tekrarlayan işler azalıyor, ama eğitim eksikliği benimsemeyi yavaşlatıyor. Başarılı şirketler küçük pilot gruplarla başlayıp kademeli genişliyor. Orta vadede rol tanımları da bu araçlara göre yeniden şekilleniyor.' },
+    ],
+    quiz: [
+      { source_index: 0, type: 'mc', bonus: false, question: '[Demo] Metne göre AI ajanlarının kurumsal kullanımdaki en büyük riski nedir?', options: ['Maliyet', 'Yetki sınırlarının net olmaması', 'Yavaş çalışması'], correct_index: 1, explanation: 'Demo açıklama: özet metninde bu doğrudan belirtiliyor.' },
+      { source_index: 0, type: 'tf', bonus: true, question: '[Demo-BONUS] Bu ifade gerçek bir kaynakta olsaydı, sadece linke tıklayıp okuyarak doğrulanabilirdi: "Ajanlar hiçbir gözetim olmadan güvenli çalışır."', options: ['Doğru', 'Yanlış'], correct_index: 1, explanation: 'Demo açıklama: bonus sorular özetten değil, kaynağın tam metninden çıkar.' },
+      { source_index: 1, type: 'mc', bonus: false, question: '[Demo] İkinci kaynağa göre benimsemeyi ne yavaşlatıyor?', options: ['Bütçe', 'Eğitim eksikliği', 'Donanım'], correct_index: 1, explanation: 'Demo açıklama: özet metninde bu doğrudan belirtiliyor.' },
+      { source_index: 1, type: 'tf', bonus: true, question: '[Demo-BONUS] "Başarılı şirketler tek seferde büyük ölçekli geçiş yapıyor." ifadesi doğru mu?', options: ['Doğru', 'Yanlış'], correct_index: 1, explanation: 'Demo açıklama: bu bonus soru gerçek senaryoda detaylı okuma gerektirir.' },
+    ],
+    number_challenge: { source_index: 0, question: '[Demo] Kaynakta örnek olarak verilen verimlilik artışı yüzde kaçtır?', correct_value: 35, tolerance: 5, explanation: 'Demo açıklama: gerçek kaynakta geçen sayı burada sorulur.' },
+    matching: { pairs: [ { source_index: 0, detail: 'Yetki sınırı belirsizliği riski' }, { source_index: 1, detail: 'Eğitim eksikliği nedeniyle yavaş benimseme' } ] },
+    risk_question: { question: '[Demo-RİSK] Bu hafta hangi yaklaşım daha çok önerildi?', options: ['Büyük patlama geçişi', 'Kademeli pilot yaklaşımı', 'Hiç AI kullanmamak'], correct_index: 1, explanation: 'Demo açıklama: risk sorusu bahis mekaniği için örnek.' },
+    boss_question: isBossWeek ? { question: '[Demo-BOSS] İki kaynağı birlikte düşünürsek, en güvenli benimseme stratejisi nedir?', options: ['Hızlı ve büyük ölçekli geçiş', 'Gözetimli, kademeli pilot yaklaşımı', 'Hiç eğitim vermeden yaygınlaştırma'], correct_index: 1, explanation: 'Demo açıklama: boss soruları birden fazla kaynağı birleştirir.' } : null,
+    is_boss: isBossWeek,
+  };
+}
+
 function App() {
   const [session, setSession] = useState(null);
   const [profile, setProfile] = useState(null);
@@ -150,14 +174,12 @@ function App() {
 
 {
   "week_theme": "haftanın öne çıkan temasını özetleyen tek kısa cümle",
-  "must_reads": [ { "title": "başlık (en fazla 8 kelime)", "url": "kaynağın orijinal linki", "summary": "2-3 KISA cümlelik özet, kaynağı okumadan da ana fikri anlat" } ],
-  "quiz": [ { "source_index": 0, "type": "mc", "bonus": false, "question": "soru metni", "options": ["seçenek1","seçenek2","seçenek3"], "correct_index": 0, "explanation": "TEK kısa cümle" } ],
-  "number_challenge": { "source_index": 0, "question": "kaynakta geçen bir sayıyı soran soru metni", "correct_value": 42, "tolerance": 5, "explanation": "TEK kısa cümle" },
-  "matching": { "pairs": [ { "source_index": 0, "detail": "o kaynağa özgü, en fazla 6 kelimelik ayırt edici bir detay" } ] },
-  "risk_question": { "question": "orta-zor bir soru", "options": ["seçenek1","seçenek2","seçenek3"], "correct_index": 0, "explanation": "TEK kısa cümle" }${isBossWeek ? ',\n  "boss_question": { "question": "birden fazla kaynaktaki bilgiyi birleştirmeyi gerektiren zor bir sentez sorusu", "options": ["seçenek1","seçenek2","seçenek3"], "correct_index": 0, "explanation": "TEK kısa cümle" }' : ''}
+  "must_reads": [ { "title": "başlık", "url": "kaynağın orijinal linki", "summary": "4-6 cümlelik doyurucu bir özet, kaynağı okumadan da ana fikri ve önemli detayları anlat" } ],
+  "quiz": [ { "source_index": 0, "type": "mc", "bonus": false, "question": "soru metni", "options": ["seçenek1","seçenek2","seçenek3"], "correct_index": 0, "explanation": "kısa açıklama" } ],
+  "number_challenge": { "source_index": 0, "question": "kaynakta geçen bir sayıyı soran soru metni", "correct_value": 42, "tolerance": 5, "explanation": "kısa açıklama" },
+  "matching": { "pairs": [ { "source_index": 0, "detail": "o kaynağa özgü kısa, ayırt edici bir detay/olgu cümlesi" } ] },
+  "risk_question": { "question": "orta-zor bir soru", "options": ["seçenek1","seçenek2","seçenek3"], "correct_index": 0, "explanation": "kısa açıklama" }${isBossWeek ? ',\n  "boss_question": { "question": "birden fazla kaynaktaki bilgiyi birleştirmeyi gerektiren zor bir sentez sorusu", "options": ["seçenek1","seçenek2","seçenek3"], "correct_index": 0, "explanation": "kısa açıklama" }' : ''}
 }
-
-ÖNEMLİ: Bu ${urls.length} kaynaklı bir hafta, yanıtın çok uzun olmasın diye TÜM metinleri (özet, soru, açıklama, detay) olabildiğince kısa ve öz tut, gereksiz kelime ekleme, markdown/madde işareti kullanma.
 
 Kurallar:
 - Her kaynak için bir must_reads öğesi oluştur (sırasıyla index 0,1,2,...).
@@ -180,7 +202,7 @@ ${combined}`;
           'anthropic-version': '2023-06-01',
           'anthropic-dangerous-direct-browser-access': 'true',
         },
-        body: JSON.stringify({ model: MODEL, max_tokens: 32000, messages: [{ role: 'user', content: prompt }] }),
+        body: JSON.stringify({ model: MODEL, max_tokens: 64000, messages: [{ role: 'user', content: prompt }] }),
       });
       const data = await response.json();
       if (data.error) throw new Error(data.error.message || 'api-error');
@@ -215,6 +237,15 @@ ${combined}`;
       setBuilding(false);
       setBuildStatus('');
     }
+  }
+
+  async function publishDemoWeek() {
+    setBuildError(''); setBuildOk('');
+    const isBossWeek = nextWeekNumber % BOSS_EVERY === 0;
+    const demo = demoWeekPayload(nextWeekNumber, isBossWeek);
+    const { error: insertError } = await sb.from('weeks').insert(demo);
+    if (insertError) { setBuildError('Veritabanına yazılamadı: ' + insertError.message); return; }
+    setBuildOk(`Hafta ${nextWeekNumber} demo veriyle yayınlandı (token harcanmadı).`);
   }
 
   if (loadingAuth) return <div className="root"><p className="panel-sub">Yükleniyor…</p></div>;
@@ -259,6 +290,12 @@ ${combined}`;
       <div style={{ textAlign: 'right', marginBottom: 14 }}>
         <a href="index.html" className="btn ghost" style={{ textDecoration: 'none', display: 'inline-block' }}>Kullanıcı Paneline Dön</a>
         <button className="btn ghost" style={{ marginLeft: 10 }} onClick={logout}>Çıkış Yap</button>
+      </div>
+
+      <div className="panel">
+        <p className="panel-title">Demo ile Test Et</p>
+        <p className="panel-sub">Hafta {nextWeekNumber}'yi gerçek link işlemeden, token harcamadan sahte veriyle yayınlar. Kullanıcı panelindeki tüm mekanikleri (quiz, eşleştirme, sayı tahmini, risk, boss) test etmek için kullan.</p>
+        <button className="btn ghost" onClick={publishDemoWeek}>Demo Verisiyle Yayınla (token harcamaz)</button>
       </div>
 
       {!apiKey ? (
