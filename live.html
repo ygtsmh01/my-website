@@ -268,19 +268,23 @@ function App() {
     if (pool.length < 4) { setError('Yeterli soru yok, önce birkaç hafta yayınlanmış olmalı.'); return; }
     const questions = pool.slice(0, Math.min(8, pool.length));
     const betAmount = mode === 'duel' ? duelBetChoice : 0;
+    let lastError = null;
     for (let attempt = 0; attempt < 3; attempt++) {
       const code = generateCode();
       const { data, error: insertError } = await sb.from('live_rooms')
         .insert({ code, mode, host_id: profile.id, questions, status: 'waiting', bet_amount: betAmount, league_tier: profile.league_tier })
         .select().single();
       if (!insertError && data) {
-        await sb.from('live_participants').insert({ room_id: data.id, user_id: profile.id, username: profile.username, avatar: profile.avatar, league_tier: profile.league_tier });
+        const { error: partError } = await sb.from('live_participants').insert({ room_id: data.id, user_id: profile.id, username: profile.username, avatar: profile.avatar, league_tier: profile.league_tier });
+        if (partError) { setError('Katılımcı eklenemedi: ' + partError.message); return; }
         setRoom(data);
         setView('room');
         return;
       }
+      lastError = insertError;
+      if (insertError && !String(insertError.message).toLowerCase().includes('duplicate')) break;
     }
-    setError('Oda oluşturulamadı, tekrar dener misin?');
+    setError('Oda oluşturulamadı: ' + (lastError ? lastError.message : 'bilinmeyen hata'));
   }
 
   async function joinRoom() {
