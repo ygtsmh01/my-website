@@ -96,6 +96,23 @@ function demoWeekPayload(weekNumber, isBossWeek) {
   };
 }
 
+function demoLeagueContent(tierName) {
+  return {
+    must_reads: [
+      { title: `[Demo] ${tierName} Temel Kaynak 1`, url: 'https://example.com/league-demo-1',
+        summary: `Bu demo içerik ${tierName} müfredatını test etmen için üretildi, gerçek bir API çağrısı yapılmadı. AI ve kurumsal dönüşüm konusunda temel bir kavramı özetliyor. Gerçek müfredatı admin panelinden linkler girip oluşturabilirsin.` },
+      { title: `[Demo] ${tierName} Temel Kaynak 2`, url: 'https://example.com/league-demo-2',
+        summary: `İkinci demo kaynak da test amaçlı. ${tierName} seviyesine uygun bir örnek konu içeriyor, gerçek üretimde kaynağın tam metninden çıkarılan detaylarla değiştirilecek.` },
+    ],
+    quiz: [
+      { source_index: 0, type: 'mc', bonus: false, question: `[Demo] ${tierName} birinci kaynağın ana fikri nedir?`, options: ['Seçenek A', 'Seçenek B (doğru)', 'Seçenek C'], correct_index: 1, explanation: 'Demo açıklama.' },
+      { source_index: 0, type: 'tf', bonus: false, question: `[Demo] Bu ifade doğru mu: "${tierName} temel bir kavramı anlatıyor."`, options: ['Doğru', 'Yanlış'], correct_index: 0, explanation: 'Demo açıklama.' },
+      { source_index: 1, type: 'mc', bonus: false, question: `[Demo] ${tierName} ikinci kaynağın ana fikri nedir?`, options: ['Seçenek A (doğru)', 'Seçenek B', 'Seçenek C'], correct_index: 0, explanation: 'Demo açıklama.' },
+      { source_index: 1, type: 'tf', bonus: false, question: `[Demo] Bu ifade doğru mu: "İkinci kaynak alakasız bir konu."`, options: ['Doğru', 'Yanlış'], correct_index: 1, explanation: 'Demo açıklama.' },
+    ],
+  };
+}
+
 function App() {
   const [theme, setTheme] = useState(() => localStorage.getItem('aitakip_theme') || 'dark');
   const [session, setSession] = useState(null);
@@ -280,6 +297,15 @@ ${combined}`;
     setBuildOk(`Hafta ${nextWeekNumber} demo veriyle yayınlandı (token harcanmadı).`);
   }
 
+  async function publishDemoLeagues() {
+    setLeagueError(''); setLeagueOk('');
+    for (const l of leagues) {
+      const content = demoLeagueContent(l.name);
+      await sb.from('leagues').update({ content }).eq('tier_index', l.tier_index);
+    }
+    setLeagueOk('Tüm liglere demo müfredat yayınlandı (token harcanmadı).');
+  }
+
   async function buildLeagueContent() {
     const urls = leagueLinksText.split('\n').map(s => s.trim()).filter(Boolean);
     if (urls.length === 0 || !apiKey) return;
@@ -434,6 +460,14 @@ ${combined}`;
             <span>{new Date(w.created_at).toLocaleDateString('tr-TR')}</span>
           </div>
         ))}
+      </div>
+
+      <div className="panel">
+        <p className="panel-title">Demo Ligler</p>
+        <p className="panel-sub">Tüm ligler için sahte müfredat yayınlar, token harcamaz — kullanıcı panelindeki lig akışını hemen test etmek için.</p>
+        <button className="btn ghost" onClick={publishDemoLeagues} disabled={leagues.length === 0}>Tüm Liglere Demo Müfredat Yayınla</button>
+        {leagueError && <div className="error-box">{leagueError}</div>}
+        {leagueOk && <div className="ok-box">{leagueOk}</div>}
       </div>
 
       {apiKey && (

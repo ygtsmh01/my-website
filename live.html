@@ -226,9 +226,13 @@ function App() {
       }
     }
 
+    const effectiveTier = Math.min(...participants.map(p => p.league_tier || 0));
+    const effectiveLeague = leagues.find(l => l.tier_index === effectiveTier);
+    const effectiveMult = effectiveLeague ? Number(effectiveLeague.weekly_multiplier) : 1;
+
     let leagueDelta = 0;
-    if (rank === 1) leagueDelta = 15;
-    if (betOutcome === 'lost') leagueDelta = -20;
+    if (rank === 1) leagueDelta = Math.round(15 * effectiveMult);
+    if (betOutcome === 'lost') leagueDelta = -Math.round(20 * effectiveMult);
 
     (async () => {
       const finalXp = Math.max(0, profile.total_xp + bonus + betDelta);
@@ -270,7 +274,7 @@ function App() {
         .insert({ code, mode, host_id: profile.id, questions, status: 'waiting', bet_amount: betAmount, league_tier: profile.league_tier })
         .select().single();
       if (!insertError && data) {
-        await sb.from('live_participants').insert({ room_id: data.id, user_id: profile.id, username: profile.username, avatar: profile.avatar });
+        await sb.from('live_participants').insert({ room_id: data.id, user_id: profile.id, username: profile.username, avatar: profile.avatar, league_tier: profile.league_tier });
         setRoom(data);
         setView('room');
         return;
@@ -286,15 +290,11 @@ function App() {
     const { data: r, error: findError } = await sb.from('live_rooms').select('*').eq('code', codeUp).single();
     if (findError || !r) { setError('Oda bulunamadı.'); return; }
     if (r.status !== 'waiting') { setError('Bu oda artık katılıma kapalı.'); return; }
-    if (r.league_tier !== profile.league_tier) {
-      const roomLeagueName = (leagues.find(l => l.tier_index === r.league_tier) || {}).name || ('Lig ' + r.league_tier);
-      setError(`Bu oda ${roomLeagueName} seviyesinde, sen bu ligde değilsin.`); return;
-    }
     if (r.mode === 'duel') {
       const { count } = await sb.from('live_participants').select('*', { count: 'exact', head: true }).eq('room_id', r.id);
       if ((count || 0) >= 2) { setError('Düello odası dolu.'); return; }
     }
-    const { error: joinError } = await sb.from('live_participants').insert({ room_id: r.id, user_id: profile.id, username: profile.username, avatar: profile.avatar });
+    const { error: joinError } = await sb.from('live_participants').insert({ room_id: r.id, user_id: profile.id, username: profile.username, avatar: profile.avatar, league_tier: profile.league_tier });
     if (joinError && !String(joinError.message).toLowerCase().includes('duplicate')) {
       setError('Katılamadın: ' + joinError.message); return;
     }
@@ -377,12 +377,12 @@ function App() {
         </div>
         <div className="eyebrow">AI Takip Defteri · {profile.avatar} {profile.username}</div>
         <h1>Canlı Yarışma</h1>
-        <p className="panel-sub">Ligin: <strong>{(leagues.find(l => l.tier_index === profile.league_tier) || {}).name || '—'}</strong>. Oda ve düellolar sadece kendi liginle eşleşir.</p>
+        <p className="panel-sub">Ligin: <strong>{(leagues.find(l => l.tier_index === profile.league_tier) || {}).name || '—'}</strong>. Herkesle yarışabilirsin — odadaki en düşük ligli kişiye göre kazanılacak lig puanı ayarlanır.</p>
 
         <div className="mode-row">
           <div className="panel" onClick={() => createRoom('room')}>
             <p className="panel-title">🎮 Oda Aç</p>
-            <p className="panel-sub">Kendi liginden arkadaşların koduyla katılsın. Geçmiş tüm haftaların sorularından karışık 8 soru.</p>
+            <p className="panel-sub">Herhangi bir arkadaşın koduyla katılsın. Geçmiş tüm haftaların sorularından karışık 8 soru.</p>
           </div>
           <div className="panel" style={{ cursor: 'default' }}>
             <p className="panel-title">⚔ Düello Başlat</p>
