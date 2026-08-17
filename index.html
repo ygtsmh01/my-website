@@ -126,6 +126,7 @@
 
   .match-row { display: flex; gap: 14px; align-items: stretch; margin-bottom: 10px; }
   .match-source { flex: 1; padding: 10px 12px; border: 1px solid var(--hairline); font-size: 13px; display: flex; align-items: center; }
+  .match-source.selected { border-color: var(--azure); background: rgba(111,151,240,.1); }
   .match-slot { flex: 1; padding: 10px 12px; border: 1px dashed var(--hairline); font-size: 12.5px; color: var(--paper-dim); cursor: pointer; display: flex; align-items: center; }
   .match-slot.filled { border-style: solid; color: var(--paper); }
   .match-slot.correct { border-color: var(--green); color: var(--green); }
@@ -247,8 +248,10 @@ function App() {
   const [lastFreezeEarned, setLastFreezeEarned] = useState(false);
   const [lastStreakBonus, setLastStreakBonus] = useState(0);
   const [numberGuess, setNumberGuess] = useState('');
+  const [numberSubmitted, setNumberSubmitted] = useState(false);
+  const [numberCorrectDisplay, setNumberCorrectDisplay] = useState(false);
   const [shuffledDetails, setShuffledDetails] = useState([]);
-  const [matchSelected, setMatchSelected] = useState(null);
+  const [matchSelectedSource, setMatchSelectedSource] = useState(null);
   const [matchAssignments, setMatchAssignments] = useState({});
   const [riskChoice, setRiskChoice] = useState(null);
   const [riskAnswer, setRiskAnswer] = useState(null);
@@ -378,7 +381,9 @@ function App() {
     setQuizAnswers({});
     setQuizStepIndex(0);
     setNumberGuess('');
-    setMatchSelected(null);
+    setNumberSubmitted(false);
+    setNumberCorrectDisplay(false);
+    setMatchSelectedSource(null);
     setMatchAssignments({});
     setRiskChoice(null);
     setRiskAnswer(null);
@@ -406,14 +411,31 @@ function App() {
     }
   }
 
-  function selectMatchDetail(detail, used) {
-    if (weekClosed || used) return;
-    setMatchSelected(detail);
+  function selectMatchSource(sourceIndex) {
+    if (weekClosed || matchAssignments[sourceIndex]) return;
+    setMatchSelectedSource(sourceIndex);
   }
-  function assignMatch(sourceIndex) {
-    if (weekClosed || !matchSelected) return;
-    setMatchAssignments(prev => ({ ...prev, [sourceIndex]: matchSelected }));
-    setMatchSelected(null);
+
+  async function assignMatchDetail(detail, used) {
+    if (weekClosed || used || matchSelectedSource === null) return;
+    const pairs = (currentWeek.matching && currentWeek.matching.pairs) || [];
+    const pair = pairs.find(p => p.source_index === matchSelectedSource);
+    const correct = !!pair && pair.detail === detail;
+    setMatchAssignments(prev => ({ ...prev, [matchSelectedSource]: { detail, correct } }));
+    setMatchSelectedSource(null);
+    const delta = correct ? 10 : -5;
+    const newXp = Math.max(0, profile.total_xp + delta);
+    setProfile(p => ({ ...p, total_xp: newXp }));
+    await sb.from('profiles').update({ total_xp: newXp }).eq('id', profile.id);
+  }
+
+  function submitNumberGuess() {
+    if (weekClosed || numberSubmitted || !numberGuess.trim() || !currentWeek.number_challenge) return;
+    const g = parseFloat(numberGuess);
+    const nc = currentWeek.number_challenge;
+    const correct = !isNaN(g) && Math.abs(g - nc.correct_value) <= (nc.tolerance || 0);
+    setNumberSubmitted(true);
+    setNumberCorrectDisplay(correct);
   }
 
   async function closeWeek() {
@@ -436,16 +458,11 @@ function App() {
       if (!isNaN(g) && Math.abs(g - nc.correct_value) <= (nc.tolerance || 0)) numberCorrect = true;
     }
 
-    let matchCorrectCount = 0;
-    const matchPairs = (currentWeek.matching && currentWeek.matching.pairs) || [];
-    matchPairs.forEach(p => { if (matchAssignments[p.source_index] === p.detail) matchCorrectCount++; });
-
     let xpBeforeRisk = 20;
     xpBeforeRisk += quizXP;
     if (allReadChecked) xpBeforeRisk += 15;
     if (profile.streak > 0) xpBeforeRisk += 20;
     if (numberCorrect) xpBeforeRisk += 15;
-    xpBeforeRisk += matchCorrectCount * 10;
     if (speedResult === true) xpBeforeRisk += 30;
 
     let bossCleared = false;
@@ -621,7 +638,7 @@ function App() {
   const lvl = levelFor(profile.total_xp);
   const xpSpan = lvl.next ? lvl.next.min - lvl.floor : 1;
   const xpPct = lvl.next ? Math.min(100, Math.round(((profile.total_xp - lvl.floor) / xpSpan) * 100)) : 100;
-  const usedDetails = new Set(Object.values(matchAssignments));
+  const usedDetails = new Set(Object.values(matchAssignments).map(a => a.detail));
   const showWeek = currentWeek && !alreadyDone;
   const myLeague = leagues.find(l => l.tier_index === profile.league_tier);
   const leaguePct = myLeague && myLeague.promote_threshold ? Math.min(100, Math.round(((profile.league_xp || 0) / myLeague.promote_threshold) * 100)) : 100;
@@ -863,11 +880,14 @@ function App() {
             <div className="panel">
               <p className="panel-title">🔢 Sayı Tahmini</p>
               <p className="panel-sub">{currentWeek.number_challenge.question}</p>
-              <input type="number" value={numberGuess} disabled={weekClosed}
+              <input type="number" value={numberGuess} disabled={weekClosed || numberSubmitted}
                 onChange={e => setNumberGuess(e.target.value)} placeholder="Tahminin…" />
-              {weekClosed && (
-                <div className="quiz-explain">
-                  Doğru cevap: {currentWeek.number_challenge.correct_value} (±{currentWeek.number_challenge.tolerance}). {currentWeek.number_challenge.explanation}
+              {!numberSubmitted && !weekClosed && (
+                <button className="btn secondary" onClick={submitNumberGuess} disabled={!numberGuess.trim()}>Tahmin Et</button>
+              )}
+              {numberSubmitted && (
+                <div className={'feedback-banner ' + (numberCorrectDisplay ? 'correct' : 'wrong')}>
+                  {numberCorrectDisplay ? '🎉 Doğru tahmin!' : `Yanlış. Doğru cevap: ${currentWeek.number_challenge.correct_value} (±${currentWeek.number_challenge.tolerance}).`} {currentWeek.number_challenge.explanation}
                 </div>
               )}
             </div>
@@ -876,16 +896,19 @@ function App() {
           {(allQuizAnswered || weekClosed) && currentWeek.matching && currentWeek.matching.pairs && currentWeek.matching.pairs.length > 0 && (
             <div className="panel">
               <p className="panel-title">🔗 Eşleştirme</p>
-              <p className="panel-sub">Önce alttaki detay etiketlerinden birini seç, sonra ait olduğunu düşündüğün kaynağa tıkla.</p>
+              <p className="panel-sub">Önce solda bir kaynağa tıkla (seçili hale gelir), sonra sağdaki doğru detaya bas. Doğruysa yeşil yanar, yanlışsa kırmızı yanar ve hemen XP kaybedersin.</p>
               {currentWeek.matching.pairs.map((p, pi) => {
                 const assigned = matchAssignments[p.source_index];
                 let slotCls = 'match-slot' + (assigned ? ' filled' : '');
-                if (weekClosed && assigned) slotCls += assigned === p.detail ? ' correct' : ' wrong';
+                if (assigned) slotCls += assigned.correct ? ' correct' : ' wrong';
+                let sourceCls = 'match-source' + (matchSelectedSource === p.source_index ? ' selected' : '');
                 return (
                   <div className="match-row" key={pi}>
-                    <div className="match-source">{currentWeek.must_reads[p.source_index] ? currentWeek.must_reads[p.source_index].title : 'Kaynak ' + p.source_index}</div>
-                    <div className={slotCls} onClick={() => assignMatch(p.source_index)}>
-                      {assigned || 'Buraya eşleştir…'}
+                    <div className={sourceCls} onClick={() => selectMatchSource(p.source_index)} style={{ cursor: assigned ? 'default' : 'pointer' }}>
+                      {currentWeek.must_reads[p.source_index] ? currentWeek.must_reads[p.source_index].title : 'Kaynak ' + p.source_index}
+                    </div>
+                    <div className={slotCls}>
+                      {assigned ? `${assigned.correct ? '✓' : '✗'} ${assigned.detail}` : (matchSelectedSource === p.source_index ? 'Şimdi sağdan doğru detayı seç…' : 'Önce buraya tıkla')}
                     </div>
                   </div>
                 );
@@ -893,8 +916,8 @@ function App() {
               <div className="match-pool">
                 {shuffledDetails.map((d, di) => {
                   const used = usedDetails.has(d);
-                  const cls = 'match-chip' + (matchSelected === d ? ' selected' : '') + (used ? ' used' : '');
-                  return <span key={di} className={cls} onClick={() => selectMatchDetail(d, used || weekClosed)}>{d}</span>;
+                  const cls = 'match-chip' + (used ? ' used' : '');
+                  return <span key={di} className={cls} onClick={() => assignMatchDetail(d, used || weekClosed)}>{d}</span>;
                 })}
               </div>
             </div>
