@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AI Takip Defteri · Sıralama</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+  :root {
+    --ink: #14151f; --panel: #1c1e2c; --hairline: #33364c; --hairline-soft: #262838;
+    --paper: #edebe4; --paper-dim: #9698ac; --brass: #c9a34e; --brass-dim: #8a744a;
+    --coral: #e2604a; --azure: #6f97f0; --green: #5fbf7a;
+    --mono: 'IBM Plex Mono', monospace; --serif: 'Fraunces', Georgia, serif; --sans: 'IBM Plex Sans', -apple-system, sans-serif;
+  }
+  :root[data-theme="light"] {
+    --ink: #f3f1e9; --panel: #ffffff; --hairline: #d9d5c6; --hairline-soft: #e9e6da;
+    --paper: #1b1c26; --paper-dim: #6b6d80; --brass: #9c7a2e; --brass-dim: #8a744a;
+    --coral: #c2402b; --azure: #3457c9; --green: #2c8c4f;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--ink); color: var(--paper); font-family: var(--sans); }
+  .root { max-width: 640px; margin: 0 auto; padding: 66px 20px 60px; }
+  .eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: .14em; color: var(--brass); text-transform: uppercase; margin-bottom: 6px; text-align: center; }
+  h1 { font-family: var(--serif); font-weight: 600; font-size: 26px; margin: 0 0 20px; text-align: center; }
+  .panel { background: var(--panel); border: 1px solid var(--hairline); padding: 20px; margin-bottom: 18px; }
+  .panel-sub { font-size: 13px; color: var(--paper-dim); }
+  .lb-row { display: flex; justify-content: space-between; align-items: center; font-family: var(--mono); font-size: 13px; padding: 12px 0; border-bottom: 1px solid var(--hairline-soft); color: var(--paper-dim); }
+  .lb-row:last-child { border-bottom: none; }
+  .lb-row.me { color: var(--brass); }
+  .lb-row .hw { color: var(--paper); font-size: 15px; }
+  .lb-row.me .hw { color: var(--brass); }
+  .lb-row .rank { display: inline-block; width: 30px; color: var(--paper-dim); font-size: 15px; }
+  .lb-row .tier { font-size: 10px; color: var(--paper-dim); text-transform: uppercase; letter-spacing: .06em; }
+</style>
+</head>
+<body>
+<div class="root" id="root"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="nav.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<script type="text/babel">
+const { useState, useEffect } = React;
+
+const SUPABASE_URL = 'https://lhgkfgwtmpfxyxwyaroh.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_ZElENBh86p0cWQDAnSbNWw_EcOQHmDV';
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+function App() {
+  const [theme] = useState(() => localStorage.getItem('aitakip_theme') || 'dark');
+  const [session, setSession] = useState(null);
+  const [myId, setMyId] = useState(null);
+  const [leaderboard, setLeaderboard] = useState([]);
+  const [leagues, setLeagues] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => { document.documentElement.setAttribute('data-theme', theme); }, [theme]);
+
+  useEffect(() => {
+    sb.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+      setMyId(data.session && data.session.user.id);
+      setLoading(false);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!session) return;
+    sb.from('profiles').select('id, username, avatar, total_xp, streak, league_tier').order('total_xp', { ascending: false }).limit(100)
+      .then(({ data }) => setLeaderboard(data || []));
+    sb.from('leagues').select('tier_index, name').then(({ data }) => setLeagues(data || []));
+  }, [session]);
+
+  if (loading) return <div className="root"><p className="panel-sub">Yükleniyor…</p></div>;
+
+  if (!session) {
+    return (
+      <div className="root">
+        <h1>Sıralama</h1>
+        <div className="panel">
+          <p className="panel-sub">Sıralamayı görmek için önce giriş yapmalısın.</p>
+          <a href="index.html" style={{ color: 'var(--azure)' }}>Giriş sayfasına git</a>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="root">
+      <div className="eyebrow">AI Takip Defteri</div>
+      <h1>🏆 Sıralama Tablosu</h1>
+      <div className="panel">
+        {leaderboard.map((u, i) => (
+          <div className={'lb-row' + (u.id === myId ? ' me' : '')} key={u.id}>
+            <span><span className="rank">#{i + 1}</span><span className="hw">{u.avatar} {u.username}</span></span>
+            <span style={{ textAlign: 'right' }}>
+              <div>{u.total_xp} XP · {u.streak} seri</div>
+              <div className="tier">{(leagues.find(l => l.tier_index === u.league_tier) || {}).name || ''}</div>
+            </span>
+          </div>
+        ))}
+        {leaderboard.length === 0 && <p className="panel-sub">Henüz kimse yok.</p>}
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

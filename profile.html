@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AI Takip Defteri · Profil</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+  :root {
+    --ink: #14151f; --panel: #1c1e2c; --hairline: #33364c; --hairline-soft: #262838;
+    --paper: #edebe4; --paper-dim: #9698ac; --brass: #c9a34e; --brass-dim: #8a744a;
+    --coral: #e2604a; --azure: #6f97f0; --green: #5fbf7a;
+    --mono: 'IBM Plex Mono', monospace; --serif: 'Fraunces', Georgia, serif; --sans: 'IBM Plex Sans', -apple-system, sans-serif;
+  }
+  :root[data-theme="light"] {
+    --ink: #f3f1e9; --panel: #ffffff; --hairline: #d9d5c6; --hairline-soft: #e9e6da;
+    --paper: #1b1c26; --paper-dim: #6b6d80; --brass: #9c7a2e; --brass-dim: #8a744a;
+    --coral: #c2402b; --azure: #3457c9; --green: #2c8c4f;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--ink); color: var(--paper); font-family: var(--sans); }
+  .root { max-width: 640px; margin: 0 auto; padding: 66px 20px 60px; }
+  .eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: .14em; color: var(--brass); text-transform: uppercase; margin-bottom: 6px; }
+  h1 { font-family: var(--serif); font-weight: 600; font-size: 26px; margin: 0 0 20px; text-align: center; }
+  .panel { background: var(--panel); border: 1px solid var(--hairline); padding: 20px; margin-bottom: 18px; }
+  .panel-title { font-family: var(--serif); font-size: 17px; font-weight: 600; margin: 0 0 4px; }
+  .panel-sub { font-size: 13px; color: var(--paper-dim); margin: 0 0 14px; line-height: 1.5; }
+  input[type=text] {
+    width: 100%; background: var(--ink); border: 1px solid var(--hairline); color: var(--paper);
+    font-family: var(--mono); font-size: 13px; padding: 12px; line-height: 1.5; margin-bottom: 10px;
+  }
+  input:focus { outline: 1px solid var(--azure); }
+  .btn { font-family: var(--mono); font-size: 12.5px; letter-spacing: .04em; text-transform: uppercase; padding: 10px 18px; border: 1px solid var(--brass); background: transparent; color: var(--brass); cursor: pointer; margin-top: 6px; }
+  .btn:hover:not(:disabled) { background: var(--brass); color: var(--ink); }
+  .btn:disabled { opacity: .4; cursor: not-allowed; }
+  .error-box { border: 1px solid var(--coral); color: var(--coral); padding: 10px 12px; font-family: var(--mono); font-size: 12px; margin-top: 10px; }
+  .ok-box { border: 1px solid var(--green); color: var(--green); padding: 10px 12px; font-family: var(--mono); font-size: 12px; margin-top: 10px; }
+  label.field-label { display: block; font-family: var(--mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em; color: var(--paper-dim); margin-bottom: 6px; }
+
+  .avatar-hero { font-size: 64px; text-align: center; margin-bottom: 6px; }
+  .avatar-grid { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-bottom: 4px; }
+  .avatar-opt { font-size: 22px; padding: 8px 12px; border: 1px solid var(--hairline); background: var(--ink); cursor: pointer; }
+  .avatar-opt.selected { border-color: var(--brass); background: rgba(201,163,78,.12); }
+
+  .stat-strip { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--hairline); border: 1px solid var(--hairline); margin-bottom: 18px; }
+  .stat-cell { background: var(--panel); padding: 14px 16px; }
+  .stat-label { font-family: var(--mono); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--paper-dim); margin-bottom: 6px; }
+  .stat-value { font-family: var(--mono); font-size: 20px; font-weight: 600; }
+  .xp-track { height: 6px; background: var(--hairline-soft); border-radius: 3px; overflow: hidden; margin-top: 8px; }
+  .xp-fill { height: 100%; background: linear-gradient(90deg, var(--brass-dim), var(--brass)); }
+
+  .badge-wall { display: flex; flex-wrap: wrap; gap: 10px; }
+  .badge { display: flex; align-items: center; gap: 8px; border: 1px solid var(--hairline); padding: 8px 12px; font-family: var(--mono); font-size: 11.5px; color: var(--paper-dim); }
+  .badge.earned { border-color: var(--brass); color: var(--brass); }
+  .badge-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+</style>
+</head>
+<body>
+<div class="root" id="root"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="nav.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<script type="text/babel">
+const { useState, useEffect } = React;
+
+const SUPABASE_URL = 'https://lhgkfgwtmpfxyxwyaroh.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_ZElENBh86p0cWQDAnSbNWw_EcOQHmDV';
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const AVATAR_OPTIONS = ['🙂', '🦊', '🐙', '🐼', '🦉', '🐳', '🦁', '🐸', '🤖', '👾', '🦄', '🐢'];
+
+const LEVEL_TITLES = [
+  { min: 0, name: 'Çırak' },
+  { min: 100, name: 'Pratisyen' },
+  { min: 250, name: 'Kıdemli Pratisyen' },
+  { min: 450, name: 'Uzman' },
+  { min: 700, name: 'Stratejist' },
+  { min: 1000, name: 'Risk + AI Mimarı' },
+];
+function levelFor(xp) {
+  let idx = 0;
+  for (let i = 0; i < LEVEL_TITLES.length; i++) if (xp >= LEVEL_TITLES[i].min) idx = i;
+  return { level: idx + 1, name: LEVEL_TITLES[idx].name, floor: LEVEL_TITLES[idx].min, next: LEVEL_TITLES[idx + 1] };
+}
+const BADGE_DEFS = [
+  { id: 'ilk-hafta', label: 'İlk Hafta', check: (p, h) => h.length >= 1 },
+  { id: 'seri-3', label: '3 Hafta Seri', check: p => p.streak >= 3 },
+  { id: 'seri-5', label: '5 Hafta Seri', check: p => p.streak >= 5 },
+  { id: 'seri-10', label: '10 Hafta Seri', check: p => p.streak >= 10 },
+  { id: 'mukemmel', label: 'Mükemmel Skor', check: (p, h) => h.some(x => x.quiz_total > 0 && x.quiz_score === x.quiz_total) },
+  { id: 'on-hafta', label: '10 Hafta Tamamlandı', check: (p, h) => h.length >= 10 },
+  { id: 'kumarbaz', label: 'Kumarbaz', check: (p, h) => h.some(x => x.risk_won) },
+  { id: 'boss-avcisi', label: 'Boss Avcısı', check: (p, h) => h.some(x => x.boss_cleared) },
+];
+
+function App() {
+  const [theme, setTheme] = useState(() => localStorage.getItem('aitakip_theme') || 'dark');
+  const [session, setSession] = useState(null);
+  const [profile, setProfile] = useState(null);
+  const [history, setHistory] = useState([]);
+  const [leagues, setLeagues] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const [avatarDraft, setAvatarDraft] = useState('');
+  const [usernameDraft, setUsernameDraft] = useState('');
+  const [avatarError, setAvatarError] = useState('');
+  const [avatarOk, setAvatarOk] = useState('');
+  const [usernameError, setUsernameError] = useState('');
+  const [usernameOk, setUsernameOk] = useState('');
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+  }, [theme]);
+
+  useEffect(() => {
+    sb.auth.getSession().then(({ data }) => { setSession(data.session); setLoading(false); });
+  }, []);
+
+  useEffect(() => {
+    if (!session) return;
+    sb.from('profiles').select('*').eq('id', session.user.id).single().then(({ data }) => {
+      setProfile(data);
+      if (data) { setAvatarDraft(data.avatar); setUsernameDraft(data.username); }
+    });
+    sb.from('history').select('*').eq('user_id', session.user.id).then(({ data }) => setHistory(data || []));
+    sb.from('leagues').select('*').order('tier_index', { ascending: true }).then(({ data }) => setLeagues(data || []));
+  }, [session]);
+
+  async function saveAvatar(a) {
+    setAvatarError(''); setAvatarOk('');
+    setAvatarDraft(a);
+    const { error } = await sb.from('profiles').update({ avatar: a }).eq('id', profile.id);
+    if (error) { setAvatarError('Kaydedilemedi: ' + error.message); return; }
+    setProfile(p => ({ ...p, avatar: a }));
+    setAvatarOk('Avatar güncellendi.');
+  }
+
+  async function saveUsername() {
+    setUsernameError(''); setUsernameOk('');
+    if (!usernameDraft.trim()) { setUsernameError('Kullanıcı adı boş olamaz.'); return; }
+    const { error } = await sb.from('profiles').update({ username: usernameDraft.trim() }).eq('id', profile.id);
+    if (error) {
+      setUsernameError(error.message.includes('duplicate') ? 'Bu kullanıcı adı zaten alınmış.' : 'Kaydedilemedi: ' + error.message);
+      return;
+    }
+    setProfile(p => ({ ...p, username: usernameDraft.trim() }));
+    setUsernameOk('Kullanıcı adı güncellendi.');
+  }
+
+  if (loading) return <div className="root"><p className="panel-sub">Yükleniyor…</p></div>;
+
+  if (!session) {
+    return (
+      <div className="root">
+        <h1>Profil</h1>
+        <div className="panel">
+          <p className="panel-sub">Profilini görmek için önce giriş yapmalısın.</p>
+          <a href="index.html" className="btn" style={{ textDecoration: 'none', display: 'inline-block' }}>Giriş Sayfasına Git</a>
+        </div>
+      </div>
+    );
+  }
+
+  if (!profile) return <div className="root"><p className="panel-sub">Profil yükleniyor…</p></div>;
+
+  const lvl = levelFor(profile.total_xp);
+  const xpSpan = lvl.next ? lvl.next.min - lvl.floor : 1;
+  const xpPct = lvl.next ? Math.min(100, Math.round(((profile.total_xp - lvl.floor) / xpSpan) * 100)) : 100;
+  const myLeague = leagues.find(l => l.tier_index === profile.league_tier);
+  const leaguePct = myLeague && myLeague.promote_threshold ? Math.min(100, Math.round(((profile.league_xp || 0) / myLeague.promote_threshold) * 100)) : 100;
+
+  return (
+    <div className="root">
+      <div className="eyebrow" style={{ textAlign: 'center' }}>AI Takip Defteri</div>
+      <h1>Profil</h1>
+
+      <div className="panel" style={{ textAlign: 'center' }}>
+        <div className="avatar-hero">{avatarDraft}</div>
+        <p className="panel-title">{profile.username}</p>
+        <p className="panel-sub">Seviye {lvl.level} · {lvl.name}</p>
+        <div className="avatar-grid">
+          {AVATAR_OPTIONS.map(a => (
+            <button key={a} className={'avatar-opt' + (avatarDraft === a ? ' selected' : '')} onClick={() => saveAvatar(a)}>{a}</button>
+          ))}
+        </div>
+        {avatarError && <div className="error-box">{avatarError}</div>}
+        {avatarOk && <div className="ok-box">{avatarOk}</div>}
+
+        <div style={{ textAlign: 'left', marginTop: 18 }}>
+          <label className="field-label">Kullanıcı Adı</label>
+          <input type="text" value={usernameDraft} onChange={e => setUsernameDraft(e.target.value)} />
+          <button className="btn" onClick={saveUsername} disabled={usernameDraft.trim() === profile.username}>Kaydet</button>
+          {usernameError && <div className="error-box">{usernameError}</div>}
+          {usernameOk && <div className="ok-box">{usernameOk}</div>}
+        </div>
+      </div>
+
+      {myLeague && (
+        <div className="panel">
+          <p className="panel-title">🏅 {myLeague.name}</p>
+          {myLeague.promote_threshold ? (
+            <React.Fragment>
+              <p className="panel-sub">{profile.league_xp || 0} / {myLeague.promote_threshold} lig puanı</p>
+              <div className="xp-track"><div className="xp-fill" style={{ width: leaguePct + '%' }} /></div>
+            </React.Fragment>
+          ) : (
+            <p className="panel-sub">En üst ligdesin.</p>
+          )}
+        </div>
+      )}
+
+      <div className="stat-strip">
+        <div className="stat-cell">
+          <div className="stat-label">Toplam XP</div>
+          <div className="stat-value">{profile.total_xp}</div>
+          <div className="xp-track"><div className="xp-fill" style={{ width: xpPct + '%' }} /></div>
+        </div>
+        <div className="stat-cell">
+          <div className="stat-label">Aktif Seri</div>
+          <div className="stat-value">{profile.streak} hafta</div>
+        </div>
+        <div className="stat-cell">
+          <div className="stat-label">Tamamlanan Hafta</div>
+          <div className="stat-value">{history.length}</div>
+        </div>
+        <div className="stat-cell">
+          <div className="stat-label">Dondurma Hakkı</div>
+          <div className="stat-value">❄ {profile.freezes || 0}</div>
+        </div>
+      </div>
+
+      <div className="panel">
+        <p className="panel-title">Rozet Duvarı</p>
+        <div className="badge-wall">
+          {BADGE_DEFS.map(b => (
+            <div key={b.id} className={'badge' + (b.check(profile, history) ? ' earned' : '')}>
+              <span className="badge-dot" />{b.label}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

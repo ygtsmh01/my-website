@@ -63,6 +63,7 @@
 <div class="root" id="root"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="nav.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
@@ -97,6 +98,24 @@ function applyLeagueDelta(tier, xp, delta, leagues) {
     t += 1;
   }
   return { tier: t, xp: x };
+}
+
+function TimerRing({ seconds, total, size }) {
+  const s = size || 60;
+  const r = s / 2 - 6;
+  const circumference = 2 * Math.PI * r;
+  const pct = Math.max(0, Math.min(1, seconds / total));
+  const dash = circumference * pct;
+  const color = pct > 0.4 ? 'var(--green)' : pct > 0.15 ? 'var(--brass)' : 'var(--coral)';
+  return (
+    <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`}>
+      <circle cx={s / 2} cy={s / 2} r={r} fill="none" stroke="var(--hairline-soft)" strokeWidth="5" />
+      <circle cx={s / 2} cy={s / 2} r={r} fill="none" stroke={color} strokeWidth="5"
+        strokeDasharray={`${dash} ${circumference}`} strokeLinecap="round"
+        transform={`rotate(-90 ${s / 2} ${s / 2})`} style={{ transition: 'stroke-dasharray .3s linear' }} />
+      <text x="50%" y="52%" textAnchor="middle" dominantBaseline="middle" fill="var(--paper)" fontFamily="var(--mono)" fontSize={s * 0.32}>{seconds}</text>
+    </svg>
+  );
 }
 
 function App() {
@@ -370,17 +389,11 @@ function App() {
 
   if (!profile) return <div className="root"><p className="panel-sub">Profil yükleniyor…</p></div>;
 
-  const themeBtn = <button className="btn ghost" onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? '☀' : '🌙'}</button>;
-
   if (view === 'menu') {
     return (
       <div className="root">
-        <div className="top-bar-row">
-          {themeBtn}
-          <a href="index.html" className="btn ghost" style={{ textDecoration: 'none' }}>Ana Sayfaya Dön</a>
-        </div>
-        <div className="eyebrow">AI Takip Defteri · {profile.avatar} {profile.username}</div>
-        <h1>Canlı Yarışma</h1>
+        <div className="eyebrow" style={{ paddingLeft: 46 }}>AI Takip Defteri · {profile.avatar} {profile.username}</div>
+        <h1 style={{ paddingLeft: 46 }}>Canlı Yarışma</h1>
         <p className="panel-sub">Ligin: <strong>{(leagues.find(l => l.tier_index === profile.league_tier) || {}).name || '—'}</strong>. Herkesle yarışabilirsin — odadaki en düşük ligli kişiye göre kazanılacak lig puanı ayarlanır.</p>
 
         <div className="mode-row">
@@ -422,7 +435,7 @@ function App() {
   if (room.status === 'waiting') {
     return (
       <div className="root">
-        <div className="top-bar-row">{themeBtn}<button className="btn ghost" onClick={leaveRoom}>Odadan Ayrıl (-15 XP)</button></div>
+        <div className="top-bar-row"><button className="btn ghost" onClick={leaveRoom}>Odadan Ayrıl (-15 XP)</button></div>
         <div className="eyebrow">{room.mode === 'duel' ? 'Düello' : 'Canlı Oda'} · Bekleniyor</div>
         <h1>Oda Kodu</h1>
         <div className="panel">
@@ -459,9 +472,9 @@ function App() {
     const remainingSec = Math.max(0, Math.ceil(QUESTION_SECONDS - (nowTick - startedAt) / 1000));
     return (
       <div className="root">
-        <div className="top-bar-row">{themeBtn}<button className="btn ghost" onClick={leaveRoom}>Odadan Ayrıl (-15 XP)</button></div>
+        <div className="top-bar-row"><button className="btn ghost" onClick={leaveRoom}>Odadan Ayrıl (-15 XP)</button></div>
         <div className="eyebrow">{room.mode === 'duel' ? 'Düello' : 'Canlı Oda'} · Soru {room.current_question_index + 1}/{room.questions.length}</div>
-        <div className="timer-badge">{remainingSec}</div>
+        <div style={{ textAlign: 'center', marginBottom: 14 }}><TimerRing seconds={remainingSec} total={QUESTION_SECONDS} size={64} /></div>
         <div className="quiz-card">
           <div className="quiz-q">{q.question}</div>
           {q.options.map((opt, oi) => {
@@ -494,7 +507,7 @@ function App() {
   // finished
   return (
     <div className="root">
-      <div className="top-bar-row">{themeBtn}<button className="btn ghost" onClick={leaveRoom}>Ana Menüye Dön</button></div>
+      <div className="top-bar-row"><button className="btn ghost" onClick={leaveRoom}>Ana Menüye Dön</button></div>
       <div className="eyebrow">{room.mode === 'duel' ? 'Düello' : 'Canlı Oda'} · Bitti</div>
       <h1>Final Sıralaması</h1>
       <div className="panel">

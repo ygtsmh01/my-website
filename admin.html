@@ -51,6 +51,7 @@
 <div class="root" id="root"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="nav.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
@@ -415,13 +416,8 @@ ${combined}`;
 
   return (
     <div className="root">
-      <div className="eyebrow">AI Takip Defteri · {profile.username}</div>
-      <h1>Admin Paneli</h1>
-      <div className="top-bar-row" style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 14, gap: 10 }}>
-        <button className="btn ghost" onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? '☀' : '🌙'}</button>
-        <a href="index.html" className="btn ghost" style={{ textDecoration: 'none', display: 'inline-block' }}>Kullanıcı Paneline Dön</a>
-        <button className="btn ghost" onClick={logout}>Çıkış Yap</button>
-      </div>
+      <div className="eyebrow" style={{ paddingLeft: 46 }}>AI Takip Defteri · {profile.username}</div>
+      <h1 style={{ paddingLeft: 46 }}>Admin Paneli</h1>
 
       <div className="panel">
         <p className="panel-title">Demo ile Test Et</p>

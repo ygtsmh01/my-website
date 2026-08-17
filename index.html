@@ -38,22 +38,19 @@
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--ink); color: var(--paper); font-family: var(--sans); }
-  .root { max-width: 720px; margin: 0 auto; padding: 28px 20px 60px; }
-  .theme-toggle { display: inline-flex; align-items: center; gap: 6px; }
+  .root { max-width: 640px; margin: 0 auto; padding: 28px 20px 60px; }
 
   @media (max-width: 640px) {
     .root { padding: 16px 12px 48px; }
     .ledger-head { flex-direction: column; align-items: flex-start; gap: 10px; }
     .level-tag { text-align: left; }
     .stat-strip { grid-template-columns: 1fr 1fr; }
-    .top-bar-row { flex-wrap: wrap; justify-content: flex-start !important; gap: 8px; }
     .btn { white-space: normal; text-align: center; }
     .risk-choice-row { flex-direction: column; }
     .match-row { flex-direction: column; gap: 6px; }
-    .history-row, .lb-row { flex-direction: column; gap: 4px; align-items: flex-start; }
   }
 
-  .ledger-head { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 1px solid var(--hairline); padding-bottom: 18px; margin-bottom: 22px; }
+  .ledger-head { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 1px solid var(--hairline); padding-bottom: 18px; margin-bottom: 22px; padding-left: 46px; }
   .eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: .14em; color: var(--brass); text-transform: uppercase; margin-bottom: 6px; }
   h1 { font-family: var(--serif); font-weight: 600; font-size: 26px; margin: 0; }
   .level-tag { text-align: right; font-family: var(--mono); font-size: 12px; color: var(--paper-dim); }
@@ -94,11 +91,15 @@
   .one-liner { font-size: 12.5px; color: var(--paper-dim); margin-top: 3px; }
 
   .quiz-card { border: 1px solid var(--hairline); padding: 14px 16px; margin-bottom: 12px; }
-  .quiz-q { font-size: 14px; font-weight: 500; margin-bottom: 10px; }
-  .quiz-opt { display: block; width: 100%; text-align: left; background: var(--ink); border: 1px solid var(--hairline); color: var(--paper); padding: 9px 12px; margin-bottom: 6px; font-family: var(--sans); font-size: 13px; cursor: pointer; }
+  .quiz-q { font-size: 18px; font-weight: 600; margin-bottom: 16px; font-family: var(--serif); }
+  .quiz-opt { display: block; width: 100%; text-align: left; background: var(--ink); border: 2px solid var(--hairline); color: var(--paper); padding: 14px 16px; margin-bottom: 8px; font-family: var(--sans); font-size: 15px; font-weight: 500; cursor: pointer; border-left-width: 6px; }
   .quiz-opt:hover:not(:disabled) { border-color: var(--azure); }
-  .quiz-opt.correct { border-color: var(--green); background: rgba(95,191,122,.12); }
-  .quiz-opt.wrong { border-color: var(--coral); background: rgba(226,96,74,.12); }
+  .quiz-opt.opt-0 { border-left-color: var(--coral); }
+  .quiz-opt.opt-1 { border-left-color: var(--azure); }
+  .quiz-opt.opt-2 { border-left-color: var(--green); }
+  .quiz-opt.opt-3 { border-left-color: var(--brass); }
+  .quiz-opt.correct { border-color: var(--green); background: rgba(95,191,122,.15); }
+  .quiz-opt.wrong { border-color: var(--coral); background: rgba(226,96,74,.15); }
   .quiz-explain { font-size: 12.5px; color: var(--paper-dim); margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--hairline); }
   .tag { display: inline-block; font-family: var(--mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; margin-bottom: 6px; margin-right: 6px; padding: 2px 6px; border: 1px solid currentColor; }
   .tag.bonus { color: var(--coral); }
@@ -106,21 +107,10 @@
   .tag.risk { color: var(--brass); }
   .tag.boss { color: var(--coral); }
 
-  .badge-wall { display: flex; flex-wrap: wrap; gap: 10px; }
-  .badge { display: flex; align-items: center; gap: 8px; border: 1px solid var(--hairline); padding: 8px 12px; font-family: var(--mono); font-size: 11.5px; color: var(--paper-dim); }
-  .badge.earned { border-color: var(--brass); color: var(--brass); }
-  .badge-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-
-  .history-row, .lb-row { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 12px; padding: 8px 0; border-bottom: 1px solid var(--hairline-soft); color: var(--paper-dim); }
-  .history-row .hw, .lb-row .hw { color: var(--paper); }
-  .lb-row.me { color: var(--brass); }
-  .lb-row .rank { display: inline-block; width: 22px; color: var(--paper-dim); }
-
   .closed-stamp { display: inline-block; border: 2px solid var(--brass); color: var(--brass); font-family: var(--mono); font-size: 13px; letter-spacing: .1em; padding: 6px 14px; transform: rotate(-4deg); margin-top: 10px; }
   .critical-tag { font-family: var(--mono); font-size: 12px; color: var(--azure); margin-top: 8px; }
   .error-box { border: 1px solid var(--coral); color: var(--coral); padding: 10px 12px; font-family: var(--mono); font-size: 12px; margin-top: 10px; }
   .ok-box { border: 1px solid var(--green); color: var(--green); padding: 10px 12px; font-family: var(--mono); font-size: 12px; margin-top: 10px; }
-  .loading-line { font-family: var(--mono); font-size: 12px; color: var(--azure); margin-top: 10px; }
   .empty-hint { font-size: 13px; color: var(--paper-dim); font-style: italic; }
   label.field-label { display: block; font-family: var(--mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em; color: var(--paper-dim); margin-bottom: 6px; }
 
@@ -133,30 +123,32 @@
   .match-slot.wrong { border-color: var(--coral); color: var(--coral); }
   .match-pool { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
   .match-chip { font-family: var(--mono); font-size: 11.5px; border: 1px solid var(--azure); color: var(--azure); padding: 6px 10px; cursor: pointer; }
-  .match-chip.selected { background: var(--azure); color: var(--ink); }
   .match-chip.used { opacity: .3; cursor: not-allowed; }
 
-  .speed-banner { display: flex; justify-content: space-between; align-items: center; background: var(--coral); color: var(--ink); font-family: var(--mono); font-size: 13px; padding: 10px 14px; margin-bottom: 14px; position: sticky; top: 0; z-index: 5; }
+  .speed-banner { display: flex; justify-content: center; align-items: center; gap: 14px; background: var(--panel); border: 1px solid var(--coral); font-family: var(--mono); font-size: 12px; padding: 10px 14px; margin-bottom: 14px; position: sticky; top: 0; z-index: 5; }
 
   .risk-choice-row { display: flex; gap: 10px; }
   .risk-choice-row .btn { margin-top: 0; }
   .tabs { display: flex; gap: 10px; margin-bottom: 16px; }
   .tabs button { flex: 1; }
 
-  .quiz-progress { font-family: var(--mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--paper-dim); margin-bottom: 10px; }
+  .quiz-progress { font-family: var(--mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--paper-dim); margin-bottom: 10px; text-align: center; }
   @keyframes popCorrect { 0% { transform: scale(.4) rotate(-6deg); opacity: 0; } 55% { transform: scale(1.12) rotate(2deg); opacity: 1; } 100% { transform: scale(1) rotate(0); opacity: 1; } }
   @keyframes popWrong { 0% { transform: scale(.5); opacity: 0; } 55% { transform: scale(1.08); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
   @keyframes shakeX { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-10px); } 40% { transform: translateX(10px); } 60% { transform: translateX(-6px); } 80% { transform: translateX(6px); } }
   .feedback-banner { text-align: center; font-family: var(--mono); font-size: 14px; padding: 14px; margin-bottom: 14px; border-radius: 2px; }
   .feedback-banner.correct { color: var(--green); border: 1px solid var(--green); background: rgba(95,191,122,.1); animation: popCorrect .5s ease; }
   .feedback-banner.wrong { color: var(--coral); border: 1px solid var(--coral); background: rgba(226,96,74,.1); animation: popWrong .3s ease, shakeX .4s ease .1s; }
-  .past-week-content { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--hairline); }
+
+  .quiz-stage { max-width: 560px; margin: 0 auto; }
+  .quiz-stage .quiz-q { text-align: center; }
 </style>
 </head>
 <body>
 <div class="root" id="root"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="nav.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
@@ -184,16 +176,6 @@ function levelFor(xp) {
   for (let i = 0; i < LEVEL_TITLES.length; i++) if (xp >= LEVEL_TITLES[i].min) idx = i;
   return { level: idx + 1, name: LEVEL_TITLES[idx].name, floor: LEVEL_TITLES[idx].min, next: LEVEL_TITLES[idx + 1] };
 }
-const BADGE_DEFS = [
-  { id: 'ilk-hafta', label: 'İlk Hafta', check: (p, h) => h.length >= 1 },
-  { id: 'seri-3', label: '3 Hafta Seri', check: p => p.streak >= 3 },
-  { id: 'seri-5', label: '5 Hafta Seri', check: p => p.streak >= 5 },
-  { id: 'seri-10', label: '10 Hafta Seri', check: p => p.streak >= 10 },
-  { id: 'mukemmel', label: 'Mükemmel Skor', check: (p, h) => h.some(x => x.quiz_total > 0 && x.quiz_score === x.quiz_total) },
-  { id: 'on-hafta', label: '10 Hafta Tamamlandı', check: (p, h) => h.length >= 10 },
-  { id: 'kumarbaz', label: 'Kumarbaz', check: (p, h) => h.some(x => x.risk_won) },
-  { id: 'boss-avcisi', label: 'Boss Avcısı', check: (p, h) => h.some(x => x.boss_cleared) },
-];
 function shuffle(arr) {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {
@@ -202,7 +184,6 @@ function shuffle(arr) {
   }
   return a;
 }
-
 function applyLeagueDelta(tier, xp, delta, leagues) {
   let t = tier, x = xp + delta;
   while (x < 0 && t > 0) { t -= 1; x = 0; }
@@ -214,11 +195,27 @@ function applyLeagueDelta(tier, xp, delta, leagues) {
   return { tier: t, xp: x };
 }
 
+function TimerRing({ seconds, total, size }) {
+  const s = size || 60;
+  const r = s / 2 - 6;
+  const circumference = 2 * Math.PI * r;
+  const pct = Math.max(0, Math.min(1, seconds / total));
+  const dash = circumference * pct;
+  const color = pct > 0.4 ? 'var(--green)' : pct > 0.15 ? 'var(--brass)' : 'var(--coral)';
+  return (
+    <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`}>
+      <circle cx={s / 2} cy={s / 2} r={r} fill="none" stroke="var(--hairline-soft)" strokeWidth="5" />
+      <circle cx={s / 2} cy={s / 2} r={r} fill="none" stroke={color} strokeWidth="5"
+        strokeDasharray={`${dash} ${circumference}`} strokeLinecap="round"
+        transform={`rotate(-90 ${s / 2} ${s / 2})`} style={{ transition: 'stroke-dasharray .3s linear' }} />
+      <text x="50%" y="52%" textAnchor="middle" dominantBaseline="middle" fill="var(--paper)" fontFamily="var(--mono)" fontSize={s * 0.32}>{seconds}</text>
+    </svg>
+  );
+}
+
 function App() {
   const [session, setSession] = useState(null);
   const [profile, setProfile] = useState(null);
-  const [history, setHistory] = useState([]);
-  const [leaderboard, setLeaderboard] = useState([]);
   const [loadingAuth, setLoadingAuth] = useState(true);
 
   const [theme, setTheme] = useState(() => localStorage.getItem(THEME_KEY) || 'dark');
@@ -240,8 +237,6 @@ function App() {
   const [checkedReads, setCheckedReads] = useState({});
   const [quizAnswers, setQuizAnswers] = useState({});
   const [quizStepIndex, setQuizStepIndex] = useState(0);
-  const [pastWeekContents, setPastWeekContents] = useState({});
-  const [expandedPastWeek, setExpandedPastWeek] = useState(null);
   const [weekClosed, setWeekClosed] = useState(false);
   const [lastGain, setLastGain] = useState(null);
   const [lastCritical, setLastCritical] = useState(false);
@@ -282,10 +277,8 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (!session) { setProfile(null); setHistory([]); return; }
-    refreshProfileAndHistory();
-    sb.from('profiles').select('username, total_xp, streak, avatar').order('total_xp', { ascending: false }).limit(50)
-      .then(({ data }) => setLeaderboard(data || []));
+    if (!session) { setProfile(null); return; }
+    refreshProfile();
     sb.from('weeks').select('*').order('week_number', { ascending: false }).limit(1)
       .then(({ data }) => setCurrentWeek(data && data[0] ? data[0] : null));
     sb.from('leagues').select('*').order('tier_index', { ascending: true })
@@ -323,22 +316,12 @@ function App() {
     }
   }, [speedActive, speedTimeLeft, speedResult]);
 
-  async function togglePastWeek(weekNumber) {
-    if (expandedPastWeek === weekNumber) { setExpandedPastWeek(null); return; }
-    setExpandedPastWeek(weekNumber);
-    if (pastWeekContents[weekNumber]) return;
-    const { data } = await sb.from('weeks').select('*').eq('week_number', weekNumber).single();
-    if (data) setPastWeekContents(prev => ({ ...prev, [weekNumber]: data }));
-  }
-
-  async function refreshProfileAndHistory() {
+  async function refreshProfile() {
     const { data: sessionData } = await sb.auth.getSession();
     const uid = sessionData.session && sessionData.session.user.id;
     if (!uid) return;
     const { data: p } = await sb.from('profiles').select('*').eq('id', uid).single();
     setProfile(p);
-    const { data: h } = await sb.from('history').select('*').eq('user_id', uid).order('week_number', { ascending: false });
-    setHistory(h || []);
   }
 
   async function register() {
@@ -371,27 +354,6 @@ function App() {
     const { error } = await sb.auth.signInWithPassword({ email: resolvedEmail, password: passwordInput });
     if (error) setAuthError('Giriş başarısız: ' + error.message);
     setAuthBusy(false);
-  }
-
-  async function logout() { await sb.auth.signOut(); }
-
-  function resetWeekState() {
-    setWeekClosed(false);
-    setCheckedReads({});
-    setQuizAnswers({});
-    setQuizStepIndex(0);
-    setNumberGuess('');
-    setNumberSubmitted(false);
-    setNumberCorrectDisplay(false);
-    setMatchSelectedSource(null);
-    setMatchAssignments({});
-    setRiskChoice(null);
-    setRiskAnswer(null);
-    setBossAnswer(null);
-    setSpeedActive(false);
-    setSpeedTimeLeft(SPEED_SECONDS);
-    setSpeedResult(null);
-    setLastRiskResult(null);
   }
 
   function startSpeedRound() {
@@ -525,7 +487,7 @@ function App() {
     setLastRiskResult(riskWon);
     setWeekClosed(true);
     setSaving(false);
-    refreshProfileAndHistory();
+    refreshProfile();
   }
 
   async function useFreeze() {
@@ -542,7 +504,7 @@ function App() {
       }).eq('id', profile.id);
     }
     setSaving(false);
-    refreshProfileAndHistory();
+    refreshProfile();
   }
 
   function selectCurriculumAnswer(qIdx, optIdx) {
@@ -574,7 +536,7 @@ function App() {
     setShowCurriculum(false);
     setCurriculumAnswers({});
     setCurriculumStepIndex(0);
-    refreshProfileAndHistory();
+    refreshProfile();
   }
 
   if (loadingAuth) return <div className="root"><p className="panel-sub">Yükleniyor…</p></div>;
@@ -582,7 +544,7 @@ function App() {
   if (!session) {
     return (
       <div className="root">
-        <div className="ledger-head">
+        <div className="ledger-head" style={{ paddingLeft: 0 }}>
           <div><div className="eyebrow">AI Takip Defteri</div><h1>Giriş</h1></div>
           <button className="btn ghost" onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? '☀ Aydınlık' : '🌙 Karanlık'}</button>
         </div>
@@ -636,8 +598,6 @@ function App() {
   if (!profile) return <div className="root"><p className="panel-sub">Profil yükleniyor…</p></div>;
 
   const lvl = levelFor(profile.total_xp);
-  const xpSpan = lvl.next ? lvl.next.min - lvl.floor : 1;
-  const xpPct = lvl.next ? Math.min(100, Math.round(((profile.total_xp - lvl.floor) / xpSpan) * 100)) : 100;
   const usedDetails = new Set(Object.values(matchAssignments).map(a => a.detail));
   const showWeek = currentWeek && !alreadyDone;
   const myLeague = leagues.find(l => l.tier_index === profile.league_tier);
@@ -648,66 +608,48 @@ function App() {
     <div className="root">
       {speedActive && (
         <div className="speed-banner">
-          <span>⏱ HIZ TURU — tüm soruları bitir, +30 XP kazan</span>
-          <strong>{speedTimeLeft}s</strong>
+          <TimerRing seconds={speedTimeLeft} total={SPEED_SECONDS} size={44} />
+          <span>HIZ TURU — tüm soruları bitir, +30 XP kazan</span>
         </div>
       )}
 
       <div className="ledger-head">
         <div>
-          <div className="eyebrow">AI Takip Defteri · {profile.avatar || '🙂'} {profile.username}</div>
-          <h1>{currentWeek ? `Hafta ${currentWeek.week_number}` : 'Haftalık Denetim Kaydı'}</h1>
+          <div className="eyebrow">{profile.avatar || '🙂'} {profile.username}</div>
+          <h1>{currentWeek ? `Hafta ${currentWeek.week_number}` : 'AI Takip Defteri'}</h1>
         </div>
         <div className="level-tag">Seviye {lvl.level}<div className="level-name">{lvl.name}</div></div>
-      </div>
-
-      <div className="top-bar-row" style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 14, gap: 10 }}>
-        <button className="btn ghost" onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? '☀' : '🌙'}</button>
-        <a href="live.html" className="btn secondary" style={{ textDecoration: 'none', display: 'inline-block' }}>🎮 Canlı Yarışma</a>
-        {profile.is_admin && <a href="admin.html" className="btn ghost" style={{ textDecoration: 'none', display: 'inline-block' }}>Admin Paneli</a>}
-        <button className="btn ghost" onClick={logout}>Çıkış Yap</button>
       </div>
 
       <div className="stat-strip">
         <div className="stat-cell">
           <div className="stat-label">Toplam XP</div>
           <div className="stat-value">{profile.total_xp}</div>
-          <div className="xp-track"><div className="xp-fill" style={{ width: xpPct + '%' }} /></div>
         </div>
         <div className="stat-cell">
           <div className="stat-label">Aktif Seri</div>
           <div className="stat-value">{profile.streak} hafta</div>
         </div>
         <div className="stat-cell">
-          <div className="stat-label">Tamamlanan Hafta</div>
-          <div className="stat-value">{history.length}</div>
-        </div>
-        <div className="stat-cell">
           <div className="stat-label">Dondurma Hakkı</div>
           <div className="stat-value">❄ {profile.freezes || 0}</div>
         </div>
+        <div className="stat-cell">
+          <div className="stat-label">Lig</div>
+          <div className="stat-value" style={{ fontSize: 13 }}>{myLeague ? myLeague.name : '—'}</div>
+        </div>
       </div>
 
-      {myLeague && (
+      {myLeague && myLeague.content && !curriculumDone && (
         <div className="panel">
-          <p className="panel-title">🏅 {myLeague.name}</p>
-          {myLeague.promote_threshold ? (
+          <p className="panel-title">🏅 {myLeague.name} Müfredatı</p>
+          {myLeague.promote_threshold && (
             <React.Fragment>
-              <p className="panel-sub">{profile.league_xp || 0} / {myLeague.promote_threshold} lig puanı — bir üst lige terfi için</p>
-              <div className="xp-track"><div className="xp-fill" style={{ width: leaguePct + '%' }} /></div>
+              <p className="panel-sub">{profile.league_xp || 0} / {myLeague.promote_threshold} lig puanı</p>
+              <div className="xp-track" style={{ marginBottom: 14 }}><div className="xp-fill" style={{ width: leaguePct + '%' }} /></div>
             </React.Fragment>
-          ) : (
-            <p className="panel-sub">En üst ligdesin, terfi yok — sadece sıralamada kal.</p>
           )}
-          {myLeague.content ? (
-            curriculumDone ? (
-              <p className="panel-sub" style={{ marginTop: 10 }}>Müfredat tamamlandı ✓ ({leagueProgress.quiz_score}/{leagueProgress.quiz_total})</p>
-            ) : (
-              <button className="btn secondary" onClick={() => setShowCurriculum(true)}>Lig Müfredatını Tamamla</button>
-            )
-          ) : (
-            <p className="panel-sub" style={{ marginTop: 10 }}>Bu lig için müfredat henüz yayınlanmadı.</p>
-          )}
+          <button className="btn secondary" onClick={() => setShowCurriculum(true)}>Lig Müfredatını Tamamla</button>
         </div>
       )}
 
@@ -728,7 +670,7 @@ function App() {
               </div>
             ))}
             {cStepQ && !cAllAnswered && (
-              <div style={{ marginTop: 14 }}>
+              <div className="quiz-stage" style={{ marginTop: 14 }}>
                 <div className="quiz-progress">Soru {curriculumStepIndex + 1} / {cq.length}</div>
                 {cAnswered && (
                   <div className={'feedback-banner ' + (curriculumAnswers[curriculumStepIndex] === cStepQ.correct_index ? 'correct' : 'wrong')}>
@@ -741,7 +683,7 @@ function App() {
                     <div>{cStepQ.question}</div>
                   </div>
                   {cStepQ.options.map((opt, oi) => {
-                    let cls = 'quiz-opt';
+                    let cls = 'quiz-opt opt-' + oi;
                     if (cAnswered && oi === cStepQ.correct_index) cls += ' correct';
                     else if (cAnswered && oi === curriculumAnswers[curriculumStepIndex]) cls += ' wrong';
                     return <button key={oi} className={cls} disabled={cAnswered} onClick={() => selectCurriculumAnswer(curriculumStepIndex, oi)}>{opt}</button>;
@@ -774,7 +716,7 @@ function App() {
       {currentWeek && alreadyDone && (
         <div className="panel">
           <p className="panel-title">Hafta {currentWeek.week_number} tamamlandı ✓</p>
-          <p className="panel-sub">Bir sonraki hafta admin tarafından yayınlandığında burada görünecek. Kaynakları ve özetleri aşağıdan tekrar okuyabilirsin.</p>
+          <p className="panel-sub">Bir sonraki hafta admin tarafından yayınlandığında burada görünecek. Kaynakları ve özetleri Geçmiş sayfasından tekrar okuyabilirsin.</p>
         </div>
       )}
 
@@ -824,8 +766,8 @@ function App() {
             )}
 
             {!weekClosed && !allQuizAnswered && stepQ && (
-              <div className="panel">
-                <p className="panel-title">Sınav · {currentWeek.must_reads[stepQ.source_index] ? currentWeek.must_reads[stepQ.source_index].title : ''}</p>
+              <div className="panel quiz-stage">
+                <p className="panel-title" style={{ textAlign: 'center' }}>Sınav · {currentWeek.must_reads[stepQ.source_index] ? currentWeek.must_reads[stepQ.source_index].title : ''}</p>
                 <div className="quiz-progress">Soru {quizStepIndex + 1} / {totalQ}</div>
                 {stepAnswered && (
                   <div className={'feedback-banner ' + (quizAnswers[quizStepIndex] === stepQ.correct_index ? 'correct' : 'wrong')}>
@@ -839,7 +781,7 @@ function App() {
                     <div>{stepQ.question}</div>
                   </div>
                   {stepQ.options.map((opt, oi) => {
-                    let cls = 'quiz-opt';
+                    let cls = 'quiz-opt opt-' + oi;
                     if (stepAnswered && oi === stepQ.correct_index) cls += ' correct';
                     else if (stepAnswered && oi === quizAnswers[quizStepIndex]) cls += ' wrong';
                     return <button key={oi} className={cls} disabled={stepAnswered} onClick={() => selectQuizAnswer(quizStepIndex, oi)}>{opt}</button>;
@@ -865,7 +807,7 @@ function App() {
                       <div>{q.question}</div>
                     </div>
                     {q.options.map((opt, oi) => {
-                      let cls = 'quiz-opt';
+                      let cls = 'quiz-opt opt-' + oi;
                       if (oi === q.correct_index) cls += ' correct';
                       else if (oi === quizAnswers[qi]) cls += ' wrong';
                       return <button key={oi} className={cls} disabled>{opt}</button>;
@@ -930,7 +872,7 @@ function App() {
                 <div className="quiz-q"><span className="tag boss">SENTEZ SORUSU</span><div>{currentWeek.boss_question.question}</div></div>
                 {currentWeek.boss_question.options.map((opt, oi) => {
                   const answered = bossAnswer !== null;
-                  let cls = 'quiz-opt';
+                  let cls = 'quiz-opt opt-' + oi;
                   if (answered && oi === currentWeek.boss_question.correct_index) cls += ' correct';
                   else if (answered && oi === bossAnswer) cls += ' wrong';
                   return <button key={oi} className={cls} disabled={answered || weekClosed} onClick={() => setBossAnswer(oi)}>{opt}</button>;
@@ -955,7 +897,7 @@ function App() {
                   <div className="quiz-q"><span className="tag risk">RİSK SORUSU</span><div>{currentWeek.risk_question.question}</div></div>
                   {currentWeek.risk_question.options.map((opt, oi) => {
                     const answered = riskAnswer !== null;
-                    let cls = 'quiz-opt';
+                    let cls = 'quiz-opt opt-' + oi;
                     if (answered && oi === currentWeek.risk_question.correct_index) cls += ' correct';
                     else if (answered && oi === riskAnswer) cls += ' wrong';
                     return <button key={oi} className={cls} disabled={answered || weekClosed} onClick={() => setRiskAnswer(oi)}>{opt}</button>;
@@ -991,73 +933,6 @@ function App() {
           </React.Fragment>
         );
       })()}
-
-      <div className="panel">
-        <p className="panel-title">🏆 Sıralama Tablosu</p>
-        {leaderboard.map((u, i) => (
-          <div className={'lb-row' + (u.username === profile.username ? ' me' : '')} key={i}>
-            <span><span className="rank">#{i + 1}</span><span className="hw">{u.avatar || '🙂'} {u.username}</span></span>
-            <span>{u.total_xp} XP · {u.streak} seri</span>
-          </div>
-        ))}
-      </div>
-
-      <div className="panel">
-        <p className="panel-title">Rozet Duvarı</p>
-        <div className="badge-wall">
-          {BADGE_DEFS.map(b => (
-            <div key={b.id} className={'badge' + (b.check(profile, history) ? ' earned' : '')}>
-              <span className="badge-dot" />{b.label}
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {history.length > 0 && (
-        <div className="panel">
-          <p className="panel-title">Geçmiş Kayıtlar</p>
-          {history.map(h => (
-            <div key={h.week_number}>
-              <div className="history-row">
-                <span className="hw">
-                  Hafta {h.week_number}
-                  {!h.frozen && (
-                    <button className="btn ghost" style={{ marginLeft: 10, marginTop: 0 }} onClick={() => togglePastWeek(h.week_number)}>
-                      {expandedPastWeek === h.week_number ? 'Gizle' : 'Kaynakları Gör'}
-                    </button>
-                  )}
-                </span>
-                <span>
-                  {h.frozen ? '❄ Donduruldu' : `${h.quiz_score}/${h.quiz_total} · +${h.xp_earned} XP${h.critical ? ' ⚡' : ''}${h.boss_cleared ? ' 👑' : ''}`}
-                </span>
-              </div>
-              {expandedPastWeek === h.week_number && (
-                <div className="past-week-content">
-                  {!pastWeekContents[h.week_number] ? (
-                    <p className="panel-sub">Yükleniyor…</p>
-                  ) : (
-                    <React.Fragment>
-                      <p className="panel-sub" style={{ marginBottom: 8 }}>{pastWeekContents[h.week_number].week_theme}</p>
-                      {pastWeekContents[h.week_number].must_reads.map((mr, i) => (
-                        <div className="read-row" key={i}>
-                          <div>
-                            {mr.url ? <a href={mr.url} target="_blank" rel="noopener noreferrer">{mr.title}</a> : <strong>{mr.title}</strong>}
-                            <div className="one-liner">{mr.summary}</div>
-                          </div>
-                        </div>
-                      ))}
-                    </React.Fragment>
-                  )}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {history.length === 0 && !currentWeek && (
-        <p className="empty-hint">Henüz kayıt yok. Admin ilk haftayı yayınladığında burada başlayacak.</p>
-      )}
     </div>
   );
 }
@@ -1066,4 +941,3 @@ ReactDOM.createRoot(document.getElementById('root')).render(<App />);
 </script>
 </body>
 </html>
-<!-- rebuild trigger 1786989345 -->
