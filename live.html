@@ -97,6 +97,8 @@ function App() {
   const [view, setView] = useState('menu');
   const [error, setError] = useState('');
   const [joinCodeInput, setJoinCodeInput] = useState('');
+  const [duelBetChoice, setDuelBetChoice] = useState(0);
+  const [betResult, setBetResult] = useState(null);
 
   const [room, setRoom] = useState(null);
   const [participants, setParticipants] = useState([]);
@@ -189,7 +191,7 @@ function App() {
     if (participants.length > 0 && answeredCount >= participants.length) advanceQuestion();
   }, [answeredCount, participants.length, room && room.status, room && room.current_question_index, room && room.host_id, profile && profile.id]);
 
-  // Award XP once when the game finishes, based on final rank.
+  // Award XP once when the game finishes, based on final rank (plus duel bet payout).
   useEffect(() => {
     if (!room || room.status !== 'finished' || !profile || participants.length === 0) return;
     const mine = participants.find(p => p.user_id === profile.id);
@@ -197,10 +199,25 @@ function App() {
     const ranked = [...participants].sort((a, b) => b.score - a.score);
     const rank = ranked.findIndex(p => p.user_id === profile.id) + 1;
     const bonus = rank === 1 ? 30 : rank === 2 ? 20 : rank === 3 ? 10 : 5;
+
+    let betDelta = 0;
+    let betOutcome = null;
+    if (room.mode === 'duel' && room.bet_amount > 0 && participants.length === 2) {
+      const isTie = ranked[0].score === ranked[1].score;
+      if (!isTie) {
+        if (rank === 1) { betDelta = room.bet_amount; betOutcome = 'won'; }
+        else { betDelta = -room.bet_amount; betOutcome = 'lost'; }
+      } else {
+        betOutcome = 'tie';
+      }
+    }
+
     (async () => {
-      await sb.from('profiles').update({ total_xp: profile.total_xp + bonus }).eq('id', profile.id);
+      const finalXp = Math.max(0, profile.total_xp + bonus + betDelta);
+      await sb.from('profiles').update({ total_xp: finalXp }).eq('id', profile.id);
       await sb.from('live_participants').update({ xp_awarded: true }).eq('id', mine.id);
       setAwardedBonus(bonus);
+      setBetResult(betOutcome ? { outcome: betOutcome, amount: room.bet_amount } : null);
     })();
   }, [room && room.status, participants, profile]);
 
@@ -225,10 +242,11 @@ function App() {
     const pool = await fetchQuestionPool();
     if (pool.length < 4) { setError('Yeterli soru yok, önce birkaç hafta yayınlanmış olmalı.'); return; }
     const questions = pool.slice(0, Math.min(8, pool.length));
+    const betAmount = mode === 'duel' ? duelBetChoice : 0;
     for (let attempt = 0; attempt < 3; attempt++) {
       const code = generateCode();
       const { data, error: insertError } = await sb.from('live_rooms')
-        .insert({ code, mode, host_id: profile.id, questions, status: 'waiting' })
+        .insert({ code, mode, host_id: profile.id, questions, status: 'waiting', bet_amount: betAmount })
         .select().single();
       if (!insertError && data) {
         await sb.from('live_participants').insert({ room_id: data.id, user_id: profile.id, username: profile.username, avatar: profile.avatar });
@@ -301,6 +319,7 @@ function App() {
     setParticipants([]);
     setMyAnswer(null);
     setAwardedBonus(null);
+    setBetResult(null);
     setView('menu');
   }
 
@@ -338,9 +357,18 @@ function App() {
             <p className="panel-title">🎮 Oda Aç</p>
             <p className="panel-sub">Herkese açık bir oda kur, arkadaşların koduyla katılsın. Geçmiş tüm haftaların sorularından karışık 8 soru.</p>
           </div>
-          <div className="panel" onClick={() => createRoom('duel')}>
+          <div className="panel" style={{ cursor: 'default' }}>
             <p className="panel-title">⚔ Düello Başlat</p>
-            <p className="panel-sub">Tek bir rakiple 1'e 1 yarış. Oda koduyla sadece bir kişi katılabilir.</p>
+            <p className="panel-sub">Tek bir rakiple 1'e 1 yarış. Kaybeden, bahis miktarı kadar XP'sini kazanana kaptırır.</p>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+              {[0, 25, 50, 100].map(v => (
+                <button key={v} className="btn ghost" onClick={() => setDuelBetChoice(v)}
+                  style={{ borderColor: duelBetChoice === v ? 'var(--brass)' : 'var(--hairline)' }}>
+                  {v === 0 ? 'Bahissiz' : v + ' XP'}
+                </button>
+              ))}
+            </div>
+            <button className="btn secondary" onClick={() => createRoom('duel')}>Düelloyu Başlat</button>
           </div>
         </div>
 
@@ -369,6 +397,11 @@ function App() {
         <div className="panel">
           <div className="code-display">{room.code}</div>
           <p className="panel-sub" style={{ textAlign: 'center' }}>Bu kodu paylaş, katılanlar burada görünecek.</p>
+          {room.mode === 'duel' && (
+            <p className="panel-sub" style={{ textAlign: 'center' }}>
+              {room.bet_amount > 0 ? `⚔ Bahis: ${room.bet_amount} XP — kaybeden bu kadar XP'sini kazanana kaptırır.` : 'Bahissiz düello.'}
+            </p>
+          )}
         </div>
         <div className="panel">
           <p className="panel-title">Katılımcılar ({participants.length})</p>
@@ -441,6 +474,9 @@ function App() {
           </div>
         ))}
         {awardedBonus !== null && <p className="panel-sub" style={{ marginTop: 14 }}>+{awardedBonus} XP hesabına eklendi.</p>}
+        {betResult && betResult.outcome === 'won' && <p className="panel-sub">⚔ Bahsi kazandın! Rakibinden +{betResult.amount} XP aldın.</p>}
+        {betResult && betResult.outcome === 'lost' && <p className="panel-sub">⚔ Bahsi kaybettin, rakibine {betResult.amount} XP kaptırdın.</p>}
+        {betResult && betResult.outcome === 'tie' && <p className="panel-sub">⚔ Berabere, bahis iade edildi.</p>}
       </div>
       <button className="btn secondary" onClick={leaveRoom}>Yeni Bir Yarışma Başlat</button>
     </div>

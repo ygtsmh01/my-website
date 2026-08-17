@@ -234,6 +234,7 @@ function App() {
   const [lastGain, setLastGain] = useState(null);
   const [lastCritical, setLastCritical] = useState(false);
   const [lastFreezeEarned, setLastFreezeEarned] = useState(false);
+  const [lastStreakBonus, setLastStreakBonus] = useState(0);
   const [numberGuess, setNumberGuess] = useState('');
   const [shuffledDetails, setShuffledDetails] = useState([]);
   const [matchSelected, setMatchSelected] = useState(null);
@@ -440,6 +441,7 @@ function App() {
 
     const nextStreak = profile.streak + 1;
     const earnedFreeze = nextStreak > 0 && nextStreak % 3 === 0;
+    const streakBonus = earnedFreeze ? 50 : 0;
 
     const { error: histErr } = await sb.from('history').insert({
       user_id: profile.id,
@@ -455,7 +457,7 @@ function App() {
     });
     if (!histErr) {
       await sb.from('profiles').update({
-        total_xp: profile.total_xp + xpGain,
+        total_xp: profile.total_xp + xpGain + streakBonus,
         streak: nextStreak,
         last_week_number: currentWeek.week_number,
         freezes: (profile.freezes || 0) + (earnedFreeze ? 1 : 0),
@@ -465,6 +467,7 @@ function App() {
     setLastGain(xpGain);
     setLastCritical(isCritical);
     setLastFreezeEarned(earnedFreeze);
+    setLastStreakBonus(streakBonus);
     setLastRiskResult(riskWon);
     setWeekClosed(true);
     setSaving(false);
@@ -804,6 +807,7 @@ function App() {
                   <div className="closed-stamp">ONAYLANDI · +{lastGain} XP</div>
                   {lastCritical && <div className="critical-tag">⚡ KRİTİK BAŞARI! 1.5× bonus uygulandı</div>}
                   {lastFreezeEarned && <div className="critical-tag">❄ Yeni dondurma hakkı kazandın!</div>}
+                  {lastStreakBonus > 0 && <div className="critical-tag">🔥 3 haftalık seri bonusu: +{lastStreakBonus} XP</div>}
                   {lastRiskResult === true && <div className="critical-tag">🎲 Bahsi kazandın!</div>}
                   {lastRiskResult === false && <div className="critical-tag">🎲 Bahsi kaybettin.</div>}
                   {speedResult === true && <div className="critical-tag">⏱ Hız turu bonusu kazandın!</div>}
