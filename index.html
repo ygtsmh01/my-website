@@ -106,6 +106,9 @@
   .tag.tf { color: var(--azure); }
   .tag.risk { color: var(--brass); }
   .tag.boss { color: var(--coral); }
+  .tag.static { color: var(--azure); }
+  .tag.fresh { color: var(--brass); }
+  .panel.static-curriculum { border-color: var(--azure); background: rgba(111,151,240,.05); }
 
   .closed-stamp { display: inline-block; border: 2px solid var(--brass); color: var(--brass); font-family: var(--mono); font-size: 13px; letter-spacing: .1em; padding: 6px 14px; transform: rotate(-4deg); margin-top: 10px; }
   .critical-tag { font-family: var(--mono); font-size: 12px; color: var(--azure); margin-top: 8px; }
@@ -296,6 +299,9 @@ function App() {
   const [curriculumAnswers, setCurriculumAnswers] = useState({});
   const [curriculumStepIndex, setCurriculumStepIndex] = useState(0);
   const [curriculumSaving, setCurriculumSaving] = useState(false);
+  const [weeklyReplayActive, setWeeklyReplayActive] = useState(false);
+  const [replayQuizAnswers, setReplayQuizAnswers] = useState({});
+  const [replayQuizStepIndex, setReplayQuizStepIndex] = useState(0);
   const [lastPromotion, setLastPromotion] = useState(null);
 
   useEffect(() => {
@@ -430,6 +436,19 @@ function App() {
     }
   }
 
+  function startWeeklyReplay() {
+    setReplayQuizAnswers({});
+    setReplayQuizStepIndex(0);
+    setWeeklyReplayActive(true);
+  }
+
+  function selectReplayQuizAnswer(qIdx, optIdx) {
+    if (replayQuizAnswers[qIdx] !== undefined) return;
+    setReplayQuizAnswers(prev => ({ ...prev, [qIdx]: optIdx }));
+    const q = currentWeek.quiz[qIdx];
+    if (optIdx === q.correct_index) grantXp(Math.round((q.bonus ? 20 : 10) / 2));
+  }
+
   function selectMatchSource(sourceIndex) {
     if (weekClosed || matchAssignments[sourceIndex]) return;
     setMatchSelectedSource(sourceIndex);
@@ -505,7 +524,7 @@ function App() {
     if (!histErr) {
       const myLeague = leagues.find(l => l.tier_index === profile.league_tier);
       const mult = myLeague ? Number(myLeague.weekly_multiplier) : 1;
-      const leagueGain = Math.round(totalWeekXp * mult * 0.5);
+      const leagueGain = Math.round(totalWeekXp * mult * 1.0);
       const { tier: newTier, xp: newLeagueXp } = applyLeagueDelta(profile.league_tier, profile.league_xp || 0, leagueGain, leagues);
       if (newTier > profile.league_tier) {
         const promotedTo = leagues.find(l => l.tier_index === newTier);
@@ -552,17 +571,18 @@ function App() {
     setCurriculumAnswers(prev => ({ ...prev, [qIdx]: optIdx }));
   }
 
-  async function finishCurriculum(myLeague) {
+  async function finishCurriculum(myLeague, isReplay) {
     if (!profile || !myLeague || !myLeague.content) return;
     setCurriculumSaving(true);
     const quiz = myLeague.content.quiz || [];
     const score = quiz.reduce((acc, q, i) => acc + (curriculumAnswers[i] === q.correct_index ? 1 : 0), 0);
-    const completionBonus = myLeague.promote_threshold ? Math.round(myLeague.promote_threshold * 0.8) : 300;
+    const fullBonus = myLeague.promote_threshold ? Math.round(myLeague.promote_threshold * 0.4) : 150;
+    const completionBonus = isReplay ? Math.round(fullBonus / 2) : fullBonus;
 
-    const { error: progErr } = await sb.from('league_progress').insert({
+    const { error: progErr } = await sb.from('league_progress').upsert({
       user_id: profile.id, tier_index: myLeague.tier_index, completed: true,
       quiz_score: score, quiz_total: quiz.length, completed_at: new Date().toISOString(),
-    });
+    }, { onConflict: 'user_id,tier_index' });
     if (!progErr) {
       const { tier: newTier, xp: newLeagueXp } = applyLeagueDelta(profile.league_tier, profile.league_xp || 0, completionBonus, leagues);
       if (newTier > profile.league_tier) {
@@ -705,8 +725,9 @@ function App() {
       </div>
 
       {myLeague && (
-        <div className="panel">
-          <p className="panel-title">🏅 {myLeague.name}</p>
+        <div className="panel static-curriculum">
+          <span className="tag static">📘 STATİK MÜFREDAT</span>
+          <p className="panel-title">{myLeague.name}</p>
           {myLeague.promote_threshold ? (
             <React.Fragment>
               <p className="panel-sub">{profile.league_xp || 0} / {myLeague.promote_threshold} lig puanı</p>
@@ -717,7 +738,10 @@ function App() {
           )}
           {myLeague.content && (
             curriculumDone ? (
-              <p className="panel-sub" style={{ margin: 0 }}>Müfredat tamamlandı ✓ ({leagueProgress.quiz_score}/{leagueProgress.quiz_total})</p>
+              <React.Fragment>
+                <p className="panel-sub" style={{ margin: '0 0 8px' }}>Müfredat tamamlandı ✓ ({leagueProgress.quiz_score}/{leagueProgress.quiz_total})</p>
+                <button className="btn ghost" onClick={() => { setCurriculumAnswers({}); setCurriculumStepIndex(0); setShowCurriculum(true); }}>🔁 Tekrar Çöz (yarı XP)</button>
+              </React.Fragment>
             ) : (
               <button className="btn secondary" onClick={() => setShowCurriculum(true)}>Lig Müfredatını Tamamla</button>
             )
@@ -725,7 +749,8 @@ function App() {
         </div>
       )}
 
-      <div className="panel">
+      <div className="panel static-curriculum">
+        <span className="tag static">📘 STATİK MÜFREDAT</span>
         <p className="panel-title">📖 Tüm Lig Müfredatları</p>
         <p className="panel-sub">Her ligin kaynak başlıklarını görebilirsin, ama sadece kendi liginin müfredatını açıp tamamlayabilirsin.</p>
         <button className="btn ghost" onClick={() => setShowAllCurricula(v => !v)}>{showAllCurricula ? 'Gizle' : 'Tüm Ligleri Gör'}</button>
@@ -761,7 +786,8 @@ function App() {
         const cAnswered = cStepQ && curriculumAnswers[curriculumStepIndex] !== undefined;
         const cAllAnswered = cq.every((_, i) => curriculumAnswers[i] !== undefined);
         return (
-          <div className="panel">
+          <div className="panel static-curriculum">
+            <span className="tag static">📘 STATİK MÜFREDAT{curriculumDone ? ' · TEKRAR (yarı XP)' : ''}</span>
             <p className="panel-title">{myLeague.name} Müfredatı</p>
             {myLeague.content.must_reads && myLeague.content.must_reads.map((mr, i) => (
               <div className="read-row" key={i}>
@@ -800,7 +826,7 @@ function App() {
               </div>
             )}
             {cAllAnswered && (
-              <button className="btn secondary" style={{ marginTop: 14 }} onClick={() => finishCurriculum(myLeague)} disabled={curriculumSaving}>
+              <button className="btn secondary" style={{ marginTop: 14 }} onClick={() => finishCurriculum(myLeague, curriculumDone)} disabled={curriculumSaving}>
                 {curriculumSaving ? 'Kaydediliyor…' : 'Müfredatı Bitir'}
               </button>
             )}
@@ -815,12 +841,50 @@ function App() {
         </div>
       )}
 
-      {currentWeek && alreadyDone && (
-        <div className="panel">
-          <p className="panel-title">{formatWeekRange(currentWeek.created_at)} tamamlandı ✓</p>
-          <p className="panel-sub">Bir sonraki hafta admin tarafından yayınlandığında burada görünecek. Kaynakları ve özetleri Geçmiş sayfasından tekrar okuyabilirsin.</p>
-        </div>
-      )}
+      {currentWeek && alreadyDone && (() => {
+        const rq = replayQuizStepIndex < currentWeek.quiz.length ? currentWeek.quiz[replayQuizStepIndex] : null;
+        const rAnswered = rq && replayQuizAnswers[replayQuizStepIndex] !== undefined;
+        const rAllAnswered = currentWeek.quiz.every((_, i) => replayQuizAnswers[i] !== undefined);
+        return (
+          <div className="panel">
+            <span className="tag fresh">🗞️ GÜNCEL · BU HAFTA</span>
+            <p className="panel-title">{formatWeekRange(currentWeek.created_at)} tamamlandı ✓</p>
+            <p className="panel-sub">Bir sonraki hafta admin tarafından yayınlandığında burada görünecek. Kaynakları ve özetleri Geçmiş sayfasından tekrar okuyabilirsin.</p>
+            {!weeklyReplayActive ? (
+              <button className="btn ghost" onClick={startWeeklyReplay}>🔁 Soruları Tekrar Çöz (yarı XP)</button>
+            ) : rAllAnswered ? (
+              <p className="panel-sub" style={{ marginTop: 10 }}>Tekrar tamamladın! XP zaten hesabına işlendi. <button className="btn ghost" onClick={startWeeklyReplay}>Tekrar Başlat</button></p>
+            ) : rq && (
+              <div className="quiz-stage" style={{ marginTop: 14 }}>
+                <div className="quiz-progress">Soru {replayQuizStepIndex + 1} / {currentWeek.quiz.length}</div>
+                {rAnswered && (
+                  <div className={'feedback-banner ' + (replayQuizAnswers[replayQuizStepIndex] === rq.correct_index ? 'correct' : 'wrong')}>
+                    {replayQuizAnswers[replayQuizStepIndex] === rq.correct_index ? '🎉 Doğru!' : '💥 Olmadı.'}
+                  </div>
+                )}
+                <div className="quiz-card">
+                  <div className="quiz-q">
+                    {rq.type === 'tf' && <span className="tag tf">DOĞRU/YANLIŞ</span>}
+                    <div>{rq.question}</div>
+                  </div>
+                  {rq.options.map((opt, oi) => {
+                    let cls = 'quiz-opt opt-' + oi;
+                    if (rAnswered && oi === rq.correct_index) cls += ' correct';
+                    else if (rAnswered && oi === replayQuizAnswers[replayQuizStepIndex]) cls += ' wrong';
+                    return <button key={oi} className={cls} disabled={rAnswered} onClick={() => selectReplayQuizAnswer(replayQuizStepIndex, oi)}>{opt}</button>;
+                  })}
+                  {rAnswered && <div className="quiz-explain">{rq.explanation}</div>}
+                </div>
+                {rAnswered && (
+                  <button className="btn secondary" onClick={() => setReplayQuizStepIndex(i => i + 1)}>
+                    {replayQuizStepIndex + 1 < currentWeek.quiz.length ? 'Sonraki Soru' : 'Devam Et'}
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {currentWeek && currentWeek.is_boss && (
         <div className="panel boss">
@@ -831,6 +895,7 @@ function App() {
 
       {currentWeek && (
         <div className="panel">
+          <span className="tag fresh">🗞️ GÜNCEL · BU HAFTA</span>
           <p className="panel-title">{currentWeek.week_theme || 'Bu haftanın okumaları'}</p>
           <button className="btn ghost" onClick={() => setShowSources(v => !v)}>
             {showSources ? 'Kaynakları Gizle' : `📚 Kaynakları Göster (${currentWeek.must_reads.length})`}
