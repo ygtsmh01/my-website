@@ -704,16 +704,24 @@ function App() {
         </div>
       </div>
 
-      {myLeague && myLeague.content && !curriculumDone && (
+      {myLeague && (
         <div className="panel">
-          <p className="panel-title">🏅 {myLeague.name} Müfredatı</p>
-          {myLeague.promote_threshold && (
+          <p className="panel-title">🏅 {myLeague.name}</p>
+          {myLeague.promote_threshold ? (
             <React.Fragment>
               <p className="panel-sub">{profile.league_xp || 0} / {myLeague.promote_threshold} lig puanı</p>
               <div className="xp-track" style={{ marginBottom: 14 }}><div className="xp-fill" style={{ width: leaguePct + '%' }} /></div>
             </React.Fragment>
+          ) : (
+            <p className="panel-sub">En üst ligdesin.</p>
           )}
-          <button className="btn secondary" onClick={() => setShowCurriculum(true)}>Lig Müfredatını Tamamla</button>
+          {myLeague.content && (
+            curriculumDone ? (
+              <p className="panel-sub" style={{ margin: 0 }}>Müfredat tamamlandı ✓ ({leagueProgress.quiz_score}/{leagueProgress.quiz_total})</p>
+            ) : (
+              <button className="btn secondary" onClick={() => setShowCurriculum(true)}>Lig Müfredatını Tamamla</button>
+            )
+          )}
         </div>
       )}
 
