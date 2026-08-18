@@ -48,6 +48,7 @@
     drawer.appendChild(makeLink('leaderboard.html', '🏆 Sıralama'));
     drawer.appendChild(makeLink('history.html', '📚 Geçmiş'));
     drawer.appendChild(makeLink('live.html', '⚡ Canlı Yarışma'));
+    drawer.appendChild(makeLink('guide.html', '❓ Kılavuz'));
     if (isAdmin) drawer.appendChild(makeLink('admin.html', '🛠 Admin Paneli'));
 
     var sep = document.createElement('div');

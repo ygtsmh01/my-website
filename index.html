@@ -142,6 +142,16 @@
 
   .quiz-stage { max-width: 560px; margin: 0 auto; }
   .quiz-stage .quiz-q { text-align: center; }
+
+  .onboarding-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.7); z-index: 2000; display: flex; align-items: center; justify-content: center; padding: 20px; }
+  .onboarding-card { background: var(--panel); border: 1px solid var(--hairline); padding: 28px 24px; max-width: 380px; width: 100%; text-align: center; }
+  .onboarding-emoji { font-size: 44px; margin-bottom: 14px; }
+  .onboarding-title { font-family: var(--serif); font-size: 20px; font-weight: 600; margin: 0 0 10px; }
+  .onboarding-text { font-size: 13.5px; color: var(--paper-dim); line-height: 1.6; margin: 0 0 20px; }
+  .onboarding-dots { display: flex; justify-content: center; gap: 6px; margin-bottom: 18px; }
+  .onboarding-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--hairline); }
+  .onboarding-dot.active { background: var(--brass); }
+  .onboarding-actions { display: flex; justify-content: space-between; gap: 10px; }
 </style>
 </head>
 <body>
@@ -162,6 +172,13 @@ const BOSS_EVERY = 5;
 const SPEED_SECONDS = 45;
 const THEME_KEY = 'aitakip_theme';
 const AVATAR_OPTIONS = ['🙂', '🦊', '🐙', '🐼', '🦉', '🐳', '🦁', '🐸', '🤖', '👾', '🦄', '🐢'];
+const ONBOARDING_KEY = 'aitakip_onboarding_seen_v1';
+const ONBOARDING_SLIDES = [
+  { emoji: '🎮', title: 'Haftalık Oyun', text: 'Her hafta yeni kaynaklar gelir. Okuyup soru soru ilerleyen sınavı çöz, XP kazan.' },
+  { emoji: '🏅', title: 'Lig Sistemi', text: 'Sabit müfredatını tamamla, haftalık quizlerle puan topla, ligini yükselt.' },
+  { emoji: '⚡', title: 'Canlı Yarışma', text: 'Arkadaşlarınla oda kur ya da düello yap, gerçek zamanlı yarış.' },
+  { emoji: '☰', title: 'Her An Kılavuza Dön', text: 'Sol üstteki menüden Profil, Sıralama, Geçmiş ve Kılavuz sayfalarına ulaşabilirsin.' },
+];
 
 const TR_MONTHS = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
 function formatWeekRange(createdAt) {
@@ -272,6 +289,7 @@ function App() {
   const [leagueProgress, setLeagueProgress] = useState(null);
   const [showCurriculum, setShowCurriculum] = useState(false);
   const [showAllCurricula, setShowAllCurricula] = useState(false);
+  const [onboardingStep, setOnboardingStep] = useState(null);
   const [curriculumAnswers, setCurriculumAnswers] = useState({});
   const [curriculumStepIndex, setCurriculumStepIndex] = useState(0);
   const [curriculumSaving, setCurriculumSaving] = useState(false);
@@ -306,6 +324,11 @@ function App() {
     sb.from('league_progress').select('*').eq('user_id', profile.id).eq('tier_index', profile.league_tier).maybeSingle()
       .then(({ data }) => setLeagueProgress(data));
   }, [profile && profile.id, profile && profile.league_tier]);
+
+  useEffect(() => {
+    if (!profile) return;
+    if (!localStorage.getItem(ONBOARDING_KEY)) setOnboardingStep(0);
+  }, [profile && profile.id]);
 
   useEffect(() => {
     if (currentWeek && currentWeek.matching && currentWeek.matching.pairs) {
@@ -366,6 +389,11 @@ function App() {
     const { error } = await sb.auth.signInWithPassword({ email: resolvedEmail, password: passwordInput });
     if (error) setAuthError('Giriş başarısız: ' + error.message);
     setAuthBusy(false);
+  }
+
+  function closeOnboarding() {
+    localStorage.setItem(ONBOARDING_KEY, '1');
+    setOnboardingStep(null);
   }
 
   function startSpeedRound() {
@@ -618,6 +646,27 @@ function App() {
 
   return (
     <div className="root">
+      {onboardingStep !== null && (
+        <div className="onboarding-overlay">
+          <div className="onboarding-card">
+            <div className="onboarding-emoji">{ONBOARDING_SLIDES[onboardingStep].emoji}</div>
+            <p className="onboarding-title">{ONBOARDING_SLIDES[onboardingStep].title}</p>
+            <p className="onboarding-text">{ONBOARDING_SLIDES[onboardingStep].text}</p>
+            <div className="onboarding-dots">
+              {ONBOARDING_SLIDES.map((_, i) => <span key={i} className={'onboarding-dot' + (i === onboardingStep ? ' active' : '')} />)}
+            </div>
+            <div className="onboarding-actions">
+              <button className="btn ghost" onClick={closeOnboarding}>Atla</button>
+              {onboardingStep < ONBOARDING_SLIDES.length - 1 ? (
+                <button className="btn secondary" onClick={() => setOnboardingStep(s => s + 1)}>İleri</button>
+              ) : (
+                <button className="btn secondary" onClick={closeOnboarding}>Başla</button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {speedActive && (
         <div className="speed-banner">
           <TimerRing seconds={speedTimeLeft} total={SPEED_SECONDS} size={44} />
@@ -630,7 +679,10 @@ function App() {
           <div className="eyebrow">{profile.avatar || '🙂'} {profile.username}</div>
           <h1>{currentWeek ? formatWeekRange(currentWeek.created_at) : 'AI Takip Defteri'}</h1>
         </div>
-        <div className="level-tag">Seviye {lvl.level}<div className="level-name">{lvl.name}</div></div>
+        <div style={{ textAlign: 'right' }}>
+          <div className="level-tag">Seviye {lvl.level}<div className="level-name">{lvl.name}</div></div>
+          <button className="btn ghost" style={{ marginTop: 8 }} onClick={() => setOnboardingStep(0)}>❔ Nasıl Kullanılır</button>
+        </div>
       </div>
 
       <div className="stat-strip">

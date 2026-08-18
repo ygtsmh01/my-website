@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AI Takip Defteri · Kılavuz</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+  :root {
+    --ink: #14151f; --panel: #1c1e2c; --hairline: #33364c; --hairline-soft: #262838;
+    --paper: #edebe4; --paper-dim: #9698ac; --brass: #c9a34e; --brass-dim: #8a744a;
+    --coral: #e2604a; --azure: #6f97f0; --green: #5fbf7a;
+    --mono: 'IBM Plex Mono', monospace; --serif: 'Fraunces', Georgia, serif; --sans: 'IBM Plex Sans', -apple-system, sans-serif;
+  }
+  :root[data-theme="light"] {
+    --ink: #f3f1e9; --panel: #ffffff; --hairline: #d9d5c6; --hairline-soft: #e9e6da;
+    --paper: #1b1c26; --paper-dim: #6b6d80; --brass: #9c7a2e; --brass-dim: #8a744a;
+    --coral: #c2402b; --azure: #3457c9; --green: #2c8c4f;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--ink); color: var(--paper); font-family: var(--sans); }
+  .root { max-width: 640px; margin: 0 auto; padding: 66px 20px 60px; }
+  .eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: .14em; color: var(--brass); text-transform: uppercase; margin-bottom: 6px; text-align: center; }
+  h1 { font-family: var(--serif); font-weight: 600; font-size: 26px; margin: 0 0 24px; text-align: center; }
+  h2 { font-family: var(--serif); font-weight: 600; font-size: 18px; margin: 0 0 4px; }
+  .panel { background: var(--panel); border: 1px solid var(--hairline); padding: 20px; margin-bottom: 16px; }
+  .panel-sub { font-size: 13.5px; color: var(--paper-dim); line-height: 1.6; margin: 0 0 8px; }
+  .emoji { font-size: 26px; margin-bottom: 8px; }
+  ul { margin: 8px 0 0; padding-left: 18px; }
+  li { font-size: 13.5px; color: var(--paper-dim); line-height: 1.7; }
+  li strong { color: var(--paper); }
+</style>
+</head>
+<body>
+<div class="root" id="root">
+  <div class="eyebrow">AI Takip Defteri</div>
+  <h1>📖 Kılavuz</h1>
+
+  <div class="panel">
+    <div class="emoji">🎮</div>
+    <h2>Oyun (Ana Sayfa)</h2>
+    <p class="panel-sub">Her hafta admin yeni kaynaklar yayınlar. Kaynakları okuyup işaretle, sonra soru soru ilerleyen sınavı çöz. Doğru cevap yeşil, yanlış kırmızı yanar.</p>
+    <ul>
+      <li><strong>🔢 Sayı Tahmini</strong> — kaynaktaki bir sayıyı tahmin et, tolerans içindeyse doğru sayılır.</li>
+      <li><strong>🔗 Eşleştirme</strong> — önce kaynağa, sonra doğru detaya tıkla. Anında yeşil/kırmızı yanar ve XP hemen işlenir.</li>
+      <li><strong>👑 Boss Haftası</strong> — her 5 haftada bir, daha zor ve daha ödüllü.</li>
+      <li><strong>🎲 Çift Yap ya da Kaybet</strong> — XP'nin yarısını bahse yatır, bir soruya bağlı.</li>
+      <li><strong>⏱ Hız Turu</strong> — süre dolmadan tüm soruları bitirirsen bonus XP.</li>
+      <li><strong>❄ Dondurma</strong> — meşgul bir hafta, seriyi bozmadan atlamanı sağlar (her 3 haftalık seride 1 hak).</li>
+    </ul>
+  </div>
+
+  <div class="panel">
+    <div class="emoji">🏅</div>
+    <h2>Lig Sistemi</h2>
+    <p class="panel-sub">6 lig var: Bronz → Gümüş → Altın → Elmas → Usta → Şampiyonlar Ligi. Her ligin sabit bir müfredatı (özet + quiz) var, bir kere tamamlanır. Haftalık quiz de lig puanı verir — üst liglerde çarpanı daha yüksek. Yeterli lig puanına ulaşınca otomatik terfi edersin.</p>
+    <p class="panel-sub">Ana sayfadaki "Tüm Lig Müfredatları" bölümünden her ligin kaynak başlıklarını görebilirsin, ama sadece kendi liginin müfredatını açıp tamamlayabilirsin.</p>
+  </div>
+
+  <div class="panel">
+    <div class="emoji">⚡</div>
+    <h2>Canlı Yarışma</h2>
+    <p class="panel-sub">Hamburger menüden "Canlı Yarışma"ya girip <strong>Oda Aç</strong> (herkese açık) ya da <strong>Düello Başlat</strong> (1'e 1, bahisli olabilir) diyerek bir kod oluşturursun. Arkadaşların o kodla katılır. Herkes cevaplayınca otomatik sıradaki soruya geçilir, ilk doğru cevaba ekstra puan var. Kazanan lig puanı da kazanır — odadaki en düşük ligli kişinin liginin çarpanına göre hesaplanır.</p>
+  </div>
+
+  <div class="panel">
+    <div class="emoji">👤</div>
+    <h2>Profil</h2>
+    <p class="panel-sub">Avatarını ve kullanıcı adını buradan değiştirebilirsin. Toplam XP, seri, dondurma hakkı ve rozet duvarın da burada.</p>
+  </div>
+
+  <div class="panel">
+    <div class="emoji">🏆</div>
+    <h2>Sıralama ve Geçmiş</h2>
+    <p class="panel-sub">Sıralama sayfası herkesin XP'sine göre canlı tabloyu gösterir. Geçmiş sayfasında ise tamamladığın haftaların tarih aralığını ve o haftanın kaynaklarını tekrar görebilirsin.</p>
+  </div>
+
+  <div class="panel">
+    <p class="panel-sub" style="margin:0">☰ simgesine her zaman tıklayıp bu sayfalar arasında geçiş yapabilirsin. Kafan karıştığında yine buraya dönebilirsin.</p>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="nav.js"></script>
+<script>
+  document.documentElement.setAttribute('data-theme', localStorage.getItem('aitakip_theme') || 'dark');
+</script>
+</body>
+</html>
