@@ -1,76 +1,10 @@
-<!DOCTYPE html>
-<html lang="tr">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>AI Takip Defteri · Geçmiş</title>
-<style>
-  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
-  :root {
-    --ink: #14151f; --panel: #1c1e2c; --hairline: #33364c; --hairline-soft: #262838;
-    --paper: #edebe4; --paper-dim: #9698ac; --brass: #c9a34e; --brass-dim: #8a744a;
-    --coral: #e2604a; --azure: #6f97f0; --green: #5fbf7a;
-    --mono: 'IBM Plex Mono', monospace; --serif: 'Fraunces', Georgia, serif; --sans: 'IBM Plex Sans', -apple-system, sans-serif;
-  }
-  :root[data-theme="light"] {
-    --ink: #f3f1e9; --panel: #ffffff; --hairline: #d9d5c6; --hairline-soft: #e9e6da;
-    --paper: #1b1c26; --paper-dim: #6b6d80; --brass: #9c7a2e; --brass-dim: #8a744a;
-    --coral: #c2402b; --azure: #3457c9; --green: #2c8c4f;
-  }
-  * { box-sizing: border-box; }
-  body { margin: 0; background: var(--ink); color: var(--paper); font-family: var(--sans); }
-  .root { max-width: 640px; margin: 0 auto; padding: 66px 20px 60px; }
-  .eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: .14em; color: var(--brass); text-transform: uppercase; margin-bottom: 6px; text-align: center; }
-  h1 { font-family: var(--serif); font-weight: 600; font-size: 26px; margin: 0 0 20px; text-align: center; }
-  .panel { background: var(--panel); border: 1px solid var(--hairline); padding: 20px; margin-bottom: 18px; }
-  .panel-title { font-family: var(--serif); font-size: 17px; font-weight: 600; margin: 0 0 4px; }
-  .panel-sub { font-size: 13px; color: var(--paper-dim); margin: 0 0 14px; line-height: 1.5; }
-  .btn { font-family: var(--mono); font-size: 10.5px; letter-spacing: .04em; text-transform: uppercase; padding: 6px 10px; border: 1px solid var(--hairline); background: transparent; color: var(--paper-dim); cursor: pointer; }
-  .btn:hover { background: var(--hairline-soft); }
-  .history-row { display: flex; justify-content: space-between; align-items: center; font-family: var(--mono); font-size: 12px; padding: 10px 0; border-bottom: 1px solid var(--hairline-soft); color: var(--paper-dim); }
-  .history-row .hw { color: var(--paper); }
-  .read-row { padding: 10px 0; border-bottom: 1px solid var(--hairline-soft); }
-  .read-row:last-child { border-bottom: none; }
-  .read-row a { color: var(--paper); font-weight: 600; text-decoration: none; border-bottom: 1px solid var(--brass-dim); }
-  .one-liner { font-size: 12.5px; color: var(--paper-dim); margin-top: 3px; }
-  .past-week-content { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--hairline); }
-  .empty-hint { font-size: 13px; color: var(--paper-dim); font-style: italic; }
-  .btn.secondary { border-color: var(--azure); color: var(--azure); }
-  .btn.secondary:hover { background: var(--azure); color: var(--ink); }
-  .quiz-card { border: 1px solid var(--hairline); padding: 14px 16px; margin-bottom: 12px; }
-  .quiz-q { font-size: 15px; font-weight: 600; margin-bottom: 12px; font-family: var(--serif); }
-  .quiz-opt { display: block; width: 100%; text-align: left; background: var(--ink); border: 2px solid var(--hairline); color: var(--paper); padding: 12px 14px; margin-bottom: 8px; font-family: var(--sans); font-size: 14px; cursor: pointer; }
-  .quiz-opt:hover:not(:disabled) { border-color: var(--azure); }
-  .quiz-opt.correct { border-color: var(--green); background: rgba(95,191,122,.15); }
-  .quiz-opt.wrong { border-color: var(--coral); background: rgba(226,96,74,.15); }
-  .quiz-explain { font-size: 12.5px; color: var(--paper-dim); margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--hairline); }
-  .quiz-progress { font-family: var(--mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--paper-dim); margin-bottom: 10px; text-align: center; }
-  .tag { display: inline-block; font-family: var(--mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; margin-bottom: 6px; margin-right: 6px; padding: 2px 6px; border: 1px solid currentColor; }
-  .tag.tf { color: var(--azure); }
-  .tag.missed { color: var(--coral); }
-  @keyframes popCorrect { 0% { transform: scale(.4); opacity: 0; } 55% { transform: scale(1.1); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
-  @keyframes shakeX { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-8px); } 40% { transform: translateX(8px); } 60% { transform: translateX(-5px); } 80% { transform: translateX(5px); } }
-  .feedback-banner { text-align: center; font-family: var(--mono); font-size: 13px; padding: 12px; margin-bottom: 12px; }
-  .feedback-banner.correct { color: var(--green); border: 1px solid var(--green); background: rgba(95,191,122,.1); animation: popCorrect .4s ease; }
-  .feedback-banner.wrong { color: var(--coral); border: 1px solid var(--coral); background: rgba(226,96,74,.1); animation: shakeX .4s ease; }
-</style>
-</head>
-<body>
-<div class="root" id="root"></div>
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { sb } from '../lib/supabase';
+import type { HistoryRow, Profile, Week } from '../lib/types';
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script src="nav.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
-<script type="text/babel">
-const { useState, useEffect } = React;
-
-const SUPABASE_URL = 'https://lhgkfgwtmpfxyxwyaroh.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_ZElENBh86p0cWQDAnSbNWw_EcOQHmDV';
-const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const TR_MONTHS = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
-function formatWeekRange(createdAt) {
+function formatWeekRange(createdAt?: string | null) {
   if (!createdAt) return '';
   const start = new Date(createdAt);
   const end = new Date(start);
@@ -80,19 +14,21 @@ function formatWeekRange(createdAt) {
   return sm === em ? `${sd}-${ed} ${sm}` : `${sd} ${sm} - ${ed} ${em}`;
 }
 
-function App() {
-  const [theme] = useState(() => localStorage.getItem('aitakip_theme') || 'dark');
-  const [session, setSession] = useState(null);
-  const [profile, setProfile] = useState(null);
-  const [history, setHistory] = useState([]);
-  const [allWeeks, setAllWeeks] = useState([]);
-  const [weekDates, setWeekDates] = useState({});
-  const [loading, setLoading] = useState(true);
-  const [pastWeekContents, setPastWeekContents] = useState({});
-  const [expandedPastWeek, setExpandedPastWeek] = useState(null);
+type WeekListItem = Pick<Week, 'week_number' | 'created_at' | 'week_theme' | 'quiz'>;
 
-  const [missedWeek, setMissedWeek] = useState(null);
-  const [missedAnswers, setMissedAnswers] = useState({});
+export default function History() {
+  const [theme] = useState(() => localStorage.getItem('aitakip_theme') || 'dark');
+  const [session, setSession] = useState<any>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [history, setHistory] = useState<HistoryRow[]>([]);
+  const [allWeeks, setAllWeeks] = useState<WeekListItem[]>([]);
+  const [weekDates, setWeekDates] = useState<Record<number, string>>({});
+  const [loading, setLoading] = useState(true);
+  const [pastWeekContents, setPastWeekContents] = useState<Record<number, Week>>({});
+  const [expandedPastWeek, setExpandedPastWeek] = useState<number | null>(null);
+
+  const [missedWeek, setMissedWeek] = useState<Week | null>(null);
+  const [missedAnswers, setMissedAnswers] = useState<Record<number, number>>({});
   const [missedStepIndex, setMissedStepIndex] = useState(0);
   const [missedDone, setMissedDone] = useState(false);
   const [missedGain, setMissedGain] = useState(0);
@@ -109,11 +45,12 @@ function App() {
     sb.from('profiles').select('*').eq('id', session.user.id).single().then(({ data }) => setProfile(data));
     sb.from('weeks').select('week_number, created_at, week_theme, quiz').order('week_number', { ascending: false })
       .then(({ data }) => {
-        setAllWeeks(data || []);
-        const map = {};
-        (data || []).forEach(w => { map[w.week_number] = w.created_at; });
+        setAllWeeks((data as WeekListItem[]) || []);
+        const map: Record<number, string> = {};
+        (data || []).forEach((w: any) => { map[w.week_number] = w.created_at; });
         setWeekDates(map);
       });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session]);
 
   async function refreshHistory() {
@@ -121,15 +58,15 @@ function App() {
     setHistory(data || []);
   }
 
-  async function togglePastWeek(weekNumber) {
+  async function togglePastWeek(weekNumber: number) {
     if (expandedPastWeek === weekNumber) { setExpandedPastWeek(null); return; }
     setExpandedPastWeek(weekNumber);
     if (pastWeekContents[weekNumber]) return;
     const { data } = await sb.from('weeks').select('*').eq('week_number', weekNumber).single();
-    if (data) setPastWeekContents(prev => ({ ...prev, [weekNumber]: data }));
+    if (data) setPastWeekContents((prev) => ({ ...prev, [weekNumber]: data }));
   }
 
-  function startMissedWeek(w) {
+  function startMissedWeek(w: Week) {
     setMissedWeek(w);
     setMissedAnswers({});
     setMissedStepIndex(0);
@@ -137,9 +74,9 @@ function App() {
     setMissedGain(0);
   }
 
-  function selectMissedAnswer(qIdx, optIdx) {
+  function selectMissedAnswer(qIdx: number, optIdx: number) {
     if (missedAnswers[qIdx] !== undefined) return;
-    setMissedAnswers(prev => ({ ...prev, [qIdx]: optIdx }));
+    setMissedAnswers((prev) => ({ ...prev, [qIdx]: optIdx }));
   }
 
   async function finishMissedWeek() {
@@ -157,33 +94,33 @@ function App() {
       quiz_score: score, quiz_total: quiz.length, week_theme: missedWeek.week_theme,
       critical: false, risk_won: null, boss_cleared: false, frozen: false,
     });
-    setProfile(p => ({ ...p, total_xp: newXp }));
+    setProfile((p) => (p ? { ...p, total_xp: newXp } : p));
     setMissedGain(gain);
     setMissedDone(true);
     refreshHistory();
   }
 
-  const doneWeekNumbers = new Set(history.map(h => h.week_number));
-  const missedWeeksList = allWeeks.filter(w => !doneWeekNumbers.has(w.week_number) && w.quiz && w.quiz.length > 0);
+  const doneWeekNumbers = new Set(history.map((h) => h.week_number));
+  const missedWeeksList = allWeeks.filter((w) => !doneWeekNumbers.has(w.week_number) && w.quiz && w.quiz.length > 0);
 
-  if (loading) return <div className="root"><p className="panel-sub">Yükleniyor…</p></div>;
+  if (loading) return <div className="root toppad"><p className="panel-sub">Yükleniyor…</p></div>;
 
   if (!session) {
     return (
-      <div className="root">
-        <h1>Geçmiş</h1>
+      <div className="root toppad">
+        <h1 style={{ textAlign: 'center' }}>Geçmiş</h1>
         <div className="panel">
           <p className="panel-sub">Geçmişini görmek için önce giriş yapmalısın.</p>
-          <a href="index.html" style={{ color: 'var(--azure)' }}>Giriş sayfasına git</a>
+          <Link to="/" style={{ color: 'var(--azure)' }}>Giriş sayfasına git</Link>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="root">
-      <div className="eyebrow">AI Takip Defteri</div>
-      <h1>📚 Geçmiş Haftalar</h1>
+    <div className="root toppad">
+      <div className="eyebrow" style={{ textAlign: 'center' }}>AI Takip Defteri</div>
+      <h1 style={{ textAlign: 'center' }}>📚 Geçmiş Haftalar</h1>
 
       {missedWeeksList.length > 0 && (
         <div className="panel">
@@ -191,10 +128,10 @@ function App() {
           <p className="panel-title">Kaçırdığın Haftalar</p>
           <p className="panel-sub">Katılmadan önce yayınlanmış haftalar. Sorularını çözebilirsin, ama yarı XP verir.</p>
           {!missedWeek ? (
-            missedWeeksList.map(w => (
+            missedWeeksList.map((w) => (
               <div className="history-row" key={w.week_number}>
                 <span className="hw">{formatWeekRange(w.created_at)}</span>
-                <button className="btn secondary" onClick={() => startMissedWeek(w)}>Çöz (yarı XP)</button>
+                <button className="btn secondary" onClick={() => startMissedWeek(w as Week)}>Çöz (yarı XP)</button>
               </div>
             ))
           ) : !missedDone ? (
@@ -228,7 +165,7 @@ function App() {
                         {mAnswered && <div className="quiz-explain">{mq.explanation}</div>}
                       </div>
                       {mAnswered && (
-                        <button className="btn secondary" onClick={() => setMissedStepIndex(i => i + 1)}>
+                        <button className="btn secondary" onClick={() => setMissedStepIndex((i) => i + 1)}>
                           {missedStepIndex + 1 < missedWeek.quiz.length ? 'Sonraki Soru' : 'Devam Et'}
                         </button>
                       )}
@@ -251,7 +188,7 @@ function App() {
 
       <div className="panel">
         {history.length === 0 && <p className="empty-hint">Henüz kayıt yok.</p>}
-        {history.map(h => (
+        {history.map((h) => (
           <div key={h.week_number}>
             <div className="history-row">
               <span className="hw">
@@ -271,7 +208,7 @@ function App() {
                 {!pastWeekContents[h.week_number] ? (
                   <p className="panel-sub">Yükleniyor…</p>
                 ) : (
-                  <React.Fragment>
+                  <>
                     <p className="panel-sub" style={{ marginBottom: 8 }}>{pastWeekContents[h.week_number].week_theme}</p>
                     {pastWeekContents[h.week_number].must_reads.map((mr, i) => (
                       <div className="read-row" key={i}>
@@ -279,7 +216,7 @@ function App() {
                         <div className="one-liner">{mr.summary}</div>
                       </div>
                     ))}
-                  </React.Fragment>
+                  </>
                 )}
               </div>
             )}
@@ -289,8 +226,3 @@ function App() {
     </div>
   );
 }
-
-ReactDOM.createRoot(document.getElementById('root')).render(<App />);
-</script>
-</body>
-</html>

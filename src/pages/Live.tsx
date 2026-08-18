@@ -1,82 +1,13 @@
-<!DOCTYPE html>
-<html lang="tr">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>AI Takip Defteri · Canlı Yarışma</title>
-<style>
-  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
-  :root {
-    --ink: #14151f; --panel: #1c1e2c; --hairline: #33364c; --hairline-soft: #262838;
-    --paper: #edebe4; --paper-dim: #9698ac; --brass: #c9a34e; --brass-dim: #8a744a;
-    --coral: #e2604a; --azure: #6f97f0; --green: #5fbf7a;
-    --mono: 'IBM Plex Mono', monospace; --serif: 'Fraunces', Georgia, serif; --sans: 'IBM Plex Sans', -apple-system, sans-serif;
-  }
-  :root[data-theme="light"] {
-    --ink: #f3f1e9; --panel: #ffffff; --hairline: #d9d5c6; --hairline-soft: #e9e6da;
-    --paper: #1b1c26; --paper-dim: #6b6d80; --brass: #9c7a2e; --brass-dim: #8a744a;
-    --coral: #c2402b; --azure: #3457c9; --green: #2c8c4f;
-  }
-  * { box-sizing: border-box; }
-  body { margin: 0; background: var(--ink); color: var(--paper); font-family: var(--sans); }
-  .root { max-width: 720px; margin: 0 auto; padding: 28px 20px 60px; }
-  .eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: .14em; color: var(--brass); text-transform: uppercase; margin-bottom: 6px; }
-  h1 { font-family: var(--serif); font-weight: 600; font-size: 26px; margin: 0 0 20px; }
-  .panel { background: var(--panel); border: 1px solid var(--hairline); padding: 20px; margin-bottom: 18px; }
-  .panel-title { font-family: var(--serif); font-size: 17px; font-weight: 600; margin: 0 0 4px; }
-  .panel-sub { font-size: 13px; color: var(--paper-dim); margin: 0 0 14px; line-height: 1.5; }
-  input[type=text] {
-    width: 100%; background: var(--ink); border: 1px solid var(--hairline); color: var(--paper);
-    font-family: var(--mono); font-size: 14px; padding: 12px; line-height: 1.5; margin-bottom: 10px; text-transform: uppercase; letter-spacing: .1em;
-  }
-  input:focus { outline: 1px solid var(--azure); }
-  .btn { font-family: var(--mono); font-size: 12.5px; letter-spacing: .04em; text-transform: uppercase; padding: 10px 18px; border: 1px solid var(--brass); background: transparent; color: var(--brass); cursor: pointer; margin-top: 6px; }
-  .btn:hover:not(:disabled) { background: var(--brass); color: var(--ink); }
-  .btn:disabled { opacity: .4; cursor: not-allowed; }
-  .btn.secondary { border-color: var(--azure); color: var(--azure); }
-  .btn.secondary:hover:not(:disabled) { background: var(--azure); color: var(--ink); }
-  .btn.ghost { border-color: var(--hairline); color: var(--paper-dim); font-size: 10.5px; padding: 6px 10px; }
-  .error-box { border: 1px solid var(--coral); color: var(--coral); padding: 10px 12px; font-family: var(--mono); font-size: 12px; margin-top: 10px; }
-  .code-display { font-family: var(--mono); font-size: 36px; letter-spacing: .2em; text-align: center; color: var(--brass); padding: 14px 0; }
-  .participant-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--hairline-soft); font-family: var(--mono); font-size: 13px; }
-  .participant-row.me { color: var(--brass); }
-  .participant-row .rank { display: inline-block; width: 26px; color: var(--paper-dim); }
-  .quiz-card { border: 1px solid var(--hairline); padding: 14px 16px; margin-bottom: 12px; }
-  .quiz-q { font-size: 16px; font-weight: 500; margin-bottom: 14px; }
-  .quiz-opt { display: block; width: 100%; text-align: left; background: var(--ink); border: 1px solid var(--hairline); color: var(--paper); padding: 12px 14px; margin-bottom: 8px; font-family: var(--sans); font-size: 14px; cursor: pointer; }
-  .quiz-opt:hover:not(:disabled) { border-color: var(--azure); }
-  .quiz-opt.correct { border-color: var(--green); background: rgba(95,191,122,.12); }
-  .quiz-opt.wrong { border-color: var(--coral); background: rgba(226,96,74,.12); }
-  .timer-badge { display: inline-block; font-family: var(--mono); font-size: 20px; color: var(--coral); border: 2px solid var(--coral); border-radius: 50%; width: 46px; height: 46px; text-align: center; line-height: 42px; margin-bottom: 14px; }
-  .mode-row { display: flex; gap: 12px; flex-wrap: wrap; }
-  .mode-row .panel { flex: 1; min-width: 220px; cursor: pointer; }
-  .mode-row .panel:hover { border-color: var(--azure); }
-  .top-bar-row { display: flex; justify-content: flex-end; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
-  @media (max-width: 640px) {
-    .root { padding: 16px 12px 48px; }
-    .btn { white-space: normal; text-align: center; }
-    .code-display { font-size: 28px; }
-  }
-</style>
-</head>
-<body>
-<div class="root" id="root"></div>
+import { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { sb } from '../lib/supabase';
+import TimerRing from '../components/TimerRing';
+import type { League, LiveParticipant, LiveRoom, Profile } from '../lib/types';
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script src="nav.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
-<script type="text/babel">
-const { useState, useEffect, useRef } = React;
-
-const SUPABASE_URL = 'https://lhgkfgwtmpfxyxwyaroh.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_ZElENBh86p0cWQDAnSbNWw_EcOQHmDV';
-const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const QUESTION_SECONDS = 15;
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
-function shuffle(arr) {
+function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -89,73 +20,49 @@ function generateCode() {
   for (let i = 0; i < 5; i++) s += CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)];
   return s;
 }
-function applyLeagueDelta(tier, xp, delta, leagues) {
+function applyLeagueDelta(tier: number, xp: number, delta: number, leagues: League[]) {
   let t = tier, x = xp + delta;
   while (x < 0 && t > 0) { t -= 1; x = 0; }
   if (x < 0) x = 0;
-  while (t < leagues.length - 1 && leagues[t] && leagues[t].promote_threshold != null && x >= leagues[t].promote_threshold) {
-    x -= leagues[t].promote_threshold;
+  while (t < leagues.length - 1 && leagues[t] && leagues[t].promote_threshold != null && x >= (leagues[t].promote_threshold as number)) {
+    x -= leagues[t].promote_threshold as number;
     t += 1;
   }
   return { tier: t, xp: x };
 }
 
-function TimerRing({ seconds, total, size }) {
-  const s = size || 60;
-  const r = s / 2 - 6;
-  const circumference = 2 * Math.PI * r;
-  const pct = Math.max(0, Math.min(1, seconds / total));
-  const dash = circumference * pct;
-  const color = pct > 0.4 ? 'var(--green)' : pct > 0.15 ? 'var(--brass)' : 'var(--coral)';
-  return (
-    <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`}>
-      <circle cx={s / 2} cy={s / 2} r={r} fill="none" stroke="var(--hairline-soft)" strokeWidth="5" />
-      <circle cx={s / 2} cy={s / 2} r={r} fill="none" stroke={color} strokeWidth="5"
-        strokeDasharray={`${dash} ${circumference}`} strokeLinecap="round"
-        transform={`rotate(-90 ${s / 2} ${s / 2})`} style={{ transition: 'stroke-dasharray .3s linear' }} />
-      <text x="50%" y="52%" textAnchor="middle" dominantBaseline="middle" fill="var(--paper)" fontFamily="var(--mono)" fontSize={s * 0.32}>{seconds}</text>
-    </svg>
-  );
-}
-
-function App() {
-  const [theme, setTheme] = useState(() => localStorage.getItem('aitakip_theme') || 'dark');
-  const [session, setSession] = useState(null);
-  const [profile, setProfile] = useState(null);
+export default function Live() {
+  const [session, setSession] = useState<any>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState('menu');
+  const [view, setView] = useState<'menu' | 'room'>('menu');
   const [error, setError] = useState('');
   const [joinCodeInput, setJoinCodeInput] = useState('');
   const [duelBetChoice, setDuelBetChoice] = useState(0);
-  const [betResult, setBetResult] = useState(null);
+  const [betResult, setBetResult] = useState<{ outcome: string; amount: number } | null>(null);
 
-  const [room, setRoom] = useState(null);
-  const [participants, setParticipants] = useState([]);
-  const [myAnswer, setMyAnswer] = useState(null);
+  const [room, setRoom] = useState<LiveRoom | null>(null);
+  const [participants, setParticipants] = useState<LiveParticipant[]>([]);
+  const [myAnswer, setMyAnswer] = useState<{ optionIndex: number; correct: boolean; points: number; firstCorrect: boolean } | null>(null);
   const [nowTick, setNowTick] = useState(Date.now());
-  const [awardedBonus, setAwardedBonus] = useState(null);
-  const [leagueChange, setLeagueChange] = useState(null);
+  const [awardedBonus, setAwardedBonus] = useState<number | null>(null);
+  const [leagueChange, setLeagueChange] = useState<any>(null);
   const [answeredCount, setAnsweredCount] = useState(0);
-  const roomRef = useRef(null);
+  const roomRef = useRef<LiveRoom | null>(null);
   const advancingRef = useRef(false);
   useEffect(() => { roomRef.current = room; }, [room]);
-  useEffect(() => { advancingRef.current = false; }, [room && room.current_question_index]);
-
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('aitakip_theme', theme);
-  }, [theme]);
+  useEffect(() => { advancingRef.current = false; }, [room?.current_question_index]);
 
   useEffect(() => {
     sb.auth.getSession().then(({ data }) => { setSession(data.session); setLoading(false); });
   }, []);
 
-  const [leagues, setLeagues] = useState([]);
+  const [leagues, setLeagues] = useState<League[]>([]);
 
   useEffect(() => {
     if (!session) { setProfile(null); return; }
     sb.from('profiles').select('*').eq('id', session.user.id).single().then(({ data }) => setProfile(data));
-    sb.from('leagues').select('*').order('tier_index', { ascending: true }).then(({ data }) => setLeagues(data || []));
+    sb.from('leagues').select('*').order('tier_index', { ascending: true }).then(({ data }) => setLeagues((data as League[]) || []));
   }, [session]);
 
   useEffect(() => {
@@ -166,12 +73,13 @@ function App() {
   useEffect(() => {
     if (!room) return;
     setMyAnswer(null);
-  }, [room && room.current_question_index]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [room?.current_question_index]);
 
   useEffect(() => {
     if (!room) return;
     const channel = sb.channel('room-' + room.id)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'live_rooms', filter: `id=eq.${room.id}` }, payload => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'live_rooms', filter: `id=eq.${room.id}` }, (payload: any) => {
         setRoom(payload.new);
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'live_participants', filter: `room_id=eq.${room.id}` }, () => {
@@ -183,15 +91,17 @@ function App() {
       })
       .subscribe();
     refreshParticipants(room.id);
-    return () => sb.removeChannel(channel);
-  }, [room && room.id]);
+    return () => { sb.removeChannel(channel); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [room?.id]);
 
   useEffect(() => {
     if (!room) return;
     refreshAnsweredCount(room.id, room.current_question_index);
-  }, [room && room.id, room && room.current_question_index]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [room?.id, room?.current_question_index]);
 
-  async function refreshAnsweredCount(roomId, qIdx) {
+  async function refreshAnsweredCount(roomId: string, qIdx: number) {
     const { count } = await sb.from('live_answers').select('*', { count: 'exact', head: true })
       .eq('room_id', roomId).eq('question_index', qIdx);
     setAnsweredCount(count || 0);
@@ -216,25 +126,27 @@ function App() {
     const remaining = QUESTION_SECONDS * 1000 - (Date.now() - startedAt);
     const t = setTimeout(() => { advanceQuestion(); }, Math.max(0, remaining));
     return () => clearTimeout(t);
-  }, [room && room.current_question_index, room && room.status, room && room.host_id, profile && profile.id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [room?.current_question_index, room?.status, room?.host_id, profile?.id]);
 
   // Host: advance immediately once everyone has answered, instead of waiting out the timer.
   useEffect(() => {
     if (!room || !profile || room.host_id !== profile.id || room.status !== 'active') return;
     if (participants.length > 0 && answeredCount >= participants.length) advanceQuestion();
-  }, [answeredCount, participants.length, room && room.status, room && room.current_question_index, room && room.host_id, profile && profile.id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [answeredCount, participants.length, room?.status, room?.current_question_index, room?.host_id, profile?.id]);
 
   // Award XP once when the game finishes, based on final rank (plus duel bet payout).
   useEffect(() => {
     if (!room || room.status !== 'finished' || !profile || participants.length === 0) return;
-    const mine = participants.find(p => p.user_id === profile.id);
+    const mine = participants.find((p) => p.user_id === profile.id);
     if (!mine || mine.xp_awarded) return;
     const ranked = [...participants].sort((a, b) => b.score - a.score);
-    const rank = ranked.findIndex(p => p.user_id === profile.id) + 1;
+    const rank = ranked.findIndex((p) => p.user_id === profile.id) + 1;
     const bonus = rank === 1 ? 30 : rank === 2 ? 20 : rank === 3 ? 10 : 5;
 
     let betDelta = 0;
-    let betOutcome = null;
+    let betOutcome: string | null = null;
     if (room.mode === 'duel' && room.bet_amount > 0 && participants.length === 2) {
       const isTie = ranked[0].score === ranked[1].score;
       if (!isTie) {
@@ -245,8 +157,8 @@ function App() {
       }
     }
 
-    const effectiveTier = Math.min(...participants.map(p => p.league_tier || 0));
-    const effectiveLeague = leagues.find(l => l.tier_index === effectiveTier);
+    const effectiveTier = Math.min(...participants.map((p) => p.league_tier || 0));
+    const effectiveLeague = leagues.find((l) => l.tier_index === effectiveTier);
     const effectiveMult = effectiveLeague ? Number(effectiveLeague.weekly_multiplier) : 1;
 
     let leagueDelta = 0;
@@ -263,46 +175,47 @@ function App() {
       if (newTier < profile.league_tier) {
         setLeagueChange({
           direction: 'down',
-          name: (leagues.find(l => l.tier_index === newTier) || {}).name,
-          fromName: (leagues.find(l => l.tier_index === profile.league_tier) || {}).name,
+          name: leagues.find((l) => l.tier_index === newTier)?.name,
+          fromName: leagues.find((l) => l.tier_index === profile.league_tier)?.name,
           lost: Math.abs(leagueDelta),
         });
       } else if (newTier > profile.league_tier) {
-        setLeagueChange({ direction: 'up', name: (leagues.find(l => l.tier_index === newTier) || {}).name });
+        setLeagueChange({ direction: 'up', name: leagues.find((l) => l.tier_index === newTier)?.name });
       }
     })();
-  }, [room && room.status, participants, profile]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [room?.status, participants, profile]);
 
-  async function refreshParticipants(roomId) {
+  async function refreshParticipants(roomId: string) {
     const { data } = await sb.from('live_participants').select('*').eq('room_id', roomId).order('score', { ascending: false });
     setParticipants(data || []);
   }
 
   async function fetchQuestionPool() {
     const { data } = await sb.from('weeks').select('quiz');
-    let all = [];
-    (data || []).forEach(w => {
-      (w.quiz || []).forEach(q => {
+    let all: any[] = [];
+    (data || []).forEach((w: any) => {
+      (w.quiz || []).forEach((q: any) => {
         all.push({ question: q.question, options: q.options, correct_index: q.correct_index, explanation: q.explanation });
       });
     });
     return shuffle(all);
   }
 
-  async function createRoom(mode) {
+  async function createRoom(mode: 'room' | 'duel') {
     setError('');
     const pool = await fetchQuestionPool();
     if (pool.length < 4) { setError('Yeterli soru yok, önce birkaç hafta yayınlanmış olmalı.'); return; }
     const questions = pool.slice(0, Math.min(8, pool.length));
     const betAmount = mode === 'duel' ? duelBetChoice : 0;
-    let lastError = null;
+    let lastError: any = null;
     for (let attempt = 0; attempt < 3; attempt++) {
       const code = generateCode();
       const { data, error: insertError } = await sb.from('live_rooms')
-        .insert({ code, mode, host_id: profile.id, questions, status: 'waiting', bet_amount: betAmount, league_tier: profile.league_tier })
+        .insert({ code, mode, host_id: profile!.id, questions, status: 'waiting', bet_amount: betAmount, league_tier: profile!.league_tier })
         .select().single();
       if (!insertError && data) {
-        const { error: partError } = await sb.from('live_participants').insert({ room_id: data.id, user_id: profile.id, username: profile.username, avatar: profile.avatar, league_tier: profile.league_tier });
+        const { error: partError } = await sb.from('live_participants').insert({ room_id: data.id, user_id: profile!.id, username: profile!.username, avatar: profile!.avatar, league_tier: profile!.league_tier });
         if (partError) { setError('Katılımcı eklenemedi: ' + partError.message); return; }
         setRoom(data);
         setView('room');
@@ -325,7 +238,7 @@ function App() {
       const { count } = await sb.from('live_participants').select('*', { count: 'exact', head: true }).eq('room_id', r.id);
       if ((count || 0) >= 2) { setError('Düello odası dolu.'); return; }
     }
-    const { error: joinError } = await sb.from('live_participants').insert({ room_id: r.id, user_id: profile.id, username: profile.username, avatar: profile.avatar, league_tier: profile.league_tier });
+    const { error: joinError } = await sb.from('live_participants').insert({ room_id: r.id, user_id: profile!.id, username: profile!.username, avatar: profile!.avatar, league_tier: profile!.league_tier });
     if (joinError && !String(joinError.message).toLowerCase().includes('duplicate')) {
       setError('Katılamadın: ' + joinError.message); return;
     }
@@ -334,14 +247,14 @@ function App() {
   }
 
   async function startGame() {
-    await sb.from('live_rooms').update({ status: 'active', current_question_index: 0, question_started_at: new Date().toISOString() }).eq('id', room.id);
+    await sb.from('live_rooms').update({ status: 'active', current_question_index: 0, question_started_at: new Date().toISOString() }).eq('id', room!.id);
   }
 
-  async function submitAnswer(optionIndex) {
+  async function submitAnswer(optionIndex: number) {
     if (myAnswer || !room) return;
     const q = room.questions[room.current_question_index];
     const correct = optionIndex === q.correct_index;
-    const elapsedMs = Date.now() - new Date(room.question_started_at).getTime();
+    const elapsedMs = Date.now() - new Date(room.question_started_at as string).getTime();
     const speedBonus = Math.max(0, Math.round(50 * (1 - elapsedMs / (QUESTION_SECONDS * 1000))));
     let firstCorrect = false;
     if (correct) {
@@ -352,11 +265,11 @@ function App() {
     const points = correct ? 100 + speedBonus + (firstCorrect ? 30 : 0) : 0;
     setMyAnswer({ optionIndex, correct, points, firstCorrect });
     const { error: ansError } = await sb.from('live_answers').insert({
-      room_id: room.id, user_id: profile.id, question_index: room.current_question_index,
+      room_id: room.id, user_id: profile!.id, question_index: room.current_question_index,
       option_index: optionIndex, correct, points,
     });
     if (ansError) return;
-    const mine = participants.find(p => p.user_id === profile.id);
+    const mine = participants.find((p) => p.user_id === profile!.id);
     if (mine) await sb.from('live_participants').update({ score: mine.score + points }).eq('id', mine.id);
   }
 
@@ -365,7 +278,7 @@ function App() {
       if (!window.confirm('Oyun bitmeden ayrılırsan 15 XP kaybedersin. Emin misin?')) return;
       const PENALTY = 15;
       await sb.from('profiles').update({ total_xp: Math.max(0, profile.total_xp - PENALTY) }).eq('id', profile.id);
-      const mine = participants.find(p => p.user_id === profile.id);
+      const mine = participants.find((p) => p.user_id === profile.id);
       if (mine) await sb.from('live_participants').delete().eq('id', mine.id);
       if (room.host_id === profile.id) {
         await sb.from('live_rooms').update({ status: 'finished' }).eq('id', room.id);
@@ -380,29 +293,29 @@ function App() {
     setView('menu');
   }
 
-  if (loading) return <div className="root"><p className="panel-sub">Yükleniyor…</p></div>;
+  if (loading) return <div className="root wide"><p className="panel-sub">Yükleniyor…</p></div>;
 
   if (!session) {
     return (
-      <div className="root">
+      <div className="root wide">
         <div className="eyebrow">AI Takip Defteri</div>
         <h1>Canlı Yarışma</h1>
         <div className="panel">
           <p className="panel-sub">Canlı yarışmaya katılmak için önce ana sayfadan giriş yapmalısın.</p>
-          <a href="index.html" className="btn" style={{ textDecoration: 'none', display: 'inline-block' }}>Giriş Sayfasına Git</a>
+          <Link to="/" className="btn" style={{ textDecoration: 'none', display: 'inline-block' }}>Giriş Sayfasına Git</Link>
         </div>
       </div>
     );
   }
 
-  if (!profile) return <div className="root"><p className="panel-sub">Profil yükleniyor…</p></div>;
+  if (!profile) return <div className="root wide"><p className="panel-sub">Profil yükleniyor…</p></div>;
 
   if (view === 'menu') {
     return (
-      <div className="root">
+      <div className="root wide">
         <div className="eyebrow" style={{ paddingLeft: 46 }}>AI Takip Defteri · {profile.avatar} {profile.username}</div>
         <h1 style={{ paddingLeft: 46 }}>Canlı Yarışma</h1>
-        <p className="panel-sub">Ligin: <strong>{(leagues.find(l => l.tier_index === profile.league_tier) || {}).name || '—'}</strong>. Herkesle yarışabilirsin — odadaki en düşük ligli kişiye göre kazanılacak lig puanı ayarlanır.</p>
+        <p className="panel-sub">Ligin: <strong>{leagues.find((l) => l.tier_index === profile.league_tier)?.name || '—'}</strong>. Herkesle yarışabilirsin — odadaki en düşük ligli kişiye göre kazanılacak lig puanı ayarlanır.</p>
 
         <div className="mode-row">
           <div className="panel" onClick={() => createRoom('room')}>
@@ -413,7 +326,7 @@ function App() {
             <p className="panel-title">⚔ Düello Başlat</p>
             <p className="panel-sub">Tek bir rakiple 1'e 1 yarış. Kaybeden, bahis miktarı kadar XP'sini kazanana kaptırır. Ayrıca kaybeden lig puanı da kaybeder — yeterince düşerse bir alt lige inebilirsin.</p>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
-              {[0, 25, 50, 100].map(v => (
+              {[0, 25, 50, 100].map((v) => (
                 <button key={v} className="btn ghost" onClick={() => setDuelBetChoice(v)}
                   style={{ borderColor: duelBetChoice === v ? 'var(--brass)' : 'var(--hairline)' }}>
                   {v === 0 ? 'Bahissiz' : v + ' XP'}
@@ -426,7 +339,7 @@ function App() {
 
         <div className="panel">
           <p className="panel-title">Kod ile Katıl</p>
-          <input type="text" value={joinCodeInput} onChange={e => setJoinCodeInput(e.target.value)} placeholder="ORNK5" maxLength={5} />
+          <input type="text" value={joinCodeInput} onChange={(e) => setJoinCodeInput(e.target.value)} placeholder="ORNK5" maxLength={5} />
           <button className="btn secondary" onClick={joinRoom} disabled={!joinCodeInput.trim()}>Katıl</button>
         </div>
 
@@ -435,14 +348,14 @@ function App() {
     );
   }
 
-  if (!room) return <div className="root"><p className="panel-sub">Oda yükleniyor…</p></div>;
+  if (!room) return <div className="root wide"><p className="panel-sub">Oda yükleniyor…</p></div>;
 
   const isHost = room.host_id === profile.id;
   const ranked = [...participants].sort((a, b) => b.score - a.score);
 
   if (room.status === 'waiting') {
     return (
-      <div className="root">
+      <div className="root wide">
         <div className="top-bar-row"><button className="btn ghost" onClick={leaveRoom}>Odadan Ayrıl (-15 XP)</button></div>
         <div className="eyebrow">{room.mode === 'duel' ? 'Düello' : 'Canlı Oda'} · Bekleniyor</div>
         <h1>Oda Kodu</h1>
@@ -457,14 +370,14 @@ function App() {
         </div>
         <div className="panel">
           <p className="panel-title">Katılımcılar ({participants.length})</p>
-          {participants.map((p, i) => (
+          {participants.map((p) => (
             <div className="participant-row" key={p.id}>
               <span>{p.avatar} {p.username}{p.user_id === room.host_id ? ' (host)' : ''}</span>
             </div>
           ))}
         </div>
         {isHost ? (
-          <button className="btn secondary" onClick={startGame} disabled={participants.length < (room.mode === 'duel' ? 2 : 2)}>
+          <button className="btn secondary" onClick={startGame} disabled={participants.length < 2}>
             {participants.length < 2 ? 'En az 2 katılımcı gerekli' : 'Yarışmayı Başlat'}
           </button>
         ) : (
@@ -476,10 +389,10 @@ function App() {
 
   if (room.status === 'active') {
     const q = room.questions[room.current_question_index];
-    const startedAt = new Date(room.question_started_at).getTime();
+    const startedAt = new Date(room.question_started_at as string).getTime();
     const remainingSec = Math.max(0, Math.ceil(QUESTION_SECONDS - (nowTick - startedAt) / 1000));
     return (
-      <div className="root">
+      <div className="root wide">
         <div className="top-bar-row"><button className="btn ghost" onClick={leaveRoom}>Odadan Ayrıl (-15 XP)</button></div>
         <div className="eyebrow">{room.mode === 'duel' ? 'Düello' : 'Canlı Oda'} · Soru {room.current_question_index + 1}/{room.questions.length}</div>
         <div style={{ textAlign: 'center', marginBottom: 14 }}><TimerRing seconds={remainingSec} total={QUESTION_SECONDS} size={64} /></div>
@@ -514,7 +427,7 @@ function App() {
 
   // finished
   return (
-    <div className="root">
+    <div className="root wide">
       <div className="top-bar-row"><button className="btn ghost" onClick={leaveRoom}>Ana Menüye Dön</button></div>
       <div className="eyebrow">{room.mode === 'duel' ? 'Düello' : 'Canlı Oda'} · Bitti</div>
       <h1>Final Sıralaması</h1>
@@ -538,8 +451,3 @@ function App() {
     </div>
   );
 }
-
-ReactDOM.createRoot(document.getElementById('root')).render(<App />);
-</script>
-</body>
-</html>

@@ -1,68 +1,10 @@
-<!DOCTYPE html>
-<html lang="tr">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>AI Takip Defteri · Admin</title>
-<style>
-  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
-  :root {
-    --ink: #14151f; --panel: #1c1e2c; --hairline: #33364c; --hairline-soft: #262838;
-    --paper: #edebe4; --paper-dim: #9698ac; --brass: #c9a34e; --brass-dim: #8a744a;
-    --coral: #e2604a; --azure: #6f97f0; --green: #5fbf7a;
-    --mono: 'IBM Plex Mono', monospace; --serif: 'Fraunces', Georgia, serif; --sans: 'IBM Plex Sans', -apple-system, sans-serif;
-  }
-  :root[data-theme="light"] {
-    --ink: #f3f1e9; --panel: #ffffff; --hairline: #d9d5c6; --hairline-soft: #e9e6da;
-    --paper: #1b1c26; --paper-dim: #6b6d80; --brass: #9c7a2e; --brass-dim: #8a744a;
-    --coral: #c2402b; --azure: #3457c9; --green: #2c8c4f;
-  }
-  * { box-sizing: border-box; }
-  body { margin: 0; background: var(--ink); color: var(--paper); font-family: var(--sans); }
-  .root { max-width: 720px; margin: 0 auto; padding: 28px 20px 60px; }
-  @media (max-width: 640px) {
-    .root { padding: 16px 12px 48px; }
-    .top-bar-row { flex-wrap: wrap; gap: 8px; }
-    .btn { white-space: normal; text-align: center; }
-  }
-  .eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: .14em; color: var(--brass); text-transform: uppercase; margin-bottom: 6px; }
-  h1 { font-family: var(--serif); font-weight: 600; font-size: 26px; margin: 0 0 20px; }
-  .panel { background: var(--panel); border: 1px solid var(--hairline); padding: 20px; margin-bottom: 18px; }
-  .panel-title { font-family: var(--serif); font-size: 17px; font-weight: 600; margin: 0 0 4px; }
-  .panel-sub { font-size: 13px; color: var(--paper-dim); margin: 0 0 14px; line-height: 1.5; }
-  textarea, input[type=text], input[type=password] {
-    width: 100%; background: var(--ink); border: 1px solid var(--hairline); color: var(--paper);
-    font-family: var(--mono); font-size: 12.5px; padding: 12px; line-height: 1.5; margin-bottom: 10px;
-  }
-  textarea { min-height: 110px; resize: vertical; }
-  .btn { font-family: var(--mono); font-size: 12.5px; letter-spacing: .04em; text-transform: uppercase; padding: 10px 18px; border: 1px solid var(--brass); background: transparent; color: var(--brass); cursor: pointer; margin-top: 6px; }
-  .btn:hover:not(:disabled) { background: var(--brass); color: var(--ink); }
-  .btn:disabled { opacity: .4; cursor: not-allowed; }
-  .btn.ghost { border-color: var(--hairline); color: var(--paper-dim); font-size: 10.5px; padding: 6px 10px; }
-  .error-box { border: 1px solid var(--coral); color: var(--coral); padding: 10px 12px; font-family: var(--mono); font-size: 12px; margin-top: 10px; }
-  .ok-box { border: 1px solid var(--green); color: var(--green); padding: 10px 12px; font-family: var(--mono); font-size: 12px; margin-top: 10px; }
-  .loading-line { font-family: var(--mono); font-size: 12px; color: var(--azure); margin-top: 10px; }
-  label.field-label { display: block; font-family: var(--mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em; color: var(--paper-dim); margin-bottom: 6px; }
-  .week-row { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 12px; padding: 8px 0; border-bottom: 1px solid var(--hairline-soft); color: var(--paper-dim); }
-  a { color: var(--azure); }
-</style>
-</head>
-<body>
-<div class="root" id="root"></div>
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { sb } from '../lib/supabase';
+import type { League, Profile, Week } from '../lib/types';
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script src="nav.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
-<script type="text/babel">
-const { useState, useEffect } = React;
-
-const SUPABASE_URL = 'https://lhgkfgwtmpfxyxwyaroh.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_ZElENBh86p0cWQDAnSbNWw_EcOQHmDV';
-const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const TR_MONTHS = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
-function formatWeekRange(createdAt) {
+function formatWeekRange(createdAt?: string | null) {
   if (!createdAt) return '';
   const start = new Date(createdAt);
   const end = new Date(start);
@@ -75,7 +17,7 @@ const MODEL = 'claude-sonnet-5';
 const BOSS_EVERY = 5;
 const APIKEY_SESSION_KEY = 'aitakip_admin_apikey';
 
-async function fetchReadable(url) {
+async function fetchReadable(url: string) {
   const readerUrl = 'https://r.jina.ai/' + url;
   const res = await fetch(readerUrl);
   if (!res.ok) throw new Error('reader-failed:' + url);
@@ -83,7 +25,7 @@ async function fetchReadable(url) {
   return text.slice(0, 6000);
 }
 
-function demoWeekPayload(weekNumber, isBossWeek) {
+function demoWeekPayload(weekNumber: number, isBossWeek: boolean) {
   return {
     week_number: weekNumber,
     week_theme: 'Bu hafta yapay zeka ajanları ve kurumsal iş akışları öne çıktı (DEMO VERİ)',
@@ -111,7 +53,7 @@ function demoWeekPayload(weekNumber, isBossWeek) {
   };
 }
 
-function demoLeagueContent(tierName) {
+function demoLeagueContent(tierName: string) {
   const must_reads = [];
   for (let i = 1; i <= 10; i++) {
     must_reads.push({
@@ -128,10 +70,9 @@ function demoLeagueContent(tierName) {
   return { must_reads, quiz };
 }
 
-function App() {
-  const [theme, setTheme] = useState(() => localStorage.getItem('aitakip_theme') || 'dark');
-  const [session, setSession] = useState(null);
-  const [profile, setProfile] = useState(null);
+export default function Admin() {
+  const [session, setSession] = useState<any>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
   const [loginIdentifier, setLoginIdentifier] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
@@ -144,21 +85,16 @@ function App() {
   const [buildStatus, setBuildStatus] = useState('');
   const [buildError, setBuildError] = useState('');
   const [buildOk, setBuildOk] = useState('');
-  const [pastWeeks, setPastWeeks] = useState([]);
+  const [pastWeeks, setPastWeeks] = useState<Week[]>([]);
   const [nextWeekNumber, setNextWeekNumber] = useState(1);
 
-  const [leagues, setLeagues] = useState([]);
+  const [leagues, setLeagues] = useState<League[]>([]);
   const [leagueTierChoice, setLeagueTierChoice] = useState(0);
   const [leagueLinksText, setLeagueLinksText] = useState('');
   const [leagueBuilding, setLeagueBuilding] = useState(false);
   const [leagueStatus, setLeagueStatus] = useState('');
   const [leagueError, setLeagueError] = useState('');
   const [leagueOk, setLeagueOk] = useState('');
-
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('aitakip_theme', theme);
-  }, [theme]);
 
   useEffect(() => {
     sb.auth.getSession().then(({ data }) => {
@@ -179,14 +115,16 @@ function App() {
     if (!profile || !profile.is_admin) return;
     sb.from('weeks').select('week_number, week_theme, is_boss, created_at').order('week_number', { ascending: false })
       .then(({ data }) => {
-        setPastWeeks(data || []);
+        setPastWeeks((data as Week[]) || []);
         setNextWeekNumber(data && data.length > 0 ? data[0].week_number + 1 : 1);
       });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile, buildOk]);
 
   useEffect(() => {
     if (!profile || !profile.is_admin) return;
-    sb.from('leagues').select('*').order('tier_index', { ascending: true }).then(({ data }) => setLeagues(data || []));
+    sb.from('leagues').select('*').order('tier_index', { ascending: true }).then(({ data }) => setLeagues((data as League[]) || []));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile, leagueOk]);
 
   async function login() {
@@ -210,7 +148,7 @@ function App() {
   }
 
   async function buildWeek() {
-    const urls = linksText.split('\n').map(s => s.trim()).filter(Boolean);
+    const urls = linksText.split('\n').map((s) => s.trim()).filter(Boolean);
     if (urls.length === 0 || !apiKey) return;
     if (urls.length > 10) {
       setBuildError(`En fazla 10 link ekleyebilirsin (şu an ${urls.length} tane var).`);
@@ -272,7 +210,7 @@ ${combined}`;
       const data = await response.json();
       if (data.error) throw new Error(data.error.message || 'api-error');
       if (data.stop_reason === 'max_tokens') throw new Error('Yanıt çok uzun olduğu için kesildi, daha az link ile tekrar dene');
-      const textBlock = (data.content || []).find(b => b.type === 'text');
+      const textBlock = (data.content || []).find((b: any) => b.type === 'text');
       if (!textBlock) throw new Error('Model boş yanıt döndürdü (stop_reason: ' + (data.stop_reason || 'bilinmiyor') + ')');
       let cleaned = textBlock.text.replace(/```json|```/g, '').trim();
       const start = cleaned.indexOf('{');
@@ -296,7 +234,7 @@ ${combined}`;
 
       setBuildOk(`Hafta ${nextWeekNumber} yayınlandı${isBossWeek ? ' (BOSS HAFTASI)' : ''}.`);
       setLinksText('');
-    } catch (e) {
+    } catch (e: any) {
       setBuildError('Hafta işlenirken bir sorun oldu: ' + e.message);
     } finally {
       setBuilding(false);
@@ -323,7 +261,7 @@ ${combined}`;
   }
 
   async function buildLeagueContent() {
-    const urls = leagueLinksText.split('\n').map(s => s.trim()).filter(Boolean);
+    const urls = leagueLinksText.split('\n').map((s) => s.trim()).filter(Boolean);
     if (urls.length === 0 || !apiKey) return;
     if (urls.length > 6) { setLeagueError('En fazla 6 link ekleyebilirsin.'); return; }
     setLeagueBuilding(true);
@@ -341,7 +279,7 @@ ${combined}`;
       }
     }
 
-    const leagueName = (leagues.find(l => l.tier_index === leagueTierChoice) || {}).name || ('Lig ' + leagueTierChoice);
+    const leagueName = leagues.find((l) => l.tier_index === leagueTierChoice)?.name || ('Lig ' + leagueTierChoice);
     setLeagueStatus('Müfredat hazırlanıyor…');
     try {
       const prompt = `Aşağıda "${leagueName}" ligi için TEMEL/SABİT bir müfredat oluşturacak kaynakların ham metni var, her biri "--- Kaynak N: url ---" başlığıyla ayrılmış. Bu içerik bir kere oluşturulacak ve değişmeyecek (haftalık değil). Bunları işleyip SADECE aşağıdaki şemaya uyan geçerli JSON döndür, başka açıklama, markdown işareti ekleme:
@@ -372,7 +310,7 @@ ${combined}`;
       const data = await response.json();
       if (data.error) throw new Error(data.error.message || 'api-error');
       if (data.stop_reason === 'max_tokens') throw new Error('Yanıt çok uzun olduğu için kesildi, daha az link ile tekrar dene');
-      const textBlock = (data.content || []).find(b => b.type === 'text');
+      const textBlock = (data.content || []).find((b: any) => b.type === 'text');
       if (!textBlock) throw new Error('Model boş yanıt döndürdü (stop_reason: ' + (data.stop_reason || 'bilinmiyor') + ')');
       let cleaned = textBlock.text.replace(/```json|```/g, '').trim();
       const start = cleaned.indexOf('{');
@@ -386,7 +324,7 @@ ${combined}`;
 
       setLeagueOk(`${leagueName} müfredatı kaydedildi.`);
       setLeagueLinksText('');
-    } catch (e) {
+    } catch (e: any) {
       setLeagueError('Müfredat işlenirken bir sorun oldu: ' + e.message);
     } finally {
       setLeagueBuilding(false);
@@ -394,31 +332,31 @@ ${combined}`;
     }
   }
 
-  if (loadingAuth) return <div className="root"><p className="panel-sub">Yükleniyor…</p></div>;
+  if (loadingAuth) return <div className="root wide"><p className="panel-sub">Yükleniyor…</p></div>;
 
   if (!session) {
     return (
-      <div className="root">
+      <div className="root wide">
         <div className="eyebrow">AI Takip Defteri</div>
         <h1>Admin Girişi</h1>
         <div className="panel">
           <label className="field-label">Kullanıcı Adı veya E-posta</label>
-          <input type="text" value={loginIdentifier} onChange={e => setLoginIdentifier(e.target.value)} />
+          <input type="text" value={loginIdentifier} onChange={(e) => setLoginIdentifier(e.target.value)} />
           <label className="field-label">Şifre</label>
-          <input type="password" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} />
+          <input type="password" value={passwordInput} onChange={(e) => setPasswordInput(e.target.value)} />
           <button className="btn" onClick={login}>Giriş Yap</button>
           {authError && <div className="error-box">{authError}</div>}
-          <p className="panel-sub" style={{ marginTop: 14 }}>Hesabın yoksa önce <a href="index.html">ana sayfadan</a> kayıt ol.</p>
+          <p className="panel-sub" style={{ marginTop: 14 }}>Hesabın yoksa önce <Link to="/">ana sayfadan</Link> kayıt ol.</p>
         </div>
       </div>
     );
   }
 
-  if (!profile) return <div className="root"><p className="panel-sub">Profil yükleniyor…</p></div>;
+  if (!profile) return <div className="root wide"><p className="panel-sub">Profil yükleniyor…</p></div>;
 
   if (!profile.is_admin) {
     return (
-      <div className="root">
+      <div className="root wide">
         <div className="eyebrow">AI Takip Defteri</div>
         <h1>Admin Girişi</h1>
         <div className="panel">
@@ -430,7 +368,7 @@ ${combined}`;
   }
 
   return (
-    <div className="root">
+    <div className="root wide">
       <div className="eyebrow" style={{ paddingLeft: 46 }}>AI Takip Defteri · {profile.username}</div>
       <h1 style={{ paddingLeft: 46 }}>Admin Paneli</h1>
 
@@ -444,14 +382,14 @@ ${combined}`;
         <div className="panel">
           <p className="panel-title">Anthropic API Anahtarı</p>
           <p className="panel-sub">Bu anahtar sadece bu tarayıcı sekmesinde, sayfa kapanana kadar bellekte tutulur (sessionStorage). Veritabanına hiç gitmez.</p>
-          <input type="password" value={keyDraft} onChange={e => setKeyDraft(e.target.value)} placeholder="sk-ant-..." />
+          <input type="password" value={keyDraft} onChange={(e) => setKeyDraft(e.target.value)} placeholder="sk-ant-..." />
           <button className="btn" onClick={saveKey} disabled={!keyDraft.trim()}>Kaydet</button>
         </div>
       ) : (
         <div className="panel">
           <p className="panel-title">Hafta {nextWeekNumber} Oluştur{nextWeekNumber % BOSS_EVERY === 0 ? ' — 👑 BOSS HAFTASI' : ''}</p>
           <p className="panel-sub">Bu haftanın linklerini alt alta yapıştır.</p>
-          <textarea value={linksText} onChange={e => setLinksText(e.target.value)} placeholder={"https://...\nhttps://...\nhttps://..."} />
+          <textarea value={linksText} onChange={(e) => setLinksText(e.target.value)} placeholder={'https://...\nhttps://...\nhttps://...'} />
           <button className="btn" onClick={buildWeek} disabled={building || !linksText.trim()}>
             {building ? 'İşleniyor…' : `Hafta ${nextWeekNumber}'yi Yayınla`}
           </button>
@@ -465,7 +403,7 @@ ${combined}`;
       <div className="panel">
         <p className="panel-title">Yayınlanan Haftalar</p>
         {pastWeeks.length === 0 && <p className="panel-sub">Henüz hafta yok.</p>}
-        {pastWeeks.map(w => (
+        {pastWeeks.map((w) => (
           <div className="week-row" key={w.week_number}>
             <span>{formatWeekRange(w.created_at)} (Hafta {w.week_number}){w.is_boss ? ' 👑' : ''} · {w.week_theme}</span>
             <span>{new Date(w.created_at).toLocaleDateString('tr-TR')}</span>
@@ -486,13 +424,13 @@ ${combined}`;
           <p className="panel-title">Lig Müfredatı Oluştur</p>
           <p className="panel-sub">Her lig için bir kere oluşturulan, haftalık değişmeyen sabit içerik. İstediğin zaman üstüne yazıp güncelleyebilirsin.</p>
           <label className="field-label">Lig Seç</label>
-          <select value={leagueTierChoice} onChange={e => setLeagueTierChoice(Number(e.target.value))}
+          <select value={leagueTierChoice} onChange={(e) => setLeagueTierChoice(Number(e.target.value))}
             style={{ width: '100%', background: 'var(--ink)', border: '1px solid var(--hairline)', color: 'var(--paper)', fontFamily: 'var(--mono)', fontSize: '12.5px', padding: '12px', marginBottom: 10 }}>
-            {leagues.map(l => (
+            {leagues.map((l) => (
               <option key={l.tier_index} value={l.tier_index}>{l.name}{l.content ? ' (dolu — üzerine yazılır)' : ' (boş)'}</option>
             ))}
           </select>
-          <textarea value={leagueLinksText} onChange={e => setLeagueLinksText(e.target.value)} placeholder={"https://...\nhttps://...\nhttps://..."} />
+          <textarea value={leagueLinksText} onChange={(e) => setLeagueLinksText(e.target.value)} placeholder={'https://...\nhttps://...\nhttps://...'} />
           <button className="btn" onClick={buildLeagueContent} disabled={leagueBuilding || !leagueLinksText.trim()}>
             {leagueBuilding ? 'İşleniyor…' : 'Lig Müfredatını Oluştur'}
           </button>
@@ -504,8 +442,3 @@ ${combined}`;
     </div>
   );
 }
-
-ReactDOM.createRoot(document.getElementById('root')).render(<App />);
-</script>
-</body>
-</html>
