@@ -51,11 +51,22 @@ const { useState, useEffect } = React;
 const SUPABASE_URL = 'https://lhgkfgwtmpfxyxwyaroh.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_ZElENBh86p0cWQDAnSbNWw_EcOQHmDV';
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const TR_MONTHS = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
+function formatWeekRange(createdAt) {
+  if (!createdAt) return '';
+  const start = new Date(createdAt);
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+  const sd = start.getDate(), ed = end.getDate();
+  const sm = TR_MONTHS[start.getMonth()], em = TR_MONTHS[end.getMonth()];
+  return sm === em ? `${sd}-${ed} ${sm}` : `${sd} ${sm} - ${ed} ${em}`;
+}
 
 function App() {
   const [theme] = useState(() => localStorage.getItem('aitakip_theme') || 'dark');
   const [session, setSession] = useState(null);
   const [history, setHistory] = useState([]);
+  const [weekDates, setWeekDates] = useState({});
   const [loading, setLoading] = useState(true);
   const [pastWeekContents, setPastWeekContents] = useState({});
   const [expandedPastWeek, setExpandedPastWeek] = useState(null);
@@ -70,6 +81,11 @@ function App() {
     if (!session) return;
     sb.from('history').select('*').eq('user_id', session.user.id).order('week_number', { ascending: false })
       .then(({ data }) => setHistory(data || []));
+    sb.from('weeks').select('week_number, created_at').then(({ data }) => {
+      const map = {};
+      (data || []).forEach(w => { map[w.week_number] = w.created_at; });
+      setWeekDates(map);
+    });
   }, [session]);
 
   async function togglePastWeek(weekNumber) {
@@ -104,7 +120,7 @@ function App() {
           <div key={h.week_number}>
             <div className="history-row">
               <span className="hw">
-                Hafta {h.week_number}
+                {weekDates[h.week_number] ? formatWeekRange(weekDates[h.week_number]) : `Hafta ${h.week_number}`}
                 {!h.frozen && (
                   <button className="btn" style={{ marginLeft: 10 }} onClick={() => togglePastWeek(h.week_number)}>
                     {expandedPastWeek === h.week_number ? 'Gizle' : 'Kaynakları Gör'}

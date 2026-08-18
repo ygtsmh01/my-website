@@ -61,6 +61,16 @@ const { useState, useEffect } = React;
 const SUPABASE_URL = 'https://lhgkfgwtmpfxyxwyaroh.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_ZElENBh86p0cWQDAnSbNWw_EcOQHmDV';
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const TR_MONTHS = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
+function formatWeekRange(createdAt) {
+  if (!createdAt) return '';
+  const start = new Date(createdAt);
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+  const sd = start.getDate(), ed = end.getDate();
+  const sm = TR_MONTHS[start.getMonth()], em = TR_MONTHS[end.getMonth()];
+  return sm === em ? `${sd}-${ed} ${sm}` : `${sd} ${sm} - ${ed} ${em}`;
+}
 const MODEL = 'claude-sonnet-5';
 const BOSS_EVERY = 5;
 const APIKEY_SESSION_KEY = 'aitakip_admin_apikey';
@@ -98,20 +108,20 @@ function demoWeekPayload(weekNumber, isBossWeek) {
 }
 
 function demoLeagueContent(tierName) {
-  return {
-    must_reads: [
-      { title: `[Demo] ${tierName} Temel Kaynak 1`, url: 'https://example.com/league-demo-1',
-        summary: `Bu demo içerik ${tierName} müfredatını test etmen için üretildi, gerçek bir API çağrısı yapılmadı. AI ve kurumsal dönüşüm konusunda temel bir kavramı özetliyor. Gerçek müfredatı admin panelinden linkler girip oluşturabilirsin.` },
-      { title: `[Demo] ${tierName} Temel Kaynak 2`, url: 'https://example.com/league-demo-2',
-        summary: `İkinci demo kaynak da test amaçlı. ${tierName} seviyesine uygun bir örnek konu içeriyor, gerçek üretimde kaynağın tam metninden çıkarılan detaylarla değiştirilecek.` },
-    ],
-    quiz: [
-      { source_index: 0, type: 'mc', bonus: false, question: `[Demo] ${tierName} birinci kaynağın ana fikri nedir?`, options: ['Seçenek A', 'Seçenek B (doğru)', 'Seçenek C'], correct_index: 1, explanation: 'Demo açıklama.' },
-      { source_index: 0, type: 'tf', bonus: false, question: `[Demo] Bu ifade doğru mu: "${tierName} temel bir kavramı anlatıyor."`, options: ['Doğru', 'Yanlış'], correct_index: 0, explanation: 'Demo açıklama.' },
-      { source_index: 1, type: 'mc', bonus: false, question: `[Demo] ${tierName} ikinci kaynağın ana fikri nedir?`, options: ['Seçenek A (doğru)', 'Seçenek B', 'Seçenek C'], correct_index: 0, explanation: 'Demo açıklama.' },
-      { source_index: 1, type: 'tf', bonus: false, question: `[Demo] Bu ifade doğru mu: "İkinci kaynak alakasız bir konu."`, options: ['Doğru', 'Yanlış'], correct_index: 1, explanation: 'Demo açıklama.' },
-    ],
-  };
+  const must_reads = [];
+  for (let i = 1; i <= 10; i++) {
+    must_reads.push({
+      title: `${i}. [Demo] ${tierName} Kaynağı`,
+      url: `https://example.com/league-demo-${i}`,
+      summary: `Bu ${i}. demo kaynağın özeti — gerçek bir API çağrısı yapılmadan test amaçlı üretildi. ${tierName} seviyesine uygun bir AI/kurumsal dönüşüm konusunu özetliyor. Gerçek müfredat admin panelinden linkler girilerek oluşturulduğunda bu metnin yerini kaynağın tam özeti alacak.`,
+    });
+  }
+  const quiz = [];
+  for (let i = 0; i < 4; i++) {
+    quiz.push({ source_index: i, type: 'mc', bonus: false, question: `[Demo] ${i + 1}. kaynağın ana fikri nedir?`, options: ['Seçenek A', 'Seçenek B (doğru)', 'Seçenek C'], correct_index: 1, explanation: 'Demo açıklama.' });
+    quiz.push({ source_index: i, type: 'tf', bonus: false, question: `[Demo] Bu ifade doğru mu: "${i + 1}. kaynak temel bir kavramı anlatıyor."`, options: ['Doğru', 'Yanlış'], correct_index: 0, explanation: 'Demo açıklama.' });
+  }
+  return { must_reads, quiz };
 }
 
 function App() {
@@ -452,7 +462,7 @@ ${combined}`;
         {pastWeeks.length === 0 && <p className="panel-sub">Henüz hafta yok.</p>}
         {pastWeeks.map(w => (
           <div className="week-row" key={w.week_number}>
-            <span>Hafta {w.week_number}{w.is_boss ? ' 👑' : ''} · {w.week_theme}</span>
+            <span>{formatWeekRange(w.created_at)} (Hafta {w.week_number}){w.is_boss ? ' 👑' : ''} · {w.week_theme}</span>
             <span>{new Date(w.created_at).toLocaleDateString('tr-TR')}</span>
           </div>
         ))}

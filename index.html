@@ -163,6 +163,17 @@ const SPEED_SECONDS = 45;
 const THEME_KEY = 'aitakip_theme';
 const AVATAR_OPTIONS = ['🙂', '🦊', '🐙', '🐼', '🦉', '🐳', '🦁', '🐸', '🤖', '👾', '🦄', '🐢'];
 
+const TR_MONTHS = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
+function formatWeekRange(createdAt) {
+  if (!createdAt) return '';
+  const start = new Date(createdAt);
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+  const sd = start.getDate(), ed = end.getDate();
+  const sm = TR_MONTHS[start.getMonth()], em = TR_MONTHS[end.getMonth()];
+  return sm === em ? `${sd}-${ed} ${sm}` : `${sd} ${sm} - ${ed} ${em}`;
+}
+
 const LEVEL_TITLES = [
   { min: 0, name: 'Çırak' },
   { min: 100, name: 'Pratisyen' },
@@ -260,6 +271,7 @@ function App() {
   const [leagues, setLeagues] = useState([]);
   const [leagueProgress, setLeagueProgress] = useState(null);
   const [showCurriculum, setShowCurriculum] = useState(false);
+  const [showAllCurricula, setShowAllCurricula] = useState(false);
   const [curriculumAnswers, setCurriculumAnswers] = useState({});
   const [curriculumStepIndex, setCurriculumStepIndex] = useState(0);
   const [curriculumSaving, setCurriculumSaving] = useState(false);
@@ -464,7 +476,7 @@ function App() {
     if (!histErr) {
       const myLeague = leagues.find(l => l.tier_index === profile.league_tier);
       const mult = myLeague ? Number(myLeague.weekly_multiplier) : 1;
-      const leagueGain = Math.round(xpGain * mult * 0.3);
+      const leagueGain = Math.round(xpGain * mult * 0.5);
       const { tier: newTier, xp: newLeagueXp } = applyLeagueDelta(profile.league_tier, profile.league_xp || 0, leagueGain, leagues);
       if (newTier > profile.league_tier) {
         const promotedTo = leagues.find(l => l.tier_index === newTier);
@@ -517,7 +529,7 @@ function App() {
     setCurriculumSaving(true);
     const quiz = myLeague.content.quiz || [];
     const score = quiz.reduce((acc, q, i) => acc + (curriculumAnswers[i] === q.correct_index ? 1 : 0), 0);
-    const completionBonus = myLeague.promote_threshold ? Math.round(myLeague.promote_threshold * 0.6) : 300;
+    const completionBonus = myLeague.promote_threshold ? Math.round(myLeague.promote_threshold * 0.8) : 300;
 
     const { error: progErr } = await sb.from('league_progress').insert({
       user_id: profile.id, tier_index: myLeague.tier_index, completed: true,
@@ -616,7 +628,7 @@ function App() {
       <div className="ledger-head">
         <div>
           <div className="eyebrow">{profile.avatar || '🙂'} {profile.username}</div>
-          <h1>{currentWeek ? `Hafta ${currentWeek.week_number}` : 'AI Takip Defteri'}</h1>
+          <h1>{currentWeek ? formatWeekRange(currentWeek.created_at) : 'AI Takip Defteri'}</h1>
         </div>
         <div className="level-tag">Seviye {lvl.level}<div className="level-name">{lvl.name}</div></div>
       </div>
@@ -652,6 +664,36 @@ function App() {
           <button className="btn secondary" onClick={() => setShowCurriculum(true)}>Lig Müfredatını Tamamla</button>
         </div>
       )}
+
+      <div className="panel">
+        <p className="panel-title">📖 Tüm Lig Müfredatları</p>
+        <p className="panel-sub">Her ligin kaynak başlıklarını görebilirsin, ama sadece kendi liginin müfredatını açıp tamamlayabilirsin.</p>
+        <button className="btn ghost" onClick={() => setShowAllCurricula(v => !v)}>{showAllCurricula ? 'Gizle' : 'Tüm Ligleri Gör'}</button>
+        {showAllCurricula && (
+          <div style={{ marginTop: 14 }}>
+            {leagues.map(l => {
+              const isMine = l.tier_index === profile.league_tier;
+              const reads = l.content && l.content.must_reads ? l.content.must_reads : [];
+              return (
+                <div key={l.tier_index} style={{ marginBottom: 16 }}>
+                  <p className="panel-title" style={{ fontSize: 14 }}>
+                    {isMine ? '▶ ' : '🔒 '}{l.name}{isMine ? ' (senin ligin)' : ''}
+                  </p>
+                  {reads.length === 0 ? (
+                    <p className="empty-hint">Henüz içerik yok.</p>
+                  ) : (
+                    reads.map((mr, i) => (
+                      <div className="one-liner" key={i} style={{ marginBottom: 4, opacity: isMine ? 1 : 0.6 }}>
+                        {i + 1}. {mr.title}
+                      </div>
+                    ))
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       {showCurriculum && myLeague && myLeague.content && (() => {
         const cq = myLeague.content.quiz || [];
@@ -715,7 +757,7 @@ function App() {
 
       {currentWeek && alreadyDone && (
         <div className="panel">
-          <p className="panel-title">Hafta {currentWeek.week_number} tamamlandı ✓</p>
+          <p className="panel-title">{formatWeekRange(currentWeek.created_at)} tamamlandı ✓</p>
           <p className="panel-sub">Bir sonraki hafta admin tarafından yayınlandığında burada görünecek. Kaynakları ve özetleri Geçmiş sayfasından tekrar okuyabilirsin.</p>
         </div>
       )}
