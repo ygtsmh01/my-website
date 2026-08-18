@@ -260,8 +260,16 @@ function App() {
       await sb.from('live_participants').update({ xp_awarded: true }).eq('id', mine.id);
       setAwardedBonus(bonus);
       setBetResult(betOutcome ? { outcome: betOutcome, amount: room.bet_amount } : null);
-      if (newTier < profile.league_tier) setLeagueChange({ direction: 'down', name: (leagues.find(l => l.tier_index === newTier) || {}).name });
-      else if (newTier > profile.league_tier) setLeagueChange({ direction: 'up', name: (leagues.find(l => l.tier_index === newTier) || {}).name });
+      if (newTier < profile.league_tier) {
+        setLeagueChange({
+          direction: 'down',
+          name: (leagues.find(l => l.tier_index === newTier) || {}).name,
+          fromName: (leagues.find(l => l.tier_index === profile.league_tier) || {}).name,
+          lost: Math.abs(leagueDelta),
+        });
+      } else if (newTier > profile.league_tier) {
+        setLeagueChange({ direction: 'up', name: (leagues.find(l => l.tier_index === newTier) || {}).name });
+      }
     })();
   }, [room && room.status, participants, profile]);
 
@@ -403,7 +411,7 @@ function App() {
           </div>
           <div className="panel" style={{ cursor: 'default' }}>
             <p className="panel-title">⚔ Düello Başlat</p>
-            <p className="panel-sub">Tek bir rakiple 1'e 1 yarış. Kaybeden, bahis miktarı kadar XP'sini kazanana kaptırır.</p>
+            <p className="panel-sub">Tek bir rakiple 1'e 1 yarış. Kaybeden, bahis miktarı kadar XP'sini kazanana kaptırır. Ayrıca kaybeden lig puanı da kaybeder — yeterince düşerse bir alt lige inebilirsin.</p>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
               {[0, 25, 50, 100].map(v => (
                 <button key={v} className="btn ghost" onClick={() => setDuelBetChoice(v)}
@@ -522,7 +530,9 @@ function App() {
         {betResult && betResult.outcome === 'lost' && <p className="panel-sub">⚔ Bahsi kaybettin, rakibine {betResult.amount} XP kaptırdın.</p>}
         {betResult && betResult.outcome === 'tie' && <p className="panel-sub">⚔ Berabere, bahis iade edildi.</p>}
         {leagueChange && leagueChange.direction === 'up' && <p className="panel-sub">🏆 Lig puanınla terfi ettin: {leagueChange.name}!</p>}
-        {leagueChange && leagueChange.direction === 'down' && <p className="panel-sub">📉 Lig puanın düştü, bir alt lige indin: {leagueChange.name}.</p>}
+        {leagueChange && leagueChange.direction === 'down' && (
+          <p className="panel-sub">📉 Bahsi kaybettiğin için {leagueChange.lost} lig puanı kaybettin ve {leagueChange.fromName} liginden {leagueChange.name} ligine düştün.</p>
+        )}
       </div>
       <button className="btn secondary" onClick={leaveRoom}>Yeni Bir Yarışma Başlat</button>
     </div>
