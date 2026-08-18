@@ -35,6 +35,24 @@
   .one-liner { font-size: 12.5px; color: var(--paper-dim); margin-top: 3px; }
   .past-week-content { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--hairline); }
   .empty-hint { font-size: 13px; color: var(--paper-dim); font-style: italic; }
+  .btn.secondary { border-color: var(--azure); color: var(--azure); }
+  .btn.secondary:hover { background: var(--azure); color: var(--ink); }
+  .quiz-card { border: 1px solid var(--hairline); padding: 14px 16px; margin-bottom: 12px; }
+  .quiz-q { font-size: 15px; font-weight: 600; margin-bottom: 12px; font-family: var(--serif); }
+  .quiz-opt { display: block; width: 100%; text-align: left; background: var(--ink); border: 2px solid var(--hairline); color: var(--paper); padding: 12px 14px; margin-bottom: 8px; font-family: var(--sans); font-size: 14px; cursor: pointer; }
+  .quiz-opt:hover:not(:disabled) { border-color: var(--azure); }
+  .quiz-opt.correct { border-color: var(--green); background: rgba(95,191,122,.15); }
+  .quiz-opt.wrong { border-color: var(--coral); background: rgba(226,96,74,.15); }
+  .quiz-explain { font-size: 12.5px; color: var(--paper-dim); margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--hairline); }
+  .quiz-progress { font-family: var(--mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--paper-dim); margin-bottom: 10px; text-align: center; }
+  .tag { display: inline-block; font-family: var(--mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; margin-bottom: 6px; margin-right: 6px; padding: 2px 6px; border: 1px solid currentColor; }
+  .tag.tf { color: var(--azure); }
+  .tag.missed { color: var(--coral); }
+  @keyframes popCorrect { 0% { transform: scale(.4); opacity: 0; } 55% { transform: scale(1.1); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
+  @keyframes shakeX { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-8px); } 40% { transform: translateX(8px); } 60% { transform: translateX(-5px); } 80% { transform: translateX(5px); } }
+  .feedback-banner { text-align: center; font-family: var(--mono); font-size: 13px; padding: 12px; margin-bottom: 12px; }
+  .feedback-banner.correct { color: var(--green); border: 1px solid var(--green); background: rgba(95,191,122,.1); animation: popCorrect .4s ease; }
+  .feedback-banner.wrong { color: var(--coral); border: 1px solid var(--coral); background: rgba(226,96,74,.1); animation: shakeX .4s ease; }
 </style>
 </head>
 <body>
@@ -65,11 +83,19 @@ function formatWeekRange(createdAt) {
 function App() {
   const [theme] = useState(() => localStorage.getItem('aitakip_theme') || 'dark');
   const [session, setSession] = useState(null);
+  const [profile, setProfile] = useState(null);
   const [history, setHistory] = useState([]);
+  const [allWeeks, setAllWeeks] = useState([]);
   const [weekDates, setWeekDates] = useState({});
   const [loading, setLoading] = useState(true);
   const [pastWeekContents, setPastWeekContents] = useState({});
   const [expandedPastWeek, setExpandedPastWeek] = useState(null);
+
+  const [missedWeek, setMissedWeek] = useState(null);
+  const [missedAnswers, setMissedAnswers] = useState({});
+  const [missedStepIndex, setMissedStepIndex] = useState(0);
+  const [missedDone, setMissedDone] = useState(false);
+  const [missedGain, setMissedGain] = useState(0);
 
   useEffect(() => { document.documentElement.setAttribute('data-theme', theme); }, [theme]);
 
@@ -79,14 +105,21 @@ function App() {
 
   useEffect(() => {
     if (!session) return;
-    sb.from('history').select('*').eq('user_id', session.user.id).order('week_number', { ascending: false })
-      .then(({ data }) => setHistory(data || []));
-    sb.from('weeks').select('week_number, created_at').then(({ data }) => {
-      const map = {};
-      (data || []).forEach(w => { map[w.week_number] = w.created_at; });
-      setWeekDates(map);
-    });
+    refreshHistory();
+    sb.from('profiles').select('*').eq('id', session.user.id).single().then(({ data }) => setProfile(data));
+    sb.from('weeks').select('week_number, created_at, week_theme, quiz').order('week_number', { ascending: false })
+      .then(({ data }) => {
+        setAllWeeks(data || []);
+        const map = {};
+        (data || []).forEach(w => { map[w.week_number] = w.created_at; });
+        setWeekDates(map);
+      });
   }, [session]);
+
+  async function refreshHistory() {
+    const { data } = await sb.from('history').select('*').eq('user_id', session.user.id).order('week_number', { ascending: false });
+    setHistory(data || []);
+  }
 
   async function togglePastWeek(weekNumber) {
     if (expandedPastWeek === weekNumber) { setExpandedPastWeek(null); return; }
@@ -95,6 +128,43 @@ function App() {
     const { data } = await sb.from('weeks').select('*').eq('week_number', weekNumber).single();
     if (data) setPastWeekContents(prev => ({ ...prev, [weekNumber]: data }));
   }
+
+  function startMissedWeek(w) {
+    setMissedWeek(w);
+    setMissedAnswers({});
+    setMissedStepIndex(0);
+    setMissedDone(false);
+    setMissedGain(0);
+  }
+
+  function selectMissedAnswer(qIdx, optIdx) {
+    if (missedAnswers[qIdx] !== undefined) return;
+    setMissedAnswers(prev => ({ ...prev, [qIdx]: optIdx }));
+  }
+
+  async function finishMissedWeek() {
+    if (!missedWeek || !profile) return;
+    const quiz = missedWeek.quiz || [];
+    const score = quiz.reduce((acc, q, i) => acc + (missedAnswers[i] === q.correct_index ? 1 : 0), 0);
+    const gain = quiz.reduce((acc, q, i) => {
+      if (missedAnswers[i] !== q.correct_index) return acc;
+      return acc + Math.round((q.bonus ? 20 : 10) / 2);
+    }, 0);
+    const newXp = Math.max(0, profile.total_xp + gain);
+    await sb.from('profiles').update({ total_xp: newXp }).eq('id', profile.id);
+    await sb.from('history').insert({
+      user_id: profile.id, week_number: missedWeek.week_number, xp_earned: gain,
+      quiz_score: score, quiz_total: quiz.length, week_theme: missedWeek.week_theme,
+      critical: false, risk_won: null, boss_cleared: false, frozen: false,
+    });
+    setProfile(p => ({ ...p, total_xp: newXp }));
+    setMissedGain(gain);
+    setMissedDone(true);
+    refreshHistory();
+  }
+
+  const doneWeekNumbers = new Set(history.map(h => h.week_number));
+  const missedWeeksList = allWeeks.filter(w => !doneWeekNumbers.has(w.week_number) && w.quiz && w.quiz.length > 0);
 
   if (loading) return <div className="root"><p className="panel-sub">Yükleniyor…</p></div>;
 
@@ -114,6 +184,71 @@ function App() {
     <div className="root">
       <div className="eyebrow">AI Takip Defteri</div>
       <h1>📚 Geçmiş Haftalar</h1>
+
+      {missedWeeksList.length > 0 && (
+        <div className="panel">
+          <span className="tag missed">KAÇIRILAN HAFTALAR</span>
+          <p className="panel-title">Kaçırdığın Haftalar</p>
+          <p className="panel-sub">Katılmadan önce yayınlanmış haftalar. Sorularını çözebilirsin, ama yarı XP verir.</p>
+          {!missedWeek ? (
+            missedWeeksList.map(w => (
+              <div className="history-row" key={w.week_number}>
+                <span className="hw">{formatWeekRange(w.created_at)}</span>
+                <button className="btn secondary" onClick={() => startMissedWeek(w)}>Çöz (yarı XP)</button>
+              </div>
+            ))
+          ) : !missedDone ? (
+            (() => {
+              const mq = missedWeek.quiz[missedStepIndex];
+              const mAnswered = mq && missedAnswers[missedStepIndex] !== undefined;
+              const mAllAnswered = missedWeek.quiz.every((_, i) => missedAnswers[i] !== undefined);
+              return (
+                <div>
+                  <button className="btn" onClick={() => setMissedWeek(null)} style={{ marginBottom: 14 }}>← Listeye Dön</button>
+                  <p className="panel-sub">{formatWeekRange(missedWeek.created_at)}</p>
+                  {!mAllAnswered && mq && (
+                    <div>
+                      <div className="quiz-progress">Soru {missedStepIndex + 1} / {missedWeek.quiz.length}</div>
+                      {mAnswered && (
+                        <div className={'feedback-banner ' + (missedAnswers[missedStepIndex] === mq.correct_index ? 'correct' : 'wrong')}>
+                          {missedAnswers[missedStepIndex] === mq.correct_index ? '🎉 Doğru!' : '💥 Olmadı.'}
+                        </div>
+                      )}
+                      <div className="quiz-card">
+                        <div className="quiz-q">
+                          {mq.type === 'tf' && <span className="tag tf">DOĞRU/YANLIŞ</span>}
+                          <div>{mq.question}</div>
+                        </div>
+                        {mq.options.map((opt, oi) => {
+                          let cls = 'quiz-opt';
+                          if (mAnswered && oi === mq.correct_index) cls += ' correct';
+                          else if (mAnswered && oi === missedAnswers[missedStepIndex]) cls += ' wrong';
+                          return <button key={oi} className={cls} disabled={mAnswered} onClick={() => selectMissedAnswer(missedStepIndex, oi)}>{opt}</button>;
+                        })}
+                        {mAnswered && <div className="quiz-explain">{mq.explanation}</div>}
+                      </div>
+                      {mAnswered && (
+                        <button className="btn secondary" onClick={() => setMissedStepIndex(i => i + 1)}>
+                          {missedStepIndex + 1 < missedWeek.quiz.length ? 'Sonraki Soru' : 'Devam Et'}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  {mAllAnswered && (
+                    <button className="btn secondary" onClick={finishMissedWeek}>Bitir ve XP Al</button>
+                  )}
+                </div>
+              );
+            })()
+          ) : (
+            <div>
+              <p className="panel-sub">✓ Tamamlandı, +{missedGain} XP kazandın.</p>
+              <button className="btn" onClick={() => setMissedWeek(null)}>Listeye Dön</button>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="panel">
         {history.length === 0 && <p className="empty-hint">Henüz kayıt yok.</p>}
         {history.map(h => (
