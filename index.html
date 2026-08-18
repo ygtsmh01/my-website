@@ -1019,10 +1019,12 @@ function App() {
           {(allQuizAnswered || weekClosed) && (
             <div className="panel">
               {!weekClosed ? (
-                <button className="btn secondary" onClick={closeWeek} disabled={saving || (riskChoice === 'bet' && riskAnswer === null)}>
-                  {saving ? 'Kaydediliyor…' : 'Haftayı Bitir ve Bonus Al'}
-                </button>
-                <p className="panel-sub" style={{ marginTop: 8 }}>Sorulardan kazandığın XP zaten hesabına işlendi ({sessionXp} XP). Bu buton sadece bitirme bonusunu ekler ve seriyi ilerletir.</p>
+                <React.Fragment>
+                  <button className="btn secondary" onClick={closeWeek} disabled={saving || (riskChoice === 'bet' && riskAnswer === null)}>
+                    {saving ? 'Kaydediliyor…' : 'Haftayı Bitir ve Bonus Al'}
+                  </button>
+                  <p className="panel-sub" style={{ marginTop: 8 }}>Sorulardan kazandığın XP zaten hesabına işlendi ({sessionXp} XP). Bu buton sadece bitirme bonusunu ekler ve seriyi ilerletir.</p>
+                </React.Fragment>
               ) : (
                 <div>
                   <div className="closed-stamp">ONAYLANDI · +{lastGain} XP</div>
