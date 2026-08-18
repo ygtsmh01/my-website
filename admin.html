@@ -95,9 +95,13 @@ function demoWeekPayload(weekNumber, isBossWeek) {
     ],
     quiz: [
       { source_index: 0, type: 'mc', bonus: false, question: '[Demo] Metne göre AI ajanlarının kurumsal kullanımdaki en büyük riski nedir?', options: ['Maliyet', 'Yetki sınırlarının net olmaması', 'Yavaş çalışması'], correct_index: 1, explanation: 'Demo açıklama: özet metninde bu doğrudan belirtiliyor.' },
+      { source_index: 0, type: 'mc', bonus: false, question: '[Demo] Doğru gözetim mekanizmalarının etkisi nedir?', options: ['Verimliliği azaltır', 'Verimliliği belirgin artırır', 'Hiçbir etkisi yok'], correct_index: 1, explanation: 'Demo açıklama: özet metninde bu doğrudan belirtiliyor.' },
       { source_index: 0, type: 'tf', bonus: true, question: '[Demo-BONUS] Bu ifade gerçek bir kaynakta olsaydı, sadece linke tıklayıp okuyarak doğrulanabilirdi: "Ajanlar hiçbir gözetim olmadan güvenli çalışır."', options: ['Doğru', 'Yanlış'], correct_index: 1, explanation: 'Demo açıklama: bonus sorular özetten değil, kaynağın tam metninden çıkar.' },
+      { source_index: 0, type: 'mc', bonus: true, question: '[Demo-BONUS] Pilot uygulamalar genelde ilk olarak nerede başlatılıyor?', options: ['Yüksek riskli süreçlerde', 'Düşük riskli süreçlerde', 'Hiç pilot yapılmıyor'], correct_index: 1, explanation: 'Demo açıklama: bu bonus soru kaynağın tam metnine dayanır.' },
       { source_index: 1, type: 'mc', bonus: false, question: '[Demo] İkinci kaynağa göre benimsemeyi ne yavaşlatıyor?', options: ['Bütçe', 'Eğitim eksikliği', 'Donanım'], correct_index: 1, explanation: 'Demo açıklama: özet metninde bu doğrudan belirtiliyor.' },
+      { source_index: 1, type: 'mc', bonus: false, question: '[Demo] AI destekli araçları benimsedikçe ne azalıyor?', options: ['Tekrarlayan işler', 'Yaratıcı işler', 'Toplantılar'], correct_index: 0, explanation: 'Demo açıklama: özet metninde bu doğrudan belirtiliyor.' },
       { source_index: 1, type: 'tf', bonus: true, question: '[Demo-BONUS] "Başarılı şirketler tek seferde büyük ölçekli geçiş yapıyor." ifadesi doğru mu?', options: ['Doğru', 'Yanlış'], correct_index: 1, explanation: 'Demo açıklama: bu bonus soru gerçek senaryoda detaylı okuma gerektirir.' },
+      { source_index: 1, type: 'mc', bonus: true, question: '[Demo-BONUS] Orta vadede rol tanımlarına ne oluyor?', options: ['Hiç değişmiyor', 'Araçlara göre yeniden şekilleniyor', 'Kaldırılıyor'], correct_index: 1, explanation: 'Demo açıklama: bu bonus soru kaynağın tam metnine dayanır.' },
     ],
     number_challenge: { source_index: 0, question: '[Demo] Kaynakta örnek olarak verilen verimlilik artışı yüzde kaçtır?', correct_value: 35, tolerance: 5, explanation: 'Demo açıklama: gerçek kaynakta geçen sayı burada sorulur.' },
     matching: { pairs: [ { source_index: 0, detail: 'Yetki sınırı belirsizliği riski' }, { source_index: 1, detail: 'Eğitim eksikliği nedeniyle yavaş benimseme' } ] },
@@ -243,9 +247,10 @@ function App() {
 
 Kurallar:
 - Her kaynak için bir must_reads öğesi oluştur (sırasıyla index 0,1,2,...).
-- Her kaynak için quiz'de "source_index" o kaynağın must_reads içindeki index'ine eşit olan tam olarak 2 soru olsun:
-  - 1 tanesi "type": "mc", "bonus": false — cevabı summary'den çıkarılabilecek, genel anlama sorusu, 3 seçenekli.
+- Her kaynak için quiz'de "source_index" o kaynağın must_reads içindeki index'ine eşit olan tam olarak 4 soru olsun:
+  - 2 tanesi "type": "mc", "bonus": false — cevabı summary'den çıkarılabilecek, genel anlama soruları, farklı yönlere odaklansın, 3 seçenekli.
   - 1 tanesi "type": "tf", "bonus": true — Doğru/Yanlış formatında bir ifade, SADECE kaynağın tam metnindeki spesifik bir detaya dayanmalı, summary'den cevaplanamamalı; "options" tam olarak ["Doğru","Yanlış"] olmalı, "correct_index" 0 (Doğru) veya 1 (Yanlış).
+  - 1 tanesi "type": "mc", "bonus": true — yine kaynağın tam metnindeki bir detaya dayanmalı, summary'den cevaplanamamalı, 3 seçenekli.
 - "number_challenge": haftada sadece 1 tane, kaynaklardan birinde geçen somut bir sayıyı/istatistiği sorsun, makul bir "tolerance" belirle.
 - "matching": kaynak sayısı 2 veya daha fazlaysa doldur, "pairs" uzunluğu kaynak sayısına eşit olsun, her "detail" sadece o kaynağa ait, kısa ve ayırt edici olsun. Kaynak sayısı 1 ise "pairs": [] olarak boş bırak.
 - "risk_question": kaynaklardan herhangi birine dayanan, normal sorulardan biraz daha zor, 3 seçenekli tek bir soru.

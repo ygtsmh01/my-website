@@ -284,6 +284,9 @@ function App() {
   const [speedResult, setSpeedResult] = useState(null);
   const [lastRiskResult, setLastRiskResult] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [sessionXp, setSessionXp] = useState(0);
+  const [readBonusGranted, setReadBonusGranted] = useState(false);
+  const [showSources, setShowSources] = useState(false);
 
   const [leagues, setLeagues] = useState([]);
   const [leagueProgress, setLeagueProgress] = useState(null);
@@ -337,6 +340,11 @@ function App() {
       setShuffledDetails([]);
     }
   }, [currentWeek]);
+
+  useEffect(() => {
+    setSessionXp(0);
+    setReadBonusGranted(false);
+  }, [currentWeek && currentWeek.week_number]);
 
   useEffect(() => {
     if (!speedActive || speedTimeLeft <= 0) return;
@@ -402,9 +410,18 @@ function App() {
     setSpeedResult(null);
   }
 
+  async function grantXp(delta) {
+    let newXp = profile.total_xp;
+    setProfile(p => { newXp = Math.max(0, p.total_xp + delta); return { ...p, total_xp: newXp }; });
+    setSessionXp(s => s + delta);
+    await sb.from('profiles').update({ total_xp: newXp }).eq('id', profile.id);
+  }
+
   function selectQuizAnswer(qIdx, optIdx) {
     if (quizAnswers[qIdx] !== undefined) return;
     setQuizAnswers(prev => ({ ...prev, [qIdx]: optIdx }));
+    const q = currentWeek.quiz[qIdx];
+    if (optIdx === q.correct_index) grantXp(q.bonus ? 20 : 10);
     if (speedActive) {
       setTimeout(() => {
         const allAnswered = currentWeek.quiz.every((_, i) => (i === qIdx ? true : quizAnswers[i] !== undefined));
@@ -418,17 +435,29 @@ function App() {
     setMatchSelectedSource(sourceIndex);
   }
 
-  async function assignMatchDetail(detail, used) {
+  function assignMatchDetail(detail, used) {
     if (weekClosed || used || matchSelectedSource === null) return;
     const pairs = (currentWeek.matching && currentWeek.matching.pairs) || [];
     const pair = pairs.find(p => p.source_index === matchSelectedSource);
     const correct = !!pair && pair.detail === detail;
     setMatchAssignments(prev => ({ ...prev, [matchSelectedSource]: { detail, correct } }));
     setMatchSelectedSource(null);
-    const delta = correct ? 10 : -5;
-    const newXp = Math.max(0, profile.total_xp + delta);
-    setProfile(p => ({ ...p, total_xp: newXp }));
-    await sb.from('profiles').update({ total_xp: newXp }).eq('id', profile.id);
+    grantXp(correct ? 10 : -5);
+  }
+
+  function selectBossAnswer(oi) {
+    if (bossAnswer !== null) return;
+    setBossAnswer(oi);
+    if (currentWeek.boss_question && oi === currentWeek.boss_question.correct_index) grantXp(30);
+  }
+
+  function selectRiskAnswer(oi) {
+    if (riskAnswer !== null || !currentWeek.risk_question) return;
+    setRiskAnswer(oi);
+    const won = oi === currentWeek.risk_question.correct_index;
+    const betAmount = Math.max(10, Math.round(sessionXp / 2));
+    grantXp(won ? betAmount : -betAmount);
+    setLastRiskResult(won);
   }
 
   function submitNumberGuess() {
@@ -438,6 +467,7 @@ function App() {
     const correct = !isNaN(g) && Math.abs(g - nc.correct_value) <= (nc.tolerance || 0);
     setNumberSubmitted(true);
     setNumberCorrectDisplay(correct);
+    if (correct) grantXp(15);
   }
 
   async function closeWeek() {
@@ -447,71 +477,42 @@ function App() {
 
     const quizTotal = currentWeek.quiz.length;
     const quizScore = currentWeek.quiz.reduce((acc, q, i) => acc + (quizAnswers[i] === q.correct_index ? 1 : 0), 0);
-    const quizXP = currentWeek.quiz.reduce((acc, q, i) => {
-      if (quizAnswers[i] !== q.correct_index) return acc;
-      return acc + (q.bonus ? 20 : 10);
-    }, 0);
-    const allReadChecked = currentWeek.must_reads.every((_, i) => checkedReads[i]);
+    const bossCleared = !!(currentWeek.is_boss && currentWeek.boss_question && bossAnswer === currentWeek.boss_question.correct_index);
 
-    let numberCorrect = false;
-    if (currentWeek.number_challenge && numberGuess.trim() !== '') {
-      const g = parseFloat(numberGuess);
-      const nc = currentWeek.number_challenge;
-      if (!isNaN(g) && Math.abs(g - nc.correct_value) <= (nc.tolerance || 0)) numberCorrect = true;
-    }
-
-    let xpBeforeRisk = 20;
-    xpBeforeRisk += quizXP;
-    if (allReadChecked) xpBeforeRisk += 15;
-    if (profile.streak > 0) xpBeforeRisk += 20;
-    if (numberCorrect) xpBeforeRisk += 15;
-    if (speedResult === true) xpBeforeRisk += 30;
-
-    let bossCleared = false;
-    if (currentWeek.is_boss && currentWeek.boss_question) {
-      bossCleared = bossAnswer === currentWeek.boss_question.correct_index;
-      if (bossCleared) xpBeforeRisk += 30;
-    }
-
+    let completionBonus = 20;
+    if (profile.streak > 0) completionBonus += 20;
     const isCritical = Math.random() < 0.2;
-    if (isCritical) xpBeforeRisk = Math.round(xpBeforeRisk * 1.5);
-
-    let xpGain = xpBeforeRisk;
-    let riskWon = null;
-    if (riskChoice === 'bet' && currentWeek.risk_question) {
-      const betAmount = Math.round(xpBeforeRisk / 2);
-      riskWon = riskAnswer === currentWeek.risk_question.correct_index;
-      xpGain = riskWon ? xpBeforeRisk + betAmount : xpBeforeRisk - betAmount;
-      if (xpGain < 5) xpGain = 5;
-    }
+    if (isCritical) completionBonus = Math.round(completionBonus * 1.5);
 
     const nextStreak = profile.streak + 1;
     const earnedFreeze = nextStreak > 0 && nextStreak % 3 === 0;
     const streakBonus = earnedFreeze ? 50 : 0;
 
+    const totalWeekXp = sessionXp + completionBonus + streakBonus;
+
     const { error: histErr } = await sb.from('history').insert({
       user_id: profile.id,
       week_number: currentWeek.week_number,
-      xp_earned: xpGain,
+      xp_earned: totalWeekXp,
       quiz_score: quizScore,
       quiz_total: quizTotal,
       week_theme: currentWeek.week_theme,
       critical: isCritical,
-      risk_won: riskWon,
+      risk_won: lastRiskResult,
       boss_cleared: bossCleared,
       frozen: false,
     });
     if (!histErr) {
       const myLeague = leagues.find(l => l.tier_index === profile.league_tier);
       const mult = myLeague ? Number(myLeague.weekly_multiplier) : 1;
-      const leagueGain = Math.round(xpGain * mult * 0.5);
+      const leagueGain = Math.round(totalWeekXp * mult * 0.5);
       const { tier: newTier, xp: newLeagueXp } = applyLeagueDelta(profile.league_tier, profile.league_xp || 0, leagueGain, leagues);
       if (newTier > profile.league_tier) {
         const promotedTo = leagues.find(l => l.tier_index === newTier);
         setLastPromotion(promotedTo ? promotedTo.name : null);
       }
       await sb.from('profiles').update({
-        total_xp: profile.total_xp + xpGain + streakBonus,
+        total_xp: profile.total_xp + completionBonus + streakBonus,
         streak: nextStreak,
         last_week_number: currentWeek.week_number,
         freezes: (profile.freezes || 0) + (earnedFreeze ? 1 : 0),
@@ -520,11 +521,10 @@ function App() {
       }).eq('id', profile.id);
     }
 
-    setLastGain(xpGain);
+    setLastGain(totalWeekXp);
     setLastCritical(isCritical);
     setLastFreezeEarned(earnedFreeze);
     setLastStreakBonus(streakBonus);
-    setLastRiskResult(riskWon);
     setWeekClosed(true);
     setSaving(false);
     refreshProfile();
@@ -824,10 +824,20 @@ function App() {
       {currentWeek && (
         <div className="panel">
           <p className="panel-title">{currentWeek.week_theme || 'Bu haftanın okumaları'}</p>
-          {currentWeek.must_reads.map((mr, i) => (
-            <div className="read-row" key={i}>
+          <button className="btn ghost" onClick={() => setShowSources(v => !v)}>
+            {showSources ? 'Kaynakları Gizle' : `📚 Kaynakları Göster (${currentWeek.must_reads.length})`}
+          </button>
+          {showSources && currentWeek.must_reads.map((mr, i) => (
+            <div className="read-row" key={i} style={{ marginTop: 10 }}>
               <input type="checkbox" checked={!!checkedReads[i]} disabled={weekClosed || alreadyDone}
-                onChange={() => setCheckedReads(prev => ({ ...prev, [i]: !prev[i] }))} />
+                onChange={() => {
+                  setCheckedReads(prev => {
+                    const next = { ...prev, [i]: !prev[i] };
+                    const allNow = currentWeek.must_reads.every((_, idx) => next[idx]);
+                    if (allNow && !readBonusGranted) { setReadBonusGranted(true); grantXp(15); }
+                    return next;
+                  });
+                }} />
               <div>
                 {mr.url ? <a href={mr.url} target="_blank" rel="noopener noreferrer">{mr.title}</a> : <strong>{mr.title}</strong>}
                 <div className="one-liner">{mr.summary}</div>
@@ -862,7 +872,10 @@ function App() {
             {!weekClosed && !allQuizAnswered && stepQ && (
               <div className="panel quiz-stage">
                 <p className="panel-title" style={{ textAlign: 'center' }}>Sınav · {currentWeek.must_reads[stepQ.source_index] ? currentWeek.must_reads[stepQ.source_index].title : ''}</p>
-                <div className="quiz-progress">Soru {quizStepIndex + 1} / {totalQ}</div>
+                <div className="quiz-progress">Soru {quizStepIndex + 1} / {totalQ} · +{sessionXp} XP</div>
+                <div className="xp-track" style={{ marginBottom: 14 }}>
+                  <div className="xp-fill" style={{ width: Math.round((Object.keys(quizAnswers).length / totalQ) * 100) + '%' }} />
+                </div>
                 {stepAnswered && (
                   <div className={'feedback-banner ' + (quizAnswers[quizStepIndex] === stepQ.correct_index ? 'correct' : 'wrong')}>
                     {quizAnswers[quizStepIndex] === stepQ.correct_index ? '🎉 Harika, doğru bildin!' : '💥 Olmadı, bir dahakine!'}
@@ -969,7 +982,7 @@ function App() {
                   let cls = 'quiz-opt opt-' + oi;
                   if (answered && oi === currentWeek.boss_question.correct_index) cls += ' correct';
                   else if (answered && oi === bossAnswer) cls += ' wrong';
-                  return <button key={oi} className={cls} disabled={answered || weekClosed} onClick={() => setBossAnswer(oi)}>{opt}</button>;
+                  return <button key={oi} className={cls} disabled={answered || weekClosed} onClick={() => selectBossAnswer(oi)}>{opt}</button>;
                 })}
                 {bossAnswer !== null && <div className="quiz-explain">{currentWeek.boss_question.explanation}</div>}
               </div>
@@ -979,7 +992,7 @@ function App() {
           {(allQuizAnswered || weekClosed) && currentWeek.risk_question && (
             <div className="panel">
               <p className="panel-title">🎲 Çift Yap ya da Kaybet</p>
-              <p className="panel-sub">Şu ana kadarki XP kazancının yarısını bahse yatır. Doğru bilirsen bahis miktarın kadar ekstra kazanırsın, yanlış bilirsen o kadar kaybedersin.</p>
+              <p className="panel-sub">Bu hafta oyun içinde kazandığın XP'nin yarısını bahse yatır. Soruyu cevaplar cevaplamaz sonuç anında belli olur, XP hemen işlenir.</p>
               {riskChoice === null && !weekClosed && (
                 <div className="risk-choice-row">
                   <button className="btn danger" onClick={() => setRiskChoice('bet')}>Bahse Gir</button>
@@ -994,7 +1007,7 @@ function App() {
                     let cls = 'quiz-opt opt-' + oi;
                     if (answered && oi === currentWeek.risk_question.correct_index) cls += ' correct';
                     else if (answered && oi === riskAnswer) cls += ' wrong';
-                    return <button key={oi} className={cls} disabled={answered || weekClosed} onClick={() => setRiskAnswer(oi)}>{opt}</button>;
+                    return <button key={oi} className={cls} disabled={answered || weekClosed} onClick={() => selectRiskAnswer(oi)}>{opt}</button>;
                   })}
                   {riskAnswer !== null && <div className="quiz-explain">{currentWeek.risk_question.explanation}</div>}
                 </div>
@@ -1007,8 +1020,9 @@ function App() {
             <div className="panel">
               {!weekClosed ? (
                 <button className="btn secondary" onClick={closeWeek} disabled={saving || (riskChoice === 'bet' && riskAnswer === null)}>
-                  {saving ? 'Kaydediliyor…' : 'Haftayı Kapat ve Damgala'}
+                  {saving ? 'Kaydediliyor…' : 'Haftayı Bitir ve Bonus Al'}
                 </button>
+                <p className="panel-sub" style={{ marginTop: 8 }}>Sorulardan kazandığın XP zaten hesabına işlendi ({sessionXp} XP). Bu buton sadece bitirme bonusunu ekler ve seriyi ilerletir.</p>
               ) : (
                 <div>
                   <div className="closed-stamp">ONAYLANDI · +{lastGain} XP</div>
