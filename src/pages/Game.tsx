@@ -651,7 +651,7 @@ export default function Game() {
 
       {currentWeek && alreadyDone && (() => {
         const rq = replayQuizStepIndex < currentWeek.quiz.length ? currentWeek.quiz[replayQuizStepIndex] : null;
-        const rAnswered = rq && replayQuizAnswers[replayQuizStepIndex] !== undefined;
+        const rAnswered = !!rq && replayQuizAnswers[replayQuizStepIndex] !== undefined;
         const rAllAnswered = currentWeek.quiz.every((_, i) => replayQuizAnswers[i] !== undefined);
         return (
           <div className="panel">
