@@ -32,6 +32,7 @@ create table public.history (
 create table public.weeks (
   week_number int primary key,
   week_theme text,
+  week_label text,
   must_reads jsonb not null,
   quiz jsonb not null,
   number_challenge jsonb,

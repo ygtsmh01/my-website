@@ -44,6 +44,7 @@ export interface RiskOrBossQuestion {
 export interface Week {
   week_number: number;
   week_theme: string | null;
+  week_label: string | null;
   must_reads: MustRead[];
   quiz: QuizQuestion[];
   number_challenge: NumberChallenge | null;

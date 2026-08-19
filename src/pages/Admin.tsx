@@ -83,6 +83,7 @@ export default function Admin() {
   const [apiKey, setApiKey] = useState(() => sessionStorage.getItem(APIKEY_SESSION_KEY) || '');
   const [keyDraft, setKeyDraft] = useState('');
   const [linksText, setLinksText] = useState('');
+  const [weekLabelDraft, setWeekLabelDraft] = useState('');
   const [building, setBuilding] = useState(false);
   const [buildStatus, setBuildStatus] = useState('');
   const [buildError, setBuildError] = useState('');
@@ -235,6 +236,7 @@ ${combined}`;
       const { error: insertError } = await sb.from('weeks').insert({
         week_number: nextWeekNumber,
         week_theme: parsed.week_theme,
+        week_label: weekLabelDraft.trim() || null,
         must_reads: parsed.must_reads,
         quiz: parsed.quiz,
         number_challenge: parsed.number_challenge || null,
@@ -248,6 +250,7 @@ ${combined}`;
 
       setBuildOk(`Hafta ${nextWeekNumber} taslak olarak oluşturuldu${isBossWeek ? ' (BOSS HAFTASI)' : ''}. "Taslaklar" bölümünden inceleyip yayınlayabilirsin.`);
       setLinksText('');
+      setWeekLabelDraft('');
     } catch (e: any) {
       setBuildError('Hafta işlenirken bir sorun oldu: ' + e.message);
     } finally {
@@ -260,9 +263,11 @@ ${combined}`;
     setBuildError(''); setBuildOk('');
     const isBossWeek = nextWeekNumber % BOSS_EVERY === 0;
     const demo = demoWeekPayload(nextWeekNumber, isBossWeek);
-    const { error: insertError } = await sb.from('weeks').insert(demo);
+    const label = weekLabelDraft.trim() || `Demo Hafta ${nextWeekNumber}`;
+    const { error: insertError } = await sb.from('weeks').insert({ ...demo, week_label: label });
     if (insertError) { setBuildError('Veritabanına yazılamadı: ' + insertError.message); return; }
     setBuildOk(`Hafta ${nextWeekNumber} demo veriyle yayınlandı (token harcanmadı).`);
+    setWeekLabelDraft('');
   }
 
   async function publishDemoLeagues() {
@@ -351,6 +356,7 @@ ${combined}`;
       must_reads: keyMustReads(w.must_reads || []),
       quiz: keyQuiz(w.quiz || []),
       week_theme: w.week_theme,
+      week_label: w.week_label,
       number_challenge: w.number_challenge,
       matching: w.matching,
       risk_question: w.risk_question,
@@ -374,6 +380,7 @@ ${combined}`;
     const clean = stripKeys(editingWeek.draft);
     const payload: any = {
       week_theme: editingWeek.draft.week_theme ?? null,
+      week_label: editingWeek.draft.week_label ?? null,
       must_reads: clean.must_reads,
       quiz: clean.quiz,
       number_challenge: editingWeek.draft.number_challenge ?? null,
@@ -496,6 +503,8 @@ ${combined}`;
         <div className="panel">
           <p className="panel-title">Hafta {nextWeekNumber} Oluştur{nextWeekNumber % BOSS_EVERY === 0 ? ' — 👑 BOSS HAFTASI' : ''}</p>
           <p className="panel-sub">Bu haftanın linklerini alt alta yapıştır.</p>
+          <label className="field-label">Hafta İsmi</label>
+          <input type="text" value={weekLabelDraft} onChange={(e) => setWeekLabelDraft(e.target.value)} placeholder="17-24 Ağustos 2026" />
           <textarea value={linksText} onChange={(e) => setLinksText(e.target.value)} placeholder={'https://...\nhttps://...\nhttps://...'} />
           <button className="btn" onClick={buildWeek} disabled={building || !linksText.trim()}>
             {building ? 'İşleniyor…' : `Hafta ${nextWeekNumber}'yi Yayınla`}
@@ -513,7 +522,7 @@ ${combined}`;
         {draftWeeks.length === 0 && <p className="panel-sub">Taslak yok.</p>}
         {draftWeeks.map((w) => (
           <div className="week-row" key={w.week_number}>
-            <span>Hafta {w.week_number}{w.is_boss ? ' 👑' : ''} · {w.week_theme}</span>
+            <span>{w.week_label || formatWeekRange(w.created_at)} (Hafta {w.week_number}){w.is_boss ? ' 👑' : ''} · {w.week_theme}</span>
             <button className="btn ghost" onClick={() => openWeekEditor(w, 'draft')}>İncele / Düzenle</button>
           </div>
         ))}
@@ -524,7 +533,7 @@ ${combined}`;
         {pastWeeks.length === 0 && <p className="panel-sub">Henüz hafta yok.</p>}
         {pastWeeks.map((w) => (
           <div className="week-row" key={w.week_number}>
-            <span>{formatWeekRange(w.created_at)} (Hafta {w.week_number}){w.is_boss ? ' 👑' : ''} · {w.week_theme}</span>
+            <span>{w.week_label || formatWeekRange(w.created_at)} (Hafta {w.week_number}){w.is_boss ? ' 👑' : ''} · {w.week_theme}</span>
             <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               {new Date(w.created_at).toLocaleDateString('tr-TR')}
               <button className="btn ghost" onClick={() => openWeekEditor(w, 'published')}>Düzenle</button>

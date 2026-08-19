@@ -505,7 +505,7 @@ export default function Game() {
       <div className="ledger-head">
         <div>
           <div className="eyebrow">{profile.avatar || '🙂'} {profile.username}</div>
-          <h1>{currentWeek ? formatWeekRange(currentWeek.created_at) : 'AI Takip Defteri'}</h1>
+          <h1>{currentWeek ? (currentWeek.week_label || formatWeekRange(currentWeek.created_at)) : 'AI Takip Defteri'}</h1>
         </div>
         <div style={{ textAlign: 'right' }}>
           <div className="level-tag">Seviye {lvl.level}<div className="level-name">{lvl.name}</div></div>
@@ -656,7 +656,7 @@ export default function Game() {
         return (
           <div className="panel">
             <span className="tag fresh">🗞️ GÜNCEL · BU HAFTA</span>
-            <p className="panel-title">{formatWeekRange(currentWeek.created_at)} tamamlandı ✓</p>
+            <p className="panel-title">{(currentWeek.week_label || formatWeekRange(currentWeek.created_at))} tamamlandı ✓</p>
             <p className="panel-sub">Bir sonraki hafta admin tarafından yayınlandığında burada görünecek. Kaynakları ve özetleri Geçmiş sayfasından tekrar okuyabilirsin.</p>
             {!weeklyReplayActive ? (
               <button className="btn ghost" onClick={startWeeklyReplay}>🔁 Soruları Tekrar Çöz (yarı XP)</button>

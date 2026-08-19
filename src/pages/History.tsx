@@ -14,7 +14,8 @@ function formatWeekRange(createdAt?: string | null) {
   return sm === em ? `${sd}-${ed} ${sm}` : `${sd} ${sm} - ${ed} ${em}`;
 }
 
-type WeekListItem = Pick<Week, 'week_number' | 'created_at' | 'week_theme' | 'quiz'>;
+type WeekListItem = Pick<Week, 'week_number' | 'created_at' | 'week_theme' | 'week_label' | 'quiz'>;
+type WeekDateInfo = { created_at: string; week_label: string | null };
 
 export default function History() {
   const [theme] = useState(() => localStorage.getItem('aitakip_theme') || 'dark');
@@ -22,7 +23,7 @@ export default function History() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [history, setHistory] = useState<HistoryRow[]>([]);
   const [allWeeks, setAllWeeks] = useState<WeekListItem[]>([]);
-  const [weekDates, setWeekDates] = useState<Record<number, string>>({});
+  const [weekDates, setWeekDates] = useState<Record<number, WeekDateInfo>>({});
   const [loading, setLoading] = useState(true);
   const [pastWeekContents, setPastWeekContents] = useState<Record<number, Week>>({});
   const [expandedPastWeek, setExpandedPastWeek] = useState<number | null>(null);
@@ -43,11 +44,11 @@ export default function History() {
     if (!session) return;
     refreshHistory();
     sb.from('profiles').select('*').eq('id', session.user.id).single().then(({ data }) => setProfile(data));
-    sb.from('weeks').select('week_number, created_at, week_theme, quiz').order('week_number', { ascending: false })
+    sb.from('weeks').select('week_number, created_at, week_theme, week_label, quiz').order('week_number', { ascending: false })
       .then(({ data }) => {
         setAllWeeks((data as WeekListItem[]) || []);
-        const map: Record<number, string> = {};
-        (data || []).forEach((w: any) => { map[w.week_number] = w.created_at; });
+        const map: Record<number, WeekDateInfo> = {};
+        (data || []).forEach((w: any) => { map[w.week_number] = { created_at: w.created_at, week_label: w.week_label ?? null }; });
         setWeekDates(map);
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -130,7 +131,7 @@ export default function History() {
           {!missedWeek ? (
             missedWeeksList.map((w) => (
               <div className="history-row" key={w.week_number}>
-                <span className="hw">{formatWeekRange(w.created_at)}</span>
+                <span className="hw">{w.week_label || formatWeekRange(w.created_at)}</span>
                 <button className="btn secondary" onClick={() => startMissedWeek(w as Week)}>Çöz (yarı XP)</button>
               </div>
             ))
@@ -142,7 +143,7 @@ export default function History() {
               return (
                 <div>
                   <button className="btn" onClick={() => setMissedWeek(null)} style={{ marginBottom: 14 }}>← Listeye Dön</button>
-                  <p className="panel-sub">{formatWeekRange(missedWeek.created_at)}</p>
+                  <p className="panel-sub">{missedWeek.week_label || formatWeekRange(missedWeek.created_at)}</p>
                   {!mAllAnswered && mq && (
                     <div>
                       <div className="quiz-progress">Soru {missedStepIndex + 1} / {missedWeek.quiz.length}</div>
@@ -192,7 +193,7 @@ export default function History() {
           <div key={h.week_number}>
             <div className="history-row">
               <span className="hw">
-                {weekDates[h.week_number] ? formatWeekRange(weekDates[h.week_number]) : `Hafta ${h.week_number}`}
+                {weekDates[h.week_number] ? (weekDates[h.week_number].week_label || formatWeekRange(weekDates[h.week_number].created_at)) : `Hafta ${h.week_number}`}
                 {!h.frozen && (
                   <button className="btn" style={{ marginLeft: 10 }} onClick={() => togglePastWeek(h.week_number)}>
                     {expandedPastWeek === h.week_number ? 'Gizle' : 'Kaynakları Gör'}

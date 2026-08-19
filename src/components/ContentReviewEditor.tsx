@@ -9,6 +9,7 @@ export interface ReviewDraft {
   must_reads: EditableMustRead[];
   quiz: EditableQuizQuestion[];
   week_theme?: string | null;
+  week_label?: string | null;
   number_challenge?: NumberChallenge | null;
   matching?: Matching | null;
   risk_question?: RiskOrBossQuestion | null;
@@ -120,6 +121,8 @@ export default function ContentReviewEditor({ draft, onChange, showWeekFields, i
     <div>
       {showWeekFields && (
         <>
+          <label className="field-label">Hafta İsmi</label>
+          <input type="text" placeholder="17-24 Ağustos 2026" value={draft.week_label || ''} onChange={(e) => update({ week_label: e.target.value })} />
           <label className="field-label">Hafta Teması</label>
           <input type="text" value={draft.week_theme || ''} onChange={(e) => update({ week_theme: e.target.value })} />
         </>
