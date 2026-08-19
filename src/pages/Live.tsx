@@ -6,6 +6,7 @@ import type { League, LiveParticipant, LiveRoom, Profile } from '../lib/types';
 
 const QUESTION_SECONDS = 15;
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const LIVE_ROOM_STORAGE_KEY = 'aitakip_live_room_id';
 
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
@@ -39,7 +40,8 @@ export default function Live() {
   const [error, setError] = useState('');
   const [joinCodeInput, setJoinCodeInput] = useState('');
   const [duelBetChoice, setDuelBetChoice] = useState(0);
-  const [betResult, setBetResult] = useState<{ outcome: string; amount: number } | null>(null);
+  const [roomBetChoice, setRoomBetChoice] = useState(0);
+  const [betResult, setBetResult] = useState<{ outcome: string; amount: number; potShare?: number } | null>(null);
 
   const [room, setRoom] = useState<LiveRoom | null>(null);
   const [participants, setParticipants] = useState<LiveParticipant[]>([]);
@@ -51,7 +53,7 @@ export default function Live() {
   const roomRef = useRef<LiveRoom | null>(null);
   const advancingRef = useRef(false);
   useEffect(() => { roomRef.current = room; }, [room]);
-  useEffect(() => { advancingRef.current = false; }, [room?.current_question_index]);
+  useEffect(() => { advancingRef.current = false; setAnsweredCount(0); }, [room?.current_question_index]);
 
   useEffect(() => {
     sb.auth.getSession().then(({ data }) => { setSession(data.session); setLoading(false); });
@@ -69,6 +71,22 @@ export default function Live() {
     const iv = setInterval(() => setNowTick(Date.now()), 250);
     return () => clearInterval(iv);
   }, []);
+
+  // Restore an active room after a page refresh, if the user still belongs to one.
+  useEffect(() => {
+    if (!profile) return;
+    const storedId = localStorage.getItem(LIVE_ROOM_STORAGE_KEY);
+    if (!storedId) return;
+    (async () => {
+      const { data: r } = await sb.from('live_rooms').select('*').eq('id', storedId).single();
+      if (!r) { localStorage.removeItem(LIVE_ROOM_STORAGE_KEY); return; }
+      const { data: mine } = await sb.from('live_participants').select('*').eq('room_id', storedId).eq('user_id', profile.id).maybeSingle();
+      if (!mine) { localStorage.removeItem(LIVE_ROOM_STORAGE_KEY); return; }
+      setRoom(r);
+      setView('room');
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile?.id]);
 
   useEffect(() => {
     if (!room) return;
@@ -147,6 +165,7 @@ export default function Live() {
 
     let betDelta = 0;
     let betOutcome: string | null = null;
+    let potShare = 0;
     if (room.mode === 'duel' && room.bet_amount > 0 && participants.length === 2) {
       const isTie = ranked[0].score === ranked[1].score;
       if (!isTie) {
@@ -155,6 +174,13 @@ export default function Live() {
       } else {
         betOutcome = 'tie';
       }
+    } else if (room.mode === 'room' && room.bet_amount > 0) {
+      // Pot betting: everyone stakes bet_amount; top 3 split the pot 50/30/20, others lose their stake.
+      const pot = room.bet_amount * participants.length;
+      if (rank === 1) { potShare = Math.round(pot * 0.5); betDelta = potShare - room.bet_amount; betOutcome = 'pot1'; }
+      else if (rank === 2) { potShare = Math.round(pot * 0.3); betDelta = potShare - room.bet_amount; betOutcome = 'pot2'; }
+      else if (rank === 3) { potShare = Math.round(pot * 0.2); betDelta = potShare - room.bet_amount; betOutcome = 'pot3'; }
+      else { betDelta = -room.bet_amount; betOutcome = 'potlost'; }
     }
 
     const effectiveTier = Math.min(...participants.map((p) => p.league_tier || 0));
@@ -163,7 +189,8 @@ export default function Live() {
 
     let leagueDelta = 0;
     if (rank === 1) leagueDelta = Math.round(15 * effectiveMult);
-    if (betOutcome === 'lost') leagueDelta = -Math.round(20 * effectiveMult);
+    // League-point risk stays exclusive to ranked duels — room-mode pot betting only affects XP, not league standing.
+    if (betOutcome === 'lost' && room.mode === 'duel') leagueDelta = -Math.round(20 * effectiveMult);
 
     (async () => {
       const finalXp = Math.max(0, profile.total_xp + bonus + betDelta);
@@ -171,7 +198,7 @@ export default function Live() {
       await sb.from('profiles').update({ total_xp: finalXp, league_tier: newTier, league_xp: newLeagueXp }).eq('id', profile.id);
       await sb.from('live_participants').update({ xp_awarded: true }).eq('id', mine.id);
       setAwardedBonus(bonus);
-      setBetResult(betOutcome ? { outcome: betOutcome, amount: room.bet_amount } : null);
+      setBetResult(betOutcome ? { outcome: betOutcome, amount: room.bet_amount, potShare } : null);
       if (newTier < profile.league_tier) {
         setLeagueChange({
           direction: 'down',
@@ -186,12 +213,20 @@ export default function Live() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [room?.status, participants, profile]);
 
+  // If every other participant leaves mid-game, declare the sole survivor the winner immediately.
+  useEffect(() => {
+    if (!room || !profile || room.status !== 'active') return;
+    if (participants.length !== 1 || participants[0]?.user_id !== profile.id) return;
+    sb.from('live_rooms').update({ status: 'finished' }).eq('id', room.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [participants, room?.status, room?.id, profile?.id]);
+
   async function refreshParticipants(roomId: string) {
     const { data } = await sb.from('live_participants').select('*').eq('room_id', roomId).order('score', { ascending: false });
     setParticipants(data || []);
   }
 
-  async function fetchQuestionPool() {
+  async function fetchQuestionPool(leagueTier: number) {
     const { data } = await sb.from('weeks').select('quiz');
     let all: any[] = [];
     (data || []).forEach((w: any) => {
@@ -199,15 +234,22 @@ export default function Live() {
         all.push({ question: q.question, options: q.options, correct_index: q.correct_index, explanation: q.explanation });
       });
     });
+    const { data: league } = await sb.from('leagues').select('content').eq('tier_index', leagueTier).single();
+    const leagueContent = (league as any)?.content;
+    if (leagueContent && leagueContent.quiz) {
+      (leagueContent.quiz || []).forEach((q: any) => {
+        all.push({ question: q.question, options: q.options, correct_index: q.correct_index, explanation: q.explanation });
+      });
+    }
     return shuffle(all);
   }
 
   async function createRoom(mode: 'room' | 'duel') {
     setError('');
-    const pool = await fetchQuestionPool();
+    const pool = await fetchQuestionPool(profile!.league_tier);
     if (pool.length < 4) { setError('Yeterli soru yok, önce birkaç hafta yayınlanmış olmalı.'); return; }
-    const questions = pool.slice(0, Math.min(8, pool.length));
-    const betAmount = mode === 'duel' ? duelBetChoice : 0;
+    const questions = pool.slice(0, Math.min(12, pool.length));
+    const betAmount = mode === 'duel' ? duelBetChoice : roomBetChoice;
     let lastError: any = null;
     for (let attempt = 0; attempt < 3; attempt++) {
       const code = generateCode();
@@ -218,6 +260,7 @@ export default function Live() {
         const { error: partError } = await sb.from('live_participants').insert({ room_id: data.id, user_id: profile!.id, username: profile!.username, avatar: profile!.avatar, league_tier: profile!.league_tier });
         if (partError) { setError('Katılımcı eklenemedi: ' + partError.message); return; }
         setRoom(data);
+        localStorage.setItem(LIVE_ROOM_STORAGE_KEY, data.id);
         setView('room');
         return;
       }
@@ -238,11 +281,18 @@ export default function Live() {
       const { count } = await sb.from('live_participants').select('*', { count: 'exact', head: true }).eq('room_id', r.id);
       if ((count || 0) >= 2) { setError('Düello odası dolu.'); return; }
     }
+    if (r.bet_amount > 0) {
+      const warnMsg = r.mode === 'duel'
+        ? `Bu düelloyu kaybedersen ${r.bet_amount} XP ve lig puanı kaybedersin. Katılmak istiyor musun?`
+        : `Bu odada herkes ${r.bet_amount} XP koyuyor; ilk 3'e giremezsen bu XP'yi kaybedersin. Katılmak istiyor musun?`;
+      if (!window.confirm(warnMsg)) return;
+    }
     const { error: joinError } = await sb.from('live_participants').insert({ room_id: r.id, user_id: profile!.id, username: profile!.username, avatar: profile!.avatar, league_tier: profile!.league_tier });
     if (joinError && !String(joinError.message).toLowerCase().includes('duplicate')) {
       setError('Katılamadın: ' + joinError.message); return;
     }
     setRoom(r);
+    localStorage.setItem(LIVE_ROOM_STORAGE_KEY, r.id);
     setView('room');
   }
 
@@ -257,7 +307,7 @@ export default function Live() {
     const elapsedMs = Date.now() - new Date(room.question_started_at as string).getTime();
     const speedBonus = Math.max(0, Math.round(50 * (1 - elapsedMs / (QUESTION_SECONDS * 1000))));
     let firstCorrect = false;
-    if (correct) {
+    if (correct && room.mode === 'room') {
       const { count } = await sb.from('live_answers').select('*', { count: 'exact', head: true })
         .eq('room_id', room.id).eq('question_index', room.current_question_index).eq('correct', true);
       firstCorrect = (count || 0) === 0;
@@ -284,6 +334,7 @@ export default function Live() {
         await sb.from('live_rooms').update({ status: 'finished' }).eq('id', room.id);
       }
     }
+    localStorage.removeItem(LIVE_ROOM_STORAGE_KEY);
     setRoom(null);
     setParticipants([]);
     setMyAnswer(null);
@@ -318,9 +369,21 @@ export default function Live() {
         <p className="panel-sub">Ligin: <strong>{leagues.find((l) => l.tier_index === profile.league_tier)?.name || '—'}</strong>. Herkesle yarışabilirsin — odadaki en düşük ligli kişiye göre kazanılacak lig puanı ayarlanır.</p>
 
         <div className="mode-row">
-          <div className="panel" onClick={() => createRoom('room')}>
+          <div className="panel" style={{ cursor: 'default' }}>
             <p className="panel-title">🎮 Oda Aç</p>
-            <p className="panel-sub">Herhangi bir arkadaşın koduyla katılsın. Geçmiş tüm haftaların sorularından karışık 8 soru.</p>
+            <p className="panel-sub">Herhangi bir arkadaşın koduyla katılsın (en az 3 kişi gerekir). Haftalık ve lig sorularından karışık 12 soru.</p>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+              {[0, 25, 50, 100].map((v) => (
+                <button key={v} className="btn ghost" onClick={() => setRoomBetChoice(v)}
+                  style={{ borderColor: roomBetChoice === v ? 'var(--brass)' : 'var(--hairline)' }}>
+                  {v === 0 ? 'Bahissiz' : v + ' XP'}
+                </button>
+              ))}
+            </div>
+            {roomBetChoice > 0 && (
+              <p className="error-box">Bu odada herkes {roomBetChoice} XP koyar; ortak kazanç havuzunun %50'si 1., %30'u 2., %20'si 3. sıradaki oyuncuya gider. İlk 3'e giremezsen koyduğun XP'yi kaybedersin. Emin misin?</p>
+            )}
+            <button className="btn secondary" onClick={() => createRoom('room')}>Odayı Aç</button>
           </div>
           <div className="panel" style={{ cursor: 'default' }}>
             <p className="panel-title">⚔ Düello Başlat</p>
@@ -333,7 +396,13 @@ export default function Live() {
                 </button>
               ))}
             </div>
-            <button className="btn secondary" onClick={() => createRoom('duel')}>Düelloyu Başlat</button>
+            {duelBetChoice > 0 && (
+              <p className="error-box">Bu düelloyu kaybedersen {duelBetChoice} XP ve lig puanı kaybedersin. Emin misin?</p>
+            )}
+            <button className="btn secondary" onClick={() => {
+              if (duelBetChoice > 0 && !window.confirm(`Bu düelloyu kaybedersen ${duelBetChoice} XP kaybedersin. Emin misin?`)) return;
+              createRoom('duel');
+            }}>Düelloyu Başlat</button>
           </div>
         </div>
 
@@ -367,6 +436,11 @@ export default function Live() {
               {room.bet_amount > 0 ? `⚔ Bahis: ${room.bet_amount} XP — kaybeden bu kadar XP'sini kazanana kaptırır.` : 'Bahissiz düello.'}
             </p>
           )}
+          {room.mode === 'room' && room.bet_amount > 0 && (
+            <p className="error-box" style={{ textAlign: 'center' }}>
+              ⚠ Bu odada herkes {room.bet_amount} XP koyuyor. Ortak havuzun %50'si 1., %30'u 2., %20'si 3. sıradaki oyuncuya gider; ilk 3'e giremezsen koyduğun XP'yi kaybedersin.
+            </p>
+          )}
         </div>
         <div className="panel">
           <p className="panel-title">Katılımcılar ({participants.length})</p>
@@ -377,9 +451,15 @@ export default function Live() {
           ))}
         </div>
         {isHost ? (
-          <button className="btn secondary" onClick={startGame} disabled={participants.length < 2}>
-            {participants.length < 2 ? 'En az 2 katılımcı gerekli' : 'Yarışmayı Başlat'}
-          </button>
+          room.mode === 'duel' ? (
+            <button className="btn secondary" onClick={startGame} disabled={participants.length < 2}>
+              {participants.length < 2 ? 'Düello için 2 katılımcı gerekli' : 'Yarışmayı Başlat'}
+            </button>
+          ) : (
+            <button className="btn secondary" onClick={startGame} disabled={participants.length < 3}>
+              {participants.length < 3 ? 'En az 3 katılımcı gerekli' : 'Yarışmayı Başlat'}
+            </button>
+          )
         ) : (
           <p className="panel-sub">Host'un başlatmasını bekliyorsun…</p>
         )}
@@ -391,6 +471,7 @@ export default function Live() {
     const q = room.questions[room.current_question_index];
     const startedAt = new Date(room.question_started_at as string).getTime();
     const remainingSec = Math.max(0, Math.ceil(QUESTION_SECONDS - (nowTick - startedAt) / 1000));
+    const timedOut = remainingSec <= 0 && !myAnswer;
     return (
       <div className="root wide">
         <div className="top-bar-row"><button className="btn ghost" onClick={leaveRoom}>Odadan Ayrıl (-15 XP)</button></div>
@@ -400,14 +481,14 @@ export default function Live() {
           <div className="quiz-q">{q.question}</div>
           {q.options.map((opt, oi) => {
             let cls = 'quiz-opt';
-            if (myAnswer && oi === q.correct_index) cls += ' correct';
+            if ((myAnswer || timedOut) && oi === q.correct_index) cls += ' correct';
             else if (myAnswer && oi === myAnswer.optionIndex) cls += ' wrong';
-            return <button key={oi} className={cls} disabled={!!myAnswer} onClick={() => submitAnswer(oi)}>{opt}</button>;
+            return <button key={oi} className={cls} disabled={!!myAnswer || timedOut} onClick={() => submitAnswer(oi)}>{opt}</button>;
           })}
           {myAnswer && (
             <p className="panel-sub" style={{ marginTop: 10 }}>
               {myAnswer.correct
-                ? `${myAnswer.firstCorrect ? '🥇 İlk doğru cevap! ' : ''}Doğru! +${myAnswer.points} puan.`
+                ? `${myAnswer.firstCorrect && room.mode === 'room' ? '🥇 İlk doğru cevap! ' : ''}Doğru! +${myAnswer.points} puan.`
                 : 'Yanlış, sıradaki soruyu bekle.'} {q.explanation}
             </p>
           )}
@@ -442,6 +523,10 @@ export default function Live() {
         {betResult && betResult.outcome === 'won' && <p className="panel-sub">⚔ Bahsi kazandın! Rakibinden +{betResult.amount} XP aldın.</p>}
         {betResult && betResult.outcome === 'lost' && <p className="panel-sub">⚔ Bahsi kaybettin, rakibine {betResult.amount} XP kaptırdın.</p>}
         {betResult && betResult.outcome === 'tie' && <p className="panel-sub">⚔ Berabere, bahis iade edildi.</p>}
+        {betResult && (betResult.outcome === 'pot1' || betResult.outcome === 'pot2' || betResult.outcome === 'pot3') && (
+          <p className="panel-sub">💰 Havuzdan {betResult.potShare} XP payına düştü ({betResult.amount} XP koymuştun) — net {(betResult.potShare || 0) - betResult.amount >= 0 ? '+' : ''}{(betResult.potShare || 0) - betResult.amount} XP.</p>
+        )}
+        {betResult && betResult.outcome === 'potlost' && <p className="panel-sub">💸 İlk 3'e giremediğin için koyduğun {betResult.amount} XP havuza gitti.</p>}
         {leagueChange && leagueChange.direction === 'up' && <p className="panel-sub">🏆 Lig puanınla terfi ettin: {leagueChange.name}!</p>}
         {leagueChange && leagueChange.direction === 'down' && (
           <p className="panel-sub">📉 Bahsi kaybettiğin için {leagueChange.lost} lig puanı kaybettin ve {leagueChange.fromName} liginden {leagueChange.name} ligine düştün.</p>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { sb } from '../lib/supabase';
 import TimerRing from '../components/TimerRing';
 import { useTheme } from '../lib/ThemeContext';
@@ -47,11 +47,16 @@ function shuffle<T>(arr: T[]): T[] {
   }
   return a;
 }
-function applyLeagueDelta(tier: number, xp: number, delta: number, leagues: League[]) {
+function applyLeagueDelta(tier: number, xp: number, delta: number, leagues: League[], completedTiers: Set<number>) {
   let t = tier, x = xp + delta;
   while (x < 0 && t > 0) { t -= 1; x = 0; }
   if (x < 0) x = 0;
-  while (t < leagues.length - 1 && leagues[t] && leagues[t].promote_threshold != null && x >= (leagues[t].promote_threshold as number)) {
+  // Promotion requires BOTH crossing the XP threshold AND having completed the current tier's curriculum —
+  // XP can keep accumulating past the threshold, but the tier only advances once the curriculum is done.
+  while (
+    t < leagues.length - 1 && leagues[t] && leagues[t].promote_threshold != null &&
+    x >= (leagues[t].promote_threshold as number) && completedTiers.has(t)
+  ) {
     x -= leagues[t].promote_threshold as number;
     t += 1;
   }
@@ -116,6 +121,11 @@ export default function Game() {
   const [replayQuizAnswers, setReplayQuizAnswers] = useState<Record<number, number>>({});
   const [replayQuizStepIndex, setReplayQuizStepIndex] = useState(0);
   const [lastPromotion, setLastPromotion] = useState<string | null>(null);
+  const [completedTiers, setCompletedTiers] = useState<Set<number>>(new Set());
+
+  const curriculumSectionRef = useRef<HTMLDivElement | null>(null);
+  const allCurriculaSectionRef = useRef<HTMLDivElement | null>(null);
+  const weekSectionRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     sb.auth.getSession().then(({ data }) => { setSession(data.session); setLoadingAuth(false); });
@@ -141,6 +151,14 @@ export default function Game() {
     sb.from('league_progress').select('*').eq('user_id', profile.id).eq('tier_index', profile.league_tier).maybeSingle()
       .then(({ data }) => setLeagueProgress(data));
   }, [profile?.id, profile?.league_tier]);
+
+  // Full set of tiers this user has completed the curriculum for — needed to gate league promotion
+  // (crossing the XP threshold alone is not enough, see applyLeagueDelta).
+  useEffect(() => {
+    if (!profile) { setCompletedTiers(new Set()); return; }
+    sb.from('league_progress').select('tier_index, completed').eq('user_id', profile.id).eq('completed', true)
+      .then(({ data }) => setCompletedTiers(new Set(((data as any[]) || []).map((r) => r.tier_index))));
+  }, [profile?.id]);
 
   useEffect(() => {
     if (!profile) return;
@@ -172,6 +190,18 @@ export default function Game() {
       setSpeedResult(false);
     }
   }, [speedActive, speedTimeLeft, speedResult]);
+
+  // Scroll newly-revealed major sections into view instead of leaving the user staring at
+  // unchanged content while something new appeared further down the page.
+  useEffect(() => {
+    if (showCurriculum) curriculumSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [showCurriculum]);
+  useEffect(() => {
+    if (showAllCurricula) allCurriculaSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [showAllCurricula]);
+  useEffect(() => {
+    if (showSources) weekSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [showSources]);
 
   async function refreshProfile() {
     const { data: sessionData } = await sb.auth.getSession();
@@ -333,7 +363,7 @@ export default function Game() {
       const myLeague = leagues.find((l) => l.tier_index === profile.league_tier);
       const mult = myLeague ? Number(myLeague.weekly_multiplier) : 1;
       const leagueGain = Math.round(totalWeekXp * mult * 1.0);
-      const { tier: newTier, xp: newLeagueXp } = applyLeagueDelta(profile.league_tier, profile.league_xp || 0, leagueGain, leagues);
+      const { tier: newTier, xp: newLeagueXp } = applyLeagueDelta(profile.league_tier, profile.league_xp || 0, leagueGain, leagues, completedTiers);
       if (newTier > profile.league_tier) {
         const promotedTo = leagues.find((l) => l.tier_index === newTier);
         setLastPromotion(promotedTo ? promotedTo.name : null);
@@ -392,13 +422,20 @@ export default function Game() {
       quiz_score: score, quiz_total: quiz.length, completed_at: new Date().toISOString(),
     }, { onConflict: 'user_id,tier_index' });
     if (!progErr) {
-      const { tier: newTier, xp: newLeagueXp } = applyLeagueDelta(profile.league_tier, profile.league_xp || 0, completionBonus, leagues);
+      // The curriculum we just upserted as completed needs to count immediately for the promotion
+      // gate — it may not have round-tripped into `completedTiers` state yet.
+      const localCompleted = new Set(completedTiers);
+      localCompleted.add(myLeague.tier_index);
+      const { tier: newTier, xp: newLeagueXp } = applyLeagueDelta(profile.league_tier, profile.league_xp || 0, completionBonus, leagues, localCompleted);
       if (newTier > profile.league_tier) {
         const promotedTo = leagues.find((l) => l.tier_index === newTier);
         setLastPromotion(promotedTo ? promotedTo.name : null);
       }
-      await sb.from('profiles').update({ league_tier: newTier, league_xp: newLeagueXp }).eq('id', profile.id);
+      const newTotalXp = Math.max(0, profile.total_xp + completionBonus);
+      await sb.from('profiles').update({ total_xp: newTotalXp, league_tier: newTier, league_xp: newLeagueXp }).eq('id', profile.id);
+      setProfile((p) => (p ? { ...p, total_xp: newTotalXp, league_tier: newTier, league_xp: newLeagueXp } : p));
       setLeagueProgress({ user_id: profile.id, tier_index: myLeague.tier_index, completed: true, quiz_score: score, quiz_total: quiz.length, completed_at: new Date().toISOString() });
+      setCompletedTiers(localCompleted);
     }
     setCurriculumSaving(false);
     setShowCurriculum(false);
@@ -495,10 +532,14 @@ export default function Game() {
         </div>
       )}
 
-      {speedActive && (
-        <div className="speed-banner">
-          <TimerRing seconds={speedTimeLeft} total={SPEED_SECONDS} size={44} />
-          <span>HIZ TURU — tüm soruları bitir, +30 XP kazan</span>
+      {lastPromotion && (
+        <div className="promotion-overlay">
+          <div className="promotion-card">
+            <div className="promotion-emoji">🏆</div>
+            <p className="promotion-title">Terfi ettin!</p>
+            <p className="promotion-text">Yeni ligin: <strong>{lastPromotion}</strong></p>
+            <button className="btn secondary" onClick={() => setLastPromotion(null)}>Harika!</button>
+          </div>
         </div>
       )}
 
@@ -563,7 +604,7 @@ export default function Game() {
         <p className="panel-sub">Her ligin kaynak başlıklarını görebilirsin, ama sadece kendi liginin müfredatını açıp tamamlayabilirsin.</p>
         <button className="btn ghost" onClick={() => setShowAllCurricula((v) => !v)}>{showAllCurricula ? 'Gizle' : 'Tüm Ligleri Gör'}</button>
         {showAllCurricula && (
-          <div style={{ marginTop: 14 }}>
+          <div style={{ marginTop: 14 }} ref={allCurriculaSectionRef}>
             {leagues.map((l) => {
               const isMine = l.tier_index === profile.league_tier;
               const reads = l.content && l.content.must_reads ? l.content.must_reads : [];
@@ -594,7 +635,7 @@ export default function Game() {
         const cAnswered = cStepQ && curriculumAnswers[curriculumStepIndex] !== undefined;
         const cAllAnswered = cq.every((_, i) => curriculumAnswers[i] !== undefined);
         return (
-          <div className="panel static-curriculum">
+          <div className="panel static-curriculum" ref={curriculumSectionRef}>
             <span className="tag static">📘 STATİK MÜFREDAT{curriculumDone ? ' · TEKRAR (yarı XP)' : ''}</span>
             <p className="panel-title">{myLeague.name} Müfredatı</p>
             {myLeague.content.must_reads && myLeague.content.must_reads.map((mr, i) => (
@@ -702,6 +743,10 @@ export default function Game() {
       )}
 
       {currentWeek && (
+        <div className="eyebrow section-divider" ref={weekSectionRef}>◆ HAFTALIK QUİZ — lig müfredatından bağımsız, bu haftaya özel</div>
+      )}
+
+      {currentWeek && (
         <div className="panel">
           <span className="tag fresh">🗞️ GÜNCEL · BU HAFTA</span>
           <p className="panel-title">{currentWeek.week_theme || 'Bu haftanın okumaları'}</p>
@@ -740,48 +785,65 @@ export default function Game() {
         const stepQ = currentWeek!.quiz[quizStepIndex];
         const stepAnswered = stepQ && quizAnswers[quizStepIndex] !== undefined;
 
+        const quizStagePanel = (
+          <div className="panel quiz-stage">
+            <p className="panel-sub" style={{ textAlign: 'center', margin: '0 0 2px', textTransform: 'uppercase', letterSpacing: '.06em', fontFamily: 'var(--mono)', fontSize: 11 }}>
+              Bu haftanın sınavı{currentWeek!.week_label ? ` · ${currentWeek!.week_label}` : ''}
+            </p>
+            <p className="panel-title" style={{ textAlign: 'center' }}>Sınav · {currentWeek!.must_reads[stepQ.source_index] ? currentWeek!.must_reads[stepQ.source_index].title : ''}</p>
+            <div className="quiz-progress">Soru {quizStepIndex + 1} / {totalQ} · +{sessionXp} XP</div>
+            <div className="xp-track" style={{ marginBottom: 14 }}>
+              <div className="xp-fill" style={{ width: Math.round((Object.keys(quizAnswers).length / totalQ) * 100) + '%' }} />
+            </div>
+            {stepAnswered && (
+              <div className={'feedback-banner ' + (quizAnswers[quizStepIndex] === stepQ.correct_index ? 'correct' : 'wrong')}>
+                {quizAnswers[quizStepIndex] === stepQ.correct_index ? '🎉 Harika, doğru bildin!' : '💥 Olmadı, bir dahakine!'}
+              </div>
+            )}
+            <div className="quiz-card">
+              <div className="quiz-q">
+                {stepQ.type === 'tf' && <span className="tag tf">DOĞRU/YANLIŞ</span>}
+                {stepQ.bonus && <span className="tag bonus">BONUS · +20 XP · linke girmen gerekir</span>}
+                <div>{stepQ.question}</div>
+              </div>
+              {stepQ.options.map((opt, oi) => {
+                let cls = 'quiz-opt opt-' + oi;
+                if (stepAnswered && oi === stepQ.correct_index) cls += ' correct';
+                else if (stepAnswered && oi === quizAnswers[quizStepIndex]) cls += ' wrong';
+                return <button key={oi} className={cls} disabled={stepAnswered} onClick={() => selectQuizAnswer(quizStepIndex, oi)}>{opt}</button>;
+              })}
+              {stepAnswered && <div className="quiz-explain">{stepQ.explanation}</div>}
+            </div>
+            {stepAnswered && (
+              <button className="btn secondary" onClick={() => setQuizStepIndex((i) => i + 1)}>
+                {quizStepIndex + 1 < totalQ ? 'Sonraki Soru' : 'Devam Et'}
+              </button>
+            )}
+          </div>
+        );
+
         return (
           <>
-            {!speedActive && !weekClosed && !allQuizAnswered && (
+            {!speedActive && !weekClosed && !allQuizAnswered && speedResult === null && (
               <div className="panel">
                 <p className="panel-title">⏱ Hız Turu</p>
-                <p className="panel-sub">{SPEED_SECONDS} saniyede tüm quiz sorularını bitirirsen +30 XP bonus kazanırsın.</p>
+                <p className="panel-sub">{SPEED_SECONDS} saniyede tüm quiz sorularını bitirirsen +30 XP bonus kazanırsın. Tek deneme hakkın var.</p>
                 <button className="btn secondary" onClick={startSpeedRound}>Hız Turunu Başlat</button>
               </div>
             )}
 
-            {!weekClosed && !allQuizAnswered && stepQ && (
-              <div className="panel quiz-stage">
-                <p className="panel-title" style={{ textAlign: 'center' }}>Sınav · {currentWeek!.must_reads[stepQ.source_index] ? currentWeek!.must_reads[stepQ.source_index].title : ''}</p>
-                <div className="quiz-progress">Soru {quizStepIndex + 1} / {totalQ} · +{sessionXp} XP</div>
-                <div className="xp-track" style={{ marginBottom: 14 }}>
-                  <div className="xp-fill" style={{ width: Math.round((Object.keys(quizAnswers).length / totalQ) * 100) + '%' }} />
+            {speedActive ? (
+              <div className="speed-overlay">
+                <div className="speed-overlay-timer">
+                  <TimerRing seconds={speedTimeLeft} total={SPEED_SECONDS} size={56} />
+                  <span>HIZ TURU — tüm soruları bitir, +30 XP kazan</span>
                 </div>
-                {stepAnswered && (
-                  <div className={'feedback-banner ' + (quizAnswers[quizStepIndex] === stepQ.correct_index ? 'correct' : 'wrong')}>
-                    {quizAnswers[quizStepIndex] === stepQ.correct_index ? '🎉 Harika, doğru bildin!' : '💥 Olmadı, bir dahakine!'}
-                  </div>
-                )}
-                <div className="quiz-card">
-                  <div className="quiz-q">
-                    {stepQ.type === 'tf' && <span className="tag tf">DOĞRU/YANLIŞ</span>}
-                    {stepQ.bonus && <span className="tag bonus">BONUS · +20 XP · linke girmen gerekir</span>}
-                    <div>{stepQ.question}</div>
-                  </div>
-                  {stepQ.options.map((opt, oi) => {
-                    let cls = 'quiz-opt opt-' + oi;
-                    if (stepAnswered && oi === stepQ.correct_index) cls += ' correct';
-                    else if (stepAnswered && oi === quizAnswers[quizStepIndex]) cls += ' wrong';
-                    return <button key={oi} className={cls} disabled={stepAnswered} onClick={() => selectQuizAnswer(quizStepIndex, oi)}>{opt}</button>;
-                  })}
-                  {stepAnswered && <div className="quiz-explain">{stepQ.explanation}</div>}
+                <div className="speed-overlay-panel">
+                  {!weekClosed && !allQuizAnswered && stepQ && quizStagePanel}
                 </div>
-                {stepAnswered && (
-                  <button className="btn secondary" onClick={() => setQuizStepIndex((i) => i + 1)}>
-                    {quizStepIndex + 1 < totalQ ? 'Sonraki Soru' : 'Devam Et'}
-                  </button>
-                )}
               </div>
+            ) : (
+              !weekClosed && !allQuizAnswered && stepQ && quizStagePanel
             )}
 
             {weekClosed && (
@@ -826,30 +888,33 @@ export default function Game() {
             {(allQuizAnswered || weekClosed) && currentWeek!.matching && currentWeek!.matching.pairs && currentWeek!.matching.pairs.length > 0 && (
               <div className="panel">
                 <p className="panel-title">🔗 Eşleştirme</p>
-                <p className="panel-sub">Önce solda bir kaynağa tıkla (seçili hale gelir), sonra sağdaki doğru detaya bas. Doğruysa yeşil yanar, yanlışsa kırmızı yanar ve hemen XP kaybedersin.</p>
+                <p className="panel-sub match-hint">👉 Bir kaynağa dokun, sonra doğru detayı seç. Doğruysa yeşil yanar, yanlışsa kırmızı yanar ve hemen XP kaybedersin.</p>
                 {currentWeek!.matching.pairs.map((p, pi) => {
                   const assigned = matchAssignments[p.source_index];
+                  const isSelected = matchSelectedSource === p.source_index;
                   let slotCls = 'match-slot' + (assigned ? ' filled' : '');
                   if (assigned) slotCls += assigned.correct ? ' correct' : ' wrong';
-                  let sourceCls = 'match-source' + (matchSelectedSource === p.source_index ? ' selected' : '');
+                  let sourceCls = 'match-source' + (isSelected ? ' selected' : '');
                   return (
-                    <div className="match-row" key={pi}>
-                      <div className={sourceCls} onClick={() => selectMatchSource(p.source_index)} style={{ cursor: assigned ? 'default' : 'pointer' }}>
-                        {currentWeek!.must_reads[p.source_index] ? currentWeek!.must_reads[p.source_index].title : 'Kaynak ' + p.source_index}
+                    <div className="match-item" key={pi}>
+                      <div className="match-row">
+                        <div className={sourceCls} onClick={() => selectMatchSource(p.source_index)} style={{ cursor: assigned ? 'default' : 'pointer' }}>
+                          {currentWeek!.must_reads[p.source_index] ? currentWeek!.must_reads[p.source_index].title : 'Kaynak ' + p.source_index}
+                        </div>
+                        <div className={slotCls}>
+                          {assigned ? `${assigned.correct ? '✓' : '✗'} ${assigned.detail}` : (isSelected ? 'Aşağıdan doğru detayı seç…' : 'Önce buraya tıkla')}
+                        </div>
                       </div>
-                      <div className={slotCls}>
-                        {assigned ? `${assigned.correct ? '✓' : '✗'} ${assigned.detail}` : (matchSelectedSource === p.source_index ? 'Şimdi sağdan doğru detayı seç…' : 'Önce buraya tıkla')}
-                      </div>
+                      {isSelected && !assigned && (
+                        <div className="match-pool-inline">
+                          {shuffledDetails.filter((d) => !usedDetails.has(d)).map((d, di) => (
+                            <span key={di} className="match-chip" onClick={() => assignMatchDetail(d, weekClosed)}>{d}</span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
-                <div className="match-pool">
-                  {shuffledDetails.map((d, di) => {
-                    const used = usedDetails.has(d);
-                    const cls = 'match-chip' + (used ? ' used' : '');
-                    return <span key={di} className={cls} onClick={() => assignMatchDetail(d, used || weekClosed)}>{d}</span>;
-                  })}
-                </div>
               </div>
             )}
 
@@ -912,7 +977,6 @@ export default function Game() {
                     {lastCritical && <div className="critical-tag">⚡ KRİTİK BAŞARI! 1.5× bonus uygulandı</div>}
                     {lastFreezeEarned && <div className="critical-tag">❄ Yeni dondurma hakkı kazandın!</div>}
                     {lastStreakBonus > 0 && <div className="critical-tag">🔥 3 haftalık seri bonusu: +{lastStreakBonus} XP</div>}
-                    {lastPromotion && <div className="critical-tag">🏆 Terfi ettin: {lastPromotion}!</div>}
                     {lastRiskResult === true && <div className="critical-tag">🎲 Bahsi kazandın!</div>}
                     {lastRiskResult === false && <div className="critical-tag">🎲 Bahsi kaybettin.</div>}
                     {speedResult === true && <div className="critical-tag">⏱ Hız turu bonusu kazandın!</div>}
