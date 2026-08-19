@@ -39,7 +39,8 @@ create table public.weeks (
   risk_question jsonb,
   boss_question jsonb,
   is_boss boolean default false,
-  created_at timestamptz default now()
+  created_at timestamptz default now(),
+  status text not null default 'published' check (status in ('draft', 'published'))
 );
 
 -- Yeni kullanıcı kayıt olunca otomatik profil satırı oluştur
@@ -72,11 +73,19 @@ create policy "history_insert_own" on public.history
   for insert with check (auth.uid() = user_id);
 
 create policy "weeks_select_authenticated" on public.weeks
-  for select using (auth.role() = 'authenticated');
+  for select using (
+    status = 'published'
+    or exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
+  );
 create policy "weeks_insert_admin" on public.weeks
   for insert with check (exists (select 1 from public.profiles where id = auth.uid() and is_admin = true));
 create policy "weeks_update_admin" on public.weeks
   for update using (exists (select 1 from public.profiles where id = auth.uid() and is_admin = true));
+create policy "weeks_delete_admin" on public.weeks
+  for delete using (
+    status = 'draft'
+    and exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
+  );
 
 -- Kendi hesabını admin yapmak için: yukarıdaki şemayı çalıştırdıktan sonra
 -- önce siteden normal şekilde kayıt ol, sonra AŞAĞIDAKİ satırı kendi

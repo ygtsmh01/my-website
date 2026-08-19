@@ -52,6 +52,7 @@ export interface Week {
   boss_question: RiskOrBossQuestion | null;
   is_boss: boolean;
   created_at: string;
+  status: 'draft' | 'published';
 }
 
 export interface Profile {
@@ -80,6 +81,7 @@ export interface League {
   promote_threshold: number | null;
   weekly_multiplier: number;
   content: LeagueContent | null;
+  draft_content: LeagueContent | null;
   created_at: string;
 }
 

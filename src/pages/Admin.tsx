@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { sb } from '../lib/supabase';
 import type { League, Profile, Week } from '../lib/types';
+import ContentReviewEditor, { keyMustReads, keyQuiz, stripKeys } from '../components/ContentReviewEditor';
+import type { ReviewDraft } from '../components/ContentReviewEditor';
 
 const TR_MONTHS = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
 function formatWeekRange(createdAt?: string | null) {
@@ -86,7 +88,9 @@ export default function Admin() {
   const [buildError, setBuildError] = useState('');
   const [buildOk, setBuildOk] = useState('');
   const [pastWeeks, setPastWeeks] = useState<Week[]>([]);
+  const [draftWeeks, setDraftWeeks] = useState<Week[]>([]);
   const [nextWeekNumber, setNextWeekNumber] = useState(1);
+  const [weeksVersion, setWeeksVersion] = useState(0);
 
   const [leagues, setLeagues] = useState<League[]>([]);
   const [leagueTierChoice, setLeagueTierChoice] = useState(0);
@@ -95,6 +99,13 @@ export default function Admin() {
   const [leagueStatus, setLeagueStatus] = useState('');
   const [leagueError, setLeagueError] = useState('');
   const [leagueOk, setLeagueOk] = useState('');
+  const [leaguesVersion, setLeaguesVersion] = useState(0);
+
+  // Review/edit state — a week being reviewed (draft or already-published) or a league being reviewed.
+  const [editingWeek, setEditingWeek] = useState<{ week: Week; mode: 'draft' | 'published'; draft: ReviewDraft } | null>(null);
+  const [editingLeague, setEditingLeague] = useState<{ league: League; mode: 'draft_content' | 'content'; draft: ReviewDraft } | null>(null);
+  const [editorError, setEditorError] = useState('');
+  const [editorBusy, setEditorBusy] = useState(false);
 
   useEffect(() => {
     sb.auth.getSession().then(({ data }) => {
@@ -113,19 +124,21 @@ export default function Admin() {
 
   useEffect(() => {
     if (!profile || !profile.is_admin) return;
-    sb.from('weeks').select('week_number, week_theme, is_boss, created_at').order('week_number', { ascending: false })
+    sb.from('weeks').select('*').order('week_number', { ascending: false })
       .then(({ data }) => {
-        setPastWeeks((data as Week[]) || []);
-        setNextWeekNumber(data && data.length > 0 ? data[0].week_number + 1 : 1);
+        const all = (data as Week[]) || [];
+        setPastWeeks(all.filter((w) => w.status === 'published'));
+        setDraftWeeks(all.filter((w) => w.status === 'draft'));
+        setNextWeekNumber(all.length > 0 ? Math.max(...all.map((w) => w.week_number)) + 1 : 1);
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile, buildOk]);
+  }, [profile, buildOk, weeksVersion]);
 
   useEffect(() => {
     if (!profile || !profile.is_admin) return;
     sb.from('leagues').select('*').order('tier_index', { ascending: true }).then(({ data }) => setLeagues((data as League[]) || []));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile, leagueOk]);
+  }, [profile, leagueOk, leaguesVersion]);
 
   async function login() {
     setAuthError('');
@@ -229,10 +242,11 @@ ${combined}`;
         risk_question: parsed.risk_question || null,
         boss_question: parsed.boss_question || null,
         is_boss: isBossWeek,
+        status: 'draft',
       });
       if (insertError) throw new Error('Veritabanına yazılamadı: ' + insertError.message);
 
-      setBuildOk(`Hafta ${nextWeekNumber} yayınlandı${isBossWeek ? ' (BOSS HAFTASI)' : ''}.`);
+      setBuildOk(`Hafta ${nextWeekNumber} taslak olarak oluşturuldu${isBossWeek ? ' (BOSS HAFTASI)' : ''}. "Taslaklar" bölümünden inceleyip yayınlayabilirsin.`);
       setLinksText('');
     } catch (e: any) {
       setBuildError('Hafta işlenirken bir sorun oldu: ' + e.message);
@@ -319,10 +333,10 @@ ${combined}`;
       cleaned = cleaned.replace(/,(\s*[}\]])/g, '$1');
       const parsed = JSON.parse(cleaned);
 
-      const { error: updateError } = await sb.from('leagues').update({ content: parsed }).eq('tier_index', leagueTierChoice);
+      const { error: updateError } = await sb.from('leagues').update({ draft_content: parsed }).eq('tier_index', leagueTierChoice);
       if (updateError) throw new Error('Veritabanına yazılamadı: ' + updateError.message);
 
-      setLeagueOk(`${leagueName} müfredatı kaydedildi.`);
+      setLeagueOk(`${leagueName} müfredatı taslak olarak kaydedildi. Aşağıdan inceleyip yayınlayabilirsin.`);
       setLeagueLinksText('');
     } catch (e: any) {
       setLeagueError('Müfredat işlenirken bir sorun oldu: ' + e.message);
@@ -330,6 +344,99 @@ ${combined}`;
       setLeagueBuilding(false);
       setLeagueStatus('');
     }
+  }
+
+  function weekToDraft(w: Week): ReviewDraft {
+    return {
+      must_reads: keyMustReads(w.must_reads || []),
+      quiz: keyQuiz(w.quiz || []),
+      week_theme: w.week_theme,
+      number_challenge: w.number_challenge,
+      matching: w.matching,
+      risk_question: w.risk_question,
+      boss_question: w.boss_question,
+    };
+  }
+
+  function leagueContentToDraft(c: { must_reads: any[]; quiz: any[] } | null): ReviewDraft {
+    return { must_reads: keyMustReads(c?.must_reads || []), quiz: keyQuiz(c?.quiz || []) };
+  }
+
+  function openWeekEditor(week: Week, mode: 'draft' | 'published') {
+    setEditorError('');
+    setEditingWeek({ week, mode, draft: weekToDraft(week) });
+  }
+
+  async function saveWeekEditor(publish: boolean) {
+    if (!editingWeek) return;
+    setEditorBusy(true);
+    setEditorError('');
+    const clean = stripKeys(editingWeek.draft);
+    const payload: any = {
+      week_theme: editingWeek.draft.week_theme ?? null,
+      must_reads: clean.must_reads,
+      quiz: clean.quiz,
+      number_challenge: editingWeek.draft.number_challenge ?? null,
+      matching: editingWeek.draft.matching ?? null,
+      risk_question: editingWeek.draft.risk_question ?? null,
+      boss_question: editingWeek.draft.boss_question ?? null,
+    };
+    if (publish) payload.status = 'published';
+    const { error } = await sb.from('weeks').update(payload).eq('week_number', editingWeek.week.week_number);
+    setEditorBusy(false);
+    if (error) { setEditorError('Kaydedilemedi: ' + error.message); return; }
+    setEditingWeek(null);
+    setWeeksVersion((v) => v + 1);
+  }
+
+  async function deleteWeekDraft() {
+    if (!editingWeek || editingWeek.mode !== 'draft') return;
+    if (!confirm(`Hafta ${editingWeek.week.week_number} taslağını silmek istediğine emin misin?`)) return;
+    setEditorBusy(true);
+    setEditorError('');
+    const { error } = await sb.from('weeks').delete().eq('week_number', editingWeek.week.week_number).eq('status', 'draft');
+    setEditorBusy(false);
+    if (error) { setEditorError('Silinemedi: ' + error.message); return; }
+    setEditingWeek(null);
+    setWeeksVersion((v) => v + 1);
+  }
+
+  function openLeagueEditor(league: League, mode: 'draft_content' | 'content') {
+    setEditorError('');
+    const source = mode === 'draft_content' ? league.draft_content : league.content;
+    setEditingLeague({ league, mode, draft: leagueContentToDraft(source) });
+  }
+
+  async function saveLeagueEditor(publish: boolean) {
+    if (!editingLeague) return;
+    setEditorBusy(true);
+    setEditorError('');
+    const clean = stripKeys(editingLeague.draft);
+    if (publish) {
+      const { error } = await sb.from('leagues').update({ content: clean, draft_content: null }).eq('tier_index', editingLeague.league.tier_index);
+      setEditorBusy(false);
+      if (error) { setEditorError('Yayınlanamadı: ' + error.message); return; }
+    } else {
+      const field = editingLeague.mode === 'draft_content' ? 'draft_content' : 'content';
+      const { error } = await sb.from('leagues').update({ [field]: clean }).eq('tier_index', editingLeague.league.tier_index);
+      setEditorBusy(false);
+      if (error) { setEditorError('Kaydedilemedi: ' + error.message); return; }
+    }
+    setEditingLeague(null);
+    setLeagueOk('Lig içeriği güncellendi.');
+    setLeaguesVersion((v) => v + 1);
+  }
+
+  async function discardLeagueDraft() {
+    if (!editingLeague || editingLeague.mode !== 'draft_content') return;
+    if (!confirm(`${editingLeague.league.name} taslağını silmek istediğine emin misin?`)) return;
+    setEditorBusy(true);
+    setEditorError('');
+    const { error } = await sb.from('leagues').update({ draft_content: null }).eq('tier_index', editingLeague.league.tier_index);
+    setEditorBusy(false);
+    if (error) { setEditorError('Silinemedi: ' + error.message); return; }
+    setEditingLeague(null);
+    setLeagueOk('Lig taslağı silindi.');
   }
 
   if (loadingAuth) return <div className="root wide"><p className="panel-sub">Yükleniyor…</p></div>;
@@ -401,15 +508,53 @@ ${combined}`;
       )}
 
       <div className="panel">
+        <p className="panel-title">Taslaklar</p>
+        <p className="panel-sub">AI tarafından üretilen ama henüz yayınlanmamış haftalar. İnceleyip düzenledikten sonra yayınla.</p>
+        {draftWeeks.length === 0 && <p className="panel-sub">Taslak yok.</p>}
+        {draftWeeks.map((w) => (
+          <div className="week-row" key={w.week_number}>
+            <span>Hafta {w.week_number}{w.is_boss ? ' 👑' : ''} · {w.week_theme}</span>
+            <button className="btn ghost" onClick={() => openWeekEditor(w, 'draft')}>İncele / Düzenle</button>
+          </div>
+        ))}
+      </div>
+
+      <div className="panel">
         <p className="panel-title">Yayınlanan Haftalar</p>
         {pastWeeks.length === 0 && <p className="panel-sub">Henüz hafta yok.</p>}
         {pastWeeks.map((w) => (
           <div className="week-row" key={w.week_number}>
             <span>{formatWeekRange(w.created_at)} (Hafta {w.week_number}){w.is_boss ? ' 👑' : ''} · {w.week_theme}</span>
-            <span>{new Date(w.created_at).toLocaleDateString('tr-TR')}</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              {new Date(w.created_at).toLocaleDateString('tr-TR')}
+              <button className="btn ghost" onClick={() => openWeekEditor(w, 'published')}>Düzenle</button>
+            </span>
           </div>
         ))}
       </div>
+
+      {editingWeek && (
+        <div className="panel">
+          <p className="panel-title">Hafta {editingWeek.week.week_number} {editingWeek.mode === 'draft' ? '(Taslak)' : '(Yayınlandı)'}</p>
+          <ContentReviewEditor
+            draft={editingWeek.draft}
+            onChange={(draft) => setEditingWeek({ ...editingWeek, draft })}
+            showWeekFields
+            isBoss={editingWeek.week.is_boss}
+          />
+          <div style={{ display: 'flex', gap: 10, marginTop: 16, flexWrap: 'wrap' }}>
+            <button className="btn" onClick={() => saveWeekEditor(false)} disabled={editorBusy}>Kaydet</button>
+            {editingWeek.mode === 'draft' && (
+              <>
+                <button className="btn secondary" onClick={() => saveWeekEditor(true)} disabled={editorBusy}>Yayınla</button>
+                <button className="btn danger" onClick={deleteWeekDraft} disabled={editorBusy}>Sil</button>
+              </>
+            )}
+            <button className="btn ghost" onClick={() => setEditingWeek(null)} disabled={editorBusy}>Vazgeç</button>
+          </div>
+          {editorError && <div className="error-box">{editorError}</div>}
+        </div>
+      )}
 
       <div className="panel">
         <p className="panel-title">Demo Ligler</p>
@@ -422,12 +567,12 @@ ${combined}`;
       {apiKey && (
         <div className="panel">
           <p className="panel-title">Lig Müfredatı Oluştur</p>
-          <p className="panel-sub">Her lig için bir kere oluşturulan, haftalık değişmeyen sabit içerik. İstediğin zaman üstüne yazıp güncelleyebilirsin.</p>
+          <p className="panel-sub">Her lig için bir kere oluşturulan, haftalık değişmeyen sabit içerik. AI çıktısı önce taslak olarak kaydedilir, aşağıdan inceleyip yayınlarsın.</p>
           <label className="field-label">Lig Seç</label>
           <select value={leagueTierChoice} onChange={(e) => setLeagueTierChoice(Number(e.target.value))}
             style={{ width: '100%', background: 'var(--ink)', border: '1px solid var(--hairline)', color: 'var(--paper)', fontFamily: 'var(--mono)', fontSize: '12.5px', padding: '12px', marginBottom: 10 }}>
             {leagues.map((l) => (
-              <option key={l.tier_index} value={l.tier_index}>{l.name}{l.content ? ' (dolu — üzerine yazılır)' : ' (boş)'}</option>
+              <option key={l.tier_index} value={l.tier_index}>{l.name}{l.content ? ' (dolu — üzerine yazılır)' : ' (boş)'}{l.draft_content ? ' [taslak bekliyor]' : ''}</option>
             ))}
           </select>
           <textarea value={leagueLinksText} onChange={(e) => setLeagueLinksText(e.target.value)} placeholder={'https://...\nhttps://...\nhttps://...'} />
@@ -437,6 +582,41 @@ ${combined}`;
           {leagueBuilding && <div className="loading-line">{leagueStatus}</div>}
           {leagueError && <div className="error-box">{leagueError}</div>}
           {leagueOk && <div className="ok-box">{leagueOk}</div>}
+        </div>
+      )}
+
+      <div className="panel">
+        <p className="panel-title">Lig İçerikleri</p>
+        {leagues.length === 0 && <p className="panel-sub">Lig yok.</p>}
+        {leagues.map((l) => (
+          <div className="week-row" key={l.tier_index}>
+            <span>{l.name}{l.content ? ' — dolu' : ' — boş'}{l.draft_content ? ' — taslak bekliyor' : ''}</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              {l.draft_content && <button className="btn ghost" onClick={() => openLeagueEditor(l, 'draft_content')}>Taslağı İncele</button>}
+              {l.content && <button className="btn ghost" onClick={() => openLeagueEditor(l, 'content')}>Düzenle</button>}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {editingLeague && (
+        <div className="panel">
+          <p className="panel-title">{editingLeague.league.name} {editingLeague.mode === 'draft_content' ? '(Taslak)' : '(Yayınlanan İçerik)'}</p>
+          <ContentReviewEditor
+            draft={editingLeague.draft}
+            onChange={(draft) => setEditingLeague({ ...editingLeague, draft })}
+          />
+          <div style={{ display: 'flex', gap: 10, marginTop: 16, flexWrap: 'wrap' }}>
+            <button className="btn" onClick={() => saveLeagueEditor(false)} disabled={editorBusy}>Kaydet</button>
+            {editingLeague.mode === 'draft_content' && (
+              <>
+                <button className="btn secondary" onClick={() => saveLeagueEditor(true)} disabled={editorBusy}>Yayınla</button>
+                <button className="btn danger" onClick={discardLeagueDraft} disabled={editorBusy}>Sil Taslağı</button>
+              </>
+            )}
+            <button className="btn ghost" onClick={() => setEditingLeague(null)} disabled={editorBusy}>Vazgeç</button>
+          </div>
+          {editorError && <div className="error-box">{editorError}</div>}
         </div>
       )}
     </div>

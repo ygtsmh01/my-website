@@ -192,6 +192,8 @@ label.field-label { display: block; font-family: var(--mono); font-size: 10.5px;
 /* admin.html */
 .week-row { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 12px; padding: 8px 0; border-bottom: 1px solid var(--hairline-soft); color: var(--paper-dim); }
 a { color: var(--azure); }
+.editor-subrow { border: 1px solid var(--hairline-soft); padding: 14px; margin-bottom: 12px; }
+.editor-subrow-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
 
 /* guide.html */
 .root h2 { font-family: var(--serif); font-weight: 600; font-size: 18px; margin: 0 0 4px; }
