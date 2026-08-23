@@ -11,12 +11,14 @@ import Profile from './pages/Profile';
 import History from './pages/History';
 import Leaderboard from './pages/Leaderboard';
 import Guide from './pages/Guide';
+import BackgroundTaskToasts from './lib/BackgroundTaskToasts';
 
 export default function App() {
   return (
     <ThemeProvider>
       <HashRouter>
         <Nav />
+        <BackgroundTaskToasts />
         <Routes>
           <Route path="/" element={<Game />} />
           <Route path="/admin" element={<Admin />} />
