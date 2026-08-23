@@ -814,6 +814,20 @@ export default function Game() {
               <span className="tag static">📘 SABİT REHBER · AKADEMİ{curriculumDone ? ' · TEKRAR (yarı XP)' : ''}</span>
               <p className="panel-title">{myLeague.name} Rehberi</p>
 
+              {totalLessons > 0 && (() => {
+                const totalSteps = totalLessons + (hasCapstone ? 1 : 0);
+                const completedSteps = Math.min(totalSteps, curriculumDone ? totalSteps : passedLessons.size);
+                const pct = totalSteps > 0 ? Math.round((completedSteps / totalSteps) * 100) : 0;
+                return (
+                  <div style={{ margin: '4px 0 12px' }}>
+                    <p className="panel-sub" style={{ margin: '0 0 4px' }}>
+                      {completedSteps}/{totalSteps} ünite tamamlandı{hasCapstone ? ' (bitirme sınavı dahil)' : ''}
+                    </p>
+                    <div className="xp-track"><div className="xp-fill" style={{ width: pct + '%' }} /></div>
+                  </div>
+                );
+              })()}
+
               {curriculumDone && lessonIndex === 0 && passedLessons.size === 0 && !capstoneOpen && (
                 <p className="panel-sub" style={{ margin: '10px 0' }}>Rehber tamamlandı ✓ ({leagueProgress!.quiz_score}/{leagueProgress!.quiz_total}) — istersen yarı XP için dersleri tekrar geç.</p>
               )}
