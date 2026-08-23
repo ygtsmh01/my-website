@@ -463,9 +463,11 @@ export default function Game() {
     setLessonFailInfo(null);
   }
 
-  // Evaluates the currently open lesson against the 60% pass threshold. On pass, grants a small
-  // per-lesson XP amount (fullBonus / (totalLessons * 2), halved again on replay) and advances to
-  // the next lesson. On fail, leaves lessonIndex untouched and surfaces a retry prompt.
+  // Evaluates the currently open lesson against the 60% pass threshold. On pass, grants a
+  // per-lesson XP amount (80% of fullBonus split across all lessons, halved again on replay) and
+  // advances to the next lesson — this is the bulk of the tier's reward, so the league-points bar
+  // at the top of the page visibly moves with each unit instead of only jumping at the capstone.
+  // On fail, leaves lessonIndex untouched and surfaces a retry prompt.
   async function evaluateLesson(lesson: QuizQuestion[], myLeague: League, totalLessons: number, isReplay: boolean) {
     const total = lesson.length;
     const score = lesson.reduce((acc, q, i) => acc + (lessonAnswers[i] === q.correct_index ? 1 : 0), 0);
@@ -476,7 +478,7 @@ export default function Game() {
       return;
     }
     const fullBonus = myLeague.promote_threshold ? Math.round(myLeague.promote_threshold * 0.4) : 150;
-    const perLessonXp = Math.round(fullBonus / (Math.max(1, totalLessons) * 2));
+    const perLessonXp = Math.round((fullBonus * 0.8) / Math.max(1, totalLessons));
     const grantedXp = isReplay ? Math.round(perLessonXp / 2) : perLessonXp;
     await grantXp(grantedXp);
     setLessonResults((prev) => ({ ...prev, [lessonIndex]: { score, total } }));
@@ -497,7 +499,8 @@ export default function Game() {
   // Finishes the tier: fires once the capstone is fully answered (or immediately, when there is
   // no capstone, once every lesson is passed). quiz_score/quiz_total reflect the sum across every
   // lesson attempt that passed plus the capstone, matching the "total across the whole sequence"
-  // requirement. This is unchanged from the old finishCurriculum's completion-bonus/promotion logic.
+  // requirement. Grants the remaining 20% of fullBonus as a closing bonus — the other 80% was
+  // already paid out per-lesson in evaluateLesson, so a from-scratch clear still totals fullBonus.
   async function finishCurriculum(myLeague: League | undefined, isReplay: boolean, capstone: RiskOrBossQuestion[]) {
     if (!profile || !myLeague || !myLeague.content) return;
     setCurriculumSaving(true);
@@ -508,7 +511,8 @@ export default function Game() {
     const score = lessonScoreSum + capstoneScore;
     const total = lessonTotalSum + capstoneTotal;
     const fullBonus = myLeague.promote_threshold ? Math.round(myLeague.promote_threshold * 0.4) : 150;
-    const completionBonus = isReplay ? Math.round(fullBonus / 2) : fullBonus;
+    const capstoneBonus = Math.round(fullBonus * 0.2);
+    const completionBonus = isReplay ? Math.round(capstoneBonus / 2) : capstoneBonus;
 
     const { error: progErr } = await sb.from('league_progress').upsert({
       user_id: profile.id, tier_index: myLeague.tier_index, completed: true,
