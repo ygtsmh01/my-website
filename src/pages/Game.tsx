@@ -463,14 +463,15 @@ export default function Game() {
     setLessonFailInfo(null);
   }
 
-  // Evaluates the currently open lesson against the 60% pass threshold. On pass, grants a small
-  // per-lesson Toplam XP amount (80% of fullBonus split across all lessons, halved again on
-  // replay) and advances to the next lesson. This is a bragging-rights reward only — it does NOT
-  // touch league_xp/promote_threshold. The guide is purely a completion GATE for promotion (see
-  // applyLeagueDelta / finishCurriculum): league points come from weekly quiz and Canlı Yarışma,
-  // and the top-of-page bar shows unit-completion progress, not points. On fail, leaves lessonIndex
-  // untouched and surfaces a retry prompt.
+  // Evaluates the currently open lesson against the 60% pass threshold. On pass, grants a
+  // per-lesson XP amount (80% of fullBonus split across all lessons, halved again on replay) into
+  // BOTH total_xp and league_xp via applyLeagueDelta — same pattern as finishCurriculum/closeWeek.
+  // Safe against premature promotion: the current tier isn't added to completedTiers until
+  // finishCurriculum runs, so applyLeagueDelta's promotion gate can't fire off of lesson XP alone.
+  // The top-of-page bar shows unit-completion progress, not this number, but the number itself
+  // still drives promotion. On fail, leaves lessonIndex untouched and surfaces a retry prompt.
   async function evaluateLesson(lesson: QuizQuestion[], myLeague: League, totalLessons: number, isReplay: boolean) {
+    if (!profile) return;
     const total = lesson.length;
     const score = lesson.reduce((acc, q, i) => acc + (lessonAnswers[i] === q.correct_index ? 1 : 0), 0);
     const passed = total > 0 && score / total >= 0.6;
@@ -482,7 +483,15 @@ export default function Game() {
     const fullBonus = myLeague.promote_threshold ? Math.round(myLeague.promote_threshold * 0.4) : 150;
     const perLessonXp = Math.round((fullBonus * 0.8) / Math.max(1, totalLessons));
     const grantedXp = isReplay ? Math.round(perLessonXp / 2) : perLessonXp;
-    await grantXp(grantedXp);
+    const { tier: newTier, xp: newLeagueXp } = applyLeagueDelta(profile.league_tier, profile.league_xp || 0, grantedXp, leagues, completedTiers);
+    if (newTier > profile.league_tier) {
+      const promotedTo = leagues.find((l) => l.tier_index === newTier);
+      setLastPromotion(promotedTo ? promotedTo.name : null);
+    }
+    const newTotalXp = Math.max(0, profile.total_xp + grantedXp);
+    await sb.from('profiles').update({ total_xp: newTotalXp, league_tier: newTier, league_xp: newLeagueXp }).eq('id', profile.id);
+    setProfile((p) => (p ? { ...p, total_xp: newTotalXp, league_tier: newTier, league_xp: newLeagueXp } : p));
+    setSessionXp((s) => s + grantedXp);
     setLessonResults((prev) => ({ ...prev, [lessonIndex]: { score, total } }));
     setPassedLessons((prev) => new Set(prev).add(lessonIndex));
     setLessonAnswers({});
@@ -501,11 +510,10 @@ export default function Game() {
   // Finishes the tier: fires once the capstone is fully answered (or immediately, when there is
   // no capstone, once every lesson is passed). quiz_score/quiz_total reflect the sum across every
   // lesson attempt that passed plus the capstone, matching the "total across the whole sequence"
-  // requirement. Grants the remaining 20% of fullBonus as Toplam XP (bragging only, same as the
-  // per-lesson grants — see evaluateLesson). league_xp itself is left untouched here; this only
-  // marks the tier's completedTiers gate as open and re-applies applyLeagueDelta with a zero delta
-  // so that if weekly-quiz/duel XP had already crossed the threshold while the gate was closed,
-  // promotion fires immediately instead of waiting for the next unrelated XP-granting event.
+  // requirement. Grants the remaining 20% of fullBonus into league_xp (and total_xp) — the other
+  // 80% was already paid out per-lesson in evaluateLesson, so a from-scratch clear still totals
+  // fullBonus. Also marks the tier's completedTiers gate as open, so if this delta (or prior
+  // weekly-quiz/duel XP) crosses the threshold, promotion fires here.
   async function finishCurriculum(myLeague: League | undefined, isReplay: boolean, capstone: RiskOrBossQuestion[]) {
     if (!profile || !myLeague || !myLeague.content) return;
     setCurriculumSaving(true);
@@ -528,7 +536,7 @@ export default function Game() {
       // gate — it may not have round-tripped into `completedTiers` state yet.
       const localCompleted = new Set(completedTiers);
       localCompleted.add(myLeague.tier_index);
-      const { tier: newTier, xp: newLeagueXp } = applyLeagueDelta(profile.league_tier, profile.league_xp || 0, 0, leagues, localCompleted);
+      const { tier: newTier, xp: newLeagueXp } = applyLeagueDelta(profile.league_tier, profile.league_xp || 0, completionBonus, leagues, localCompleted);
       if (newTier > profile.league_tier) {
         const promotedTo = leagues.find((l) => l.tier_index === newTier);
         setLastPromotion(promotedTo ? promotedTo.name : null);
