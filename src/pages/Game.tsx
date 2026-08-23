@@ -511,9 +511,12 @@ export default function Game() {
   // no capstone, once every lesson is passed). quiz_score/quiz_total reflect the sum across every
   // lesson attempt that passed plus the capstone, matching the "total across the whole sequence"
   // requirement. Grants the remaining 20% of fullBonus into league_xp (and total_xp) — the other
-  // 80% was already paid out per-lesson in evaluateLesson, so a from-scratch clear still totals
-  // fullBonus. Also marks the tier's completedTiers gate as open, so if this delta (or prior
-  // weekly-quiz/duel XP) crosses the threshold, promotion fires here.
+  // 80% was already paid out per-lesson in evaluateLesson. On top of that, finishing a tier's guide
+  // must promote immediately regardless of how much weekly-quiz/duel XP has been banked — so if the
+  // normal bonus wouldn't cross promote_threshold, it's topped up to exactly close the gap. Replays
+  // (isReplay) skip the top-up: by the time a replay is possible the tier is already fully passed
+  // and, in the normal case, already promoted past — this only matters for the top league, where
+  // promote_threshold is null and no top-up applies anyway.
   async function finishCurriculum(myLeague: League | undefined, isReplay: boolean, capstone: RiskOrBossQuestion[]) {
     if (!profile || !myLeague || !myLeague.content) return;
     setCurriculumSaving(true);
@@ -525,7 +528,11 @@ export default function Game() {
     const total = lessonTotalSum + capstoneTotal;
     const fullBonus = myLeague.promote_threshold ? Math.round(myLeague.promote_threshold * 0.4) : 150;
     const capstoneBonus = Math.round(fullBonus * 0.2);
-    const completionBonus = isReplay ? Math.round(capstoneBonus / 2) : capstoneBonus;
+    const baseCompletionBonus = isReplay ? Math.round(capstoneBonus / 2) : capstoneBonus;
+    const neededToPromote = !isReplay && myLeague.promote_threshold != null
+      ? Math.max(0, myLeague.promote_threshold - (profile.league_xp || 0))
+      : 0;
+    const completionBonus = Math.max(baseCompletionBonus, neededToPromote);
 
     const { error: progErr } = await sb.from('league_progress').upsert({
       user_id: profile.id, tier_index: myLeague.tier_index, completed: true,
