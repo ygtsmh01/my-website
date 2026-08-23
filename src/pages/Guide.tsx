@@ -73,7 +73,8 @@ export default function Guide() {
         <div className="emoji">📚</div>
         <h2>Tüm Lig Rehberleri</h2>
         <p className="panel-sub">Her ligin kaynak başlıklarını ve özetlerini burada inceleyebilirsin. Quiz çözmek için kendi liginin rehberine oyun sayfasından girmen gerekir.</p>
-        {leagues.length === 0 && <p className="empty-hint">Yükleniyor…</p>}
+        {!session && <p className="empty-hint">Ligleri görmek için önce giriş yapman gerekiyor.</p>}
+        {session && leagues.length === 0 && <p className="empty-hint">Yükleniyor…</p>}
         {leagues.map((l) => {
           const isMine = !!profile && l.tier_index === profile.league_tier;
           const reads = l.content && l.content.must_reads ? l.content.must_reads : [];
