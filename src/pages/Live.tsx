@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { sb } from '../lib/supabase';
 import TimerRing from '../components/TimerRing';
+import { applyLeagueDelta } from '../lib/leagueLogic';
 import type { League, LiveParticipant, LiveRoom, Profile } from '../lib/types';
 
 const QUESTION_SECONDS = 15;
@@ -20,16 +21,6 @@ function generateCode() {
   let s = '';
   for (let i = 0; i < 5; i++) s += CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)];
   return s;
-}
-function applyLeagueDelta(tier: number, xp: number, delta: number, leagues: League[]) {
-  let t = tier, x = xp + delta;
-  while (x < 0 && t > 0) { t -= 1; x = 0; }
-  if (x < 0) x = 0;
-  while (t < leagues.length - 1 && leagues[t] && leagues[t].promote_threshold != null && x >= (leagues[t].promote_threshold as number)) {
-    x -= leagues[t].promote_threshold as number;
-    t += 1;
-  }
-  return { tier: t, xp: x };
 }
 
 export default function Live() {
@@ -60,12 +51,19 @@ export default function Live() {
   }, []);
 
   const [leagues, setLeagues] = useState<League[]>([]);
+  const [completedTiers, setCompletedTiers] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     if (!session) { setProfile(null); return; }
     sb.from('profiles').select('*').eq('id', session.user.id).single().then(({ data }) => setProfile(data));
     sb.from('leagues').select('*').order('tier_index', { ascending: true }).then(({ data }) => setLeagues((data as League[]) || []));
   }, [session]);
+
+  useEffect(() => {
+    if (!profile) { setCompletedTiers(new Set()); return; }
+    sb.from('league_progress').select('tier_index, completed').eq('user_id', profile.id).eq('completed', true)
+      .then(({ data }) => setCompletedTiers(new Set((data || []).map((r: any) => r.tier_index))));
+  }, [profile?.id]);
 
   useEffect(() => {
     const iv = setInterval(() => setNowTick(Date.now()), 250);
@@ -198,7 +196,7 @@ export default function Live() {
 
     (async () => {
       const finalXp = Math.max(0, profile.total_xp + bonus + betDelta);
-      const { tier: newTier, xp: newLeagueXp } = applyLeagueDelta(profile.league_tier, profile.league_xp || 0, leagueDelta, leagues);
+      const { tier: newTier, xp: newLeagueXp } = applyLeagueDelta(profile.league_tier, profile.league_xp || 0, leagueDelta, leagues, completedTiers);
       await sb.from('profiles').update({ total_xp: finalXp, league_tier: newTier, league_xp: newLeagueXp }).eq('id', profile.id);
       await sb.from('live_participants').update({ xp_awarded: true }).eq('id', mine.id);
       setAwardedBonus(bonus);

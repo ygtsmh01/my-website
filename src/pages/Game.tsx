@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { sb } from '../lib/supabase';
 import TimerRing from '../components/TimerRing';
 import { useTheme } from '../lib/ThemeContext';
+import { applyLeagueDelta } from '../lib/leagueLogic';
 import type { League, LeagueProgress, Profile, QuizQuestion, RiskOrBossQuestion, Week } from '../lib/types';
 
 const BOSS_EVERY = 5;
@@ -25,22 +26,6 @@ function formatWeekRange(createdAt?: string | null) {
   const sd = start.getDate(), ed = end.getDate();
   const sm = TR_MONTHS[start.getMonth()], em = TR_MONTHS[end.getMonth()];
   return sm === em ? `${sd}-${ed} ${sm}` : `${sd} ${sm} - ${ed} ${em}`;
-}
-
-function applyLeagueDelta(tier: number, xp: number, delta: number, leagues: League[], completedTiers: Set<number>) {
-  let t = tier, x = xp + delta;
-  while (x < 0 && t > 0) { t -= 1; x = 0; }
-  if (x < 0) x = 0;
-  // Promotion requires BOTH crossing the XP threshold AND having completed the current tier's guide —
-  // XP can keep accumulating past the threshold, but the tier only advances once the guide is done.
-  while (
-    t < leagues.length - 1 && leagues[t] && leagues[t].promote_threshold != null &&
-    x >= (leagues[t].promote_threshold as number) && completedTiers.has(t)
-  ) {
-    x -= leagues[t].promote_threshold as number;
-    t += 1;
-  }
-  return { tier: t, xp: x };
 }
 
 // Extra per-week stages that follow the main quiz, run inside the same focused stepper card.
