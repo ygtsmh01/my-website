@@ -75,7 +75,6 @@ export interface Profile {
   avatar: string;
   marketing_consent?: boolean;
   league_tier: number;
-  league_xp: number;
   created_at: string;
 }
 

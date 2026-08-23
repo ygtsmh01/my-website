@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react';
 import { sb } from '../lib/supabase';
 import TimerRing from '../components/TimerRing';
 import { useTheme } from '../lib/ThemeContext';
-import { applyLeagueDelta } from '../lib/leagueLogic';
 import type { League, LeagueProgress, Profile, QuizQuestion, RiskOrBossQuestion, Week } from '../lib/types';
 
 const BOSS_EVERY = 5;
@@ -12,7 +11,7 @@ const ONBOARDING_KEY = 'aitakip_onboarding_seen_v1';
 const SWIPE_THRESHOLD = 45;
 const ONBOARDING_SLIDES = [
   { emoji: '🎮', title: 'Haftalık Oyun', text: 'Her hafta yeni kaynaklar gelir. Okuyup soru soru ilerleyen sınavı çöz, XP kazan.' },
-  { emoji: '🏅', title: 'Lig Sistemi', text: 'Sabit rehberini tamamla, haftalık quizlerle puan topla, ligini yükselt.' },
+  { emoji: '🏅', title: 'Lig Sistemi', text: 'Sabit rehberindeki tüm üniteleri ve bitirme sınavını tamamla, ligini yükselt.' },
   { emoji: '⚡', title: 'Canlı Yarışma', text: "Arkadaşlarınla oda kur ya da düello yap, gerçek zamanlı yarış." },
   { emoji: '☰', title: 'Her An Kılavuza Dön', text: 'Sol üstteki menüden Profil, Sıralama, Geçmiş ve Kılavuz sayfalarına ulaşabilirsin.' },
 ];
@@ -108,7 +107,6 @@ export default function Game() {
   const [replayQuizAnswers, setReplayQuizAnswers] = useState<Record<number, number>>({});
   const [replayQuizStepIndex, setReplayQuizStepIndex] = useState(0);
   const [lastPromotion, setLastPromotion] = useState<string | null>(null);
-  const [completedTiers, setCompletedTiers] = useState<Set<number>>(new Set());
 
   const weekSectionRef = useRef<HTMLDivElement | null>(null);
   const touchStartX = useRef<number | null>(null);
@@ -137,14 +135,6 @@ export default function Game() {
     sb.from('league_progress').select('*').eq('user_id', profile.id).eq('tier_index', profile.league_tier).maybeSingle()
       .then(({ data }) => setLeagueProgress(data));
   }, [profile?.id, profile?.league_tier]);
-
-  // Full set of tiers this user has completed the guide for — needed to gate league promotion
-  // (crossing the XP threshold alone is not enough, see applyLeagueDelta).
-  useEffect(() => {
-    if (!profile) { setCompletedTiers(new Set()); return; }
-    sb.from('league_progress').select('tier_index, completed').eq('user_id', profile.id).eq('completed', true)
-      .then(({ data }) => setCompletedTiers(new Set(((data as any[]) || []).map((r) => r.tier_index))));
-  }, [profile?.id]);
 
   useEffect(() => {
     if (!profile) return;
@@ -397,21 +387,11 @@ export default function Game() {
       frozen: false,
     });
     if (!histErr) {
-      const myLeague = leagues.find((l) => l.tier_index === profile.league_tier);
-      const mult = myLeague ? Number(myLeague.weekly_multiplier) : 1;
-      const leagueGain = Math.round(totalWeekXp * mult * 1.0);
-      const { tier: newTier, xp: newLeagueXp } = applyLeagueDelta(profile.league_tier, profile.league_xp || 0, leagueGain, leagues, completedTiers);
-      if (newTier > profile.league_tier) {
-        const promotedTo = leagues.find((l) => l.tier_index === newTier);
-        setLastPromotion(promotedTo ? promotedTo.name : null);
-      }
       await sb.from('profiles').update({
         total_xp: profile.total_xp + completionBonus + streakBonus,
         streak: nextStreak,
         last_week_number: currentWeek.week_number,
         freezes: (profile.freezes || 0) + (earnedFreeze ? 1 : 0),
-        league_tier: newTier,
-        league_xp: newLeagueXp,
       }).eq('id', profile.id);
     }
 
@@ -463,15 +443,12 @@ export default function Game() {
     setLessonFailInfo(null);
   }
 
-  // Evaluates the currently open lesson against the 60% pass threshold. On pass, grants a
-  // per-lesson XP amount (80% of fullBonus split across all lessons, halved again on replay) into
-  // BOTH total_xp and league_xp via applyLeagueDelta — same pattern as finishCurriculum/closeWeek.
-  // Safe against premature promotion: the current tier isn't added to completedTiers until
-  // finishCurriculum runs, so applyLeagueDelta's promotion gate can't fire off of lesson XP alone.
-  // The top-of-page bar shows unit-completion progress, not this number, but the number itself
-  // still drives promotion. On fail, leaves lessonIndex untouched and surfaces a retry prompt.
+  // Evaluates the currently open lesson against the 60% pass threshold. On pass, grants a small
+  // per-lesson Toplam XP amount (80% of fullBonus split across all lessons, halved again on
+  // replay) and advances to the next lesson — a bragging-rights reward only, it does not affect
+  // league standing (see finishCurriculum for the promotion rule). On fail, leaves lessonIndex
+  // untouched and surfaces a retry prompt.
   async function evaluateLesson(lesson: QuizQuestion[], myLeague: League, totalLessons: number, isReplay: boolean) {
-    if (!profile) return;
     const total = lesson.length;
     const score = lesson.reduce((acc, q, i) => acc + (lessonAnswers[i] === q.correct_index ? 1 : 0), 0);
     const passed = total > 0 && score / total >= 0.6;
@@ -483,15 +460,7 @@ export default function Game() {
     const fullBonus = myLeague.promote_threshold ? Math.round(myLeague.promote_threshold * 0.4) : 150;
     const perLessonXp = Math.round((fullBonus * 0.8) / Math.max(1, totalLessons));
     const grantedXp = isReplay ? Math.round(perLessonXp / 2) : perLessonXp;
-    const { tier: newTier, xp: newLeagueXp } = applyLeagueDelta(profile.league_tier, profile.league_xp || 0, grantedXp, leagues, completedTiers);
-    if (newTier > profile.league_tier) {
-      const promotedTo = leagues.find((l) => l.tier_index === newTier);
-      setLastPromotion(promotedTo ? promotedTo.name : null);
-    }
-    const newTotalXp = Math.max(0, profile.total_xp + grantedXp);
-    await sb.from('profiles').update({ total_xp: newTotalXp, league_tier: newTier, league_xp: newLeagueXp }).eq('id', profile.id);
-    setProfile((p) => (p ? { ...p, total_xp: newTotalXp, league_tier: newTier, league_xp: newLeagueXp } : p));
-    setSessionXp((s) => s + grantedXp);
+    await grantXp(grantedXp);
     setLessonResults((prev) => ({ ...prev, [lessonIndex]: { score, total } }));
     setPassedLessons((prev) => new Set(prev).add(lessonIndex));
     setLessonAnswers({});
@@ -510,13 +479,11 @@ export default function Game() {
   // Finishes the tier: fires once the capstone is fully answered (or immediately, when there is
   // no capstone, once every lesson is passed). quiz_score/quiz_total reflect the sum across every
   // lesson attempt that passed plus the capstone, matching the "total across the whole sequence"
-  // requirement. Grants the remaining 20% of fullBonus into league_xp (and total_xp) — the other
-  // 80% was already paid out per-lesson in evaluateLesson. On top of that, finishing a tier's guide
-  // must promote immediately regardless of how much weekly-quiz/duel XP has been banked — so if the
-  // normal bonus wouldn't cross promote_threshold, it's topped up to exactly close the gap. Replays
-  // (isReplay) skip the top-up: by the time a replay is possible the tier is already fully passed
-  // and, in the normal case, already promoted past — this only matters for the top league, where
-  // promote_threshold is null and no top-up applies anyway.
+  // requirement. Grants the remaining 20% of fullBonus as Toplam XP (the other 80% was already
+  // paid out per-lesson in evaluateLesson) and — this is the ONLY way league_tier changes anywhere
+  // in the app — promotes straight to the next tier, full stop. No points pool, no threshold: the
+  // guide is the entire promotion mechanic. Replays (isReplay, only reachable at the top league,
+  // where there's no next tier to promote into) skip promotion.
   async function finishCurriculum(myLeague: League | undefined, isReplay: boolean, capstone: RiskOrBossQuestion[]) {
     if (!profile || !myLeague || !myLeague.content) return;
     setCurriculumSaving(true);
@@ -528,31 +495,23 @@ export default function Game() {
     const total = lessonTotalSum + capstoneTotal;
     const fullBonus = myLeague.promote_threshold ? Math.round(myLeague.promote_threshold * 0.4) : 150;
     const capstoneBonus = Math.round(fullBonus * 0.2);
-    const baseCompletionBonus = isReplay ? Math.round(capstoneBonus / 2) : capstoneBonus;
-    const neededToPromote = !isReplay && myLeague.promote_threshold != null
-      ? Math.max(0, myLeague.promote_threshold - (profile.league_xp || 0))
-      : 0;
-    const completionBonus = Math.max(baseCompletionBonus, neededToPromote);
+    const completionBonus = isReplay ? Math.round(capstoneBonus / 2) : capstoneBonus;
 
     const { error: progErr } = await sb.from('league_progress').upsert({
       user_id: profile.id, tier_index: myLeague.tier_index, completed: true,
       quiz_score: score, quiz_total: total, completed_at: new Date().toISOString(),
     }, { onConflict: 'user_id,tier_index' });
     if (!progErr) {
-      // The guide we just upserted as completed needs to count immediately for the promotion
-      // gate — it may not have round-tripped into `completedTiers` state yet.
-      const localCompleted = new Set(completedTiers);
-      localCompleted.add(myLeague.tier_index);
-      const { tier: newTier, xp: newLeagueXp } = applyLeagueDelta(profile.league_tier, profile.league_xp || 0, completionBonus, leagues, localCompleted);
+      const newTotalXp = Math.max(0, profile.total_xp + completionBonus);
+      const isMaxTier = myLeague.tier_index >= leagues.length - 1;
+      const newTier = !isReplay && !isMaxTier ? myLeague.tier_index + 1 : profile.league_tier;
       if (newTier > profile.league_tier) {
         const promotedTo = leagues.find((l) => l.tier_index === newTier);
         setLastPromotion(promotedTo ? promotedTo.name : null);
       }
-      const newTotalXp = Math.max(0, profile.total_xp + completionBonus);
-      await sb.from('profiles').update({ total_xp: newTotalXp, league_tier: newTier, league_xp: newLeagueXp }).eq('id', profile.id);
-      setProfile((p) => (p ? { ...p, total_xp: newTotalXp, league_tier: newTier, league_xp: newLeagueXp } : p));
+      await sb.from('profiles').update({ total_xp: newTotalXp, league_tier: newTier }).eq('id', profile.id);
+      setProfile((p) => (p ? { ...p, total_xp: newTotalXp, league_tier: newTier } : p));
       setLeagueProgress({ user_id: profile.id, tier_index: myLeague.tier_index, completed: true, quiz_score: score, quiz_total: total, completed_at: new Date().toISOString() });
-      setCompletedTiers(localCompleted);
     }
     setCurriculumSaving(false);
     setCapstoneAnswers({});
@@ -624,9 +583,9 @@ export default function Game() {
   const myLeague = leagues.find((l) => l.tier_index === profile.league_tier);
   const curriculumDone = leagueProgress && leagueProgress.completed;
   // Unit-completion progress for the league guide — shown at the top of the page regardless of
-  // which tab is active. This is deliberately NOT tied to league_xp/promote_threshold: the guide
-  // is a completion gate for promotion (see applyLeagueDelta), not an XP source, so this bar tracks
-  // "how far through this tier's academy am I" rather than a points total.
+  // which tab is active. There is no points pool driving promotion: finishing every unit plus the
+  // capstone (see finishCurriculum) is itself what promotes to the next tier, so this bar tracks
+  // "how far through this tier's academy am I" directly.
   const guideLessons = myLeague && myLeague.content ? groupLessons(myLeague.content.quiz || []) : [];
   const guideTotalLessons = guideLessons.length;
   const guideHasCapstone = !!(myLeague && myLeague.content && myLeague.content.capstone && myLeague.content.capstone.length > 0);

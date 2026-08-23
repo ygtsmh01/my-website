@@ -99,7 +99,6 @@ export default function Profile() {
   const xpSpan = lvl.next ? lvl.next.min - lvl.floor : 1;
   const xpPct = lvl.next ? Math.min(100, Math.round(((profile.total_xp - lvl.floor) / xpSpan) * 100)) : 100;
   const myLeague = leagues.find((l) => l.tier_index === profile.league_tier);
-  const leaguePct = myLeague && myLeague.promote_threshold ? Math.min(100, Math.round(((profile.league_xp || 0) / myLeague.promote_threshold) * 100)) : 100;
 
   return (
     <div className="root toppad">
@@ -131,10 +130,7 @@ export default function Profile() {
         <div className="panel">
           <p className="panel-title">🏅 {myLeague.name}</p>
           {myLeague.promote_threshold ? (
-            <>
-              <p className="panel-sub">{profile.league_xp || 0} / {myLeague.promote_threshold} lig puanı</p>
-              <div className="xp-track"><div className="xp-fill" style={{ width: leaguePct + '%' }} /></div>
-            </>
+            <p className="panel-sub">Bir sonraki lige terfi etmek için rehberdeki tüm üniteleri ve bitirme sınavını tamamla.</p>
           ) : (
             <p className="panel-sub">En üst ligdesin.</p>
           )}

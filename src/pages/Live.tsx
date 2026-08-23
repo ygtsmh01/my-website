@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { sb } from '../lib/supabase';
 import TimerRing from '../components/TimerRing';
-import { applyLeagueDelta } from '../lib/leagueLogic';
 import type { League, LiveParticipant, LiveRoom, Profile } from '../lib/types';
 
 const QUESTION_SECONDS = 15;
@@ -39,7 +38,6 @@ export default function Live() {
   const [myAnswer, setMyAnswer] = useState<{ optionIndex: number; correct: boolean; points: number; firstCorrect: boolean } | null>(null);
   const [nowTick, setNowTick] = useState(Date.now());
   const [awardedBonus, setAwardedBonus] = useState<number | null>(null);
-  const [leagueChange, setLeagueChange] = useState<any>(null);
   const [answeredCount, setAnsweredCount] = useState(0);
   const roomRef = useRef<LiveRoom | null>(null);
   const advancingRef = useRef(false);
@@ -51,19 +49,12 @@ export default function Live() {
   }, []);
 
   const [leagues, setLeagues] = useState<League[]>([]);
-  const [completedTiers, setCompletedTiers] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     if (!session) { setProfile(null); return; }
     sb.from('profiles').select('*').eq('id', session.user.id).single().then(({ data }) => setProfile(data));
     sb.from('leagues').select('*').order('tier_index', { ascending: true }).then(({ data }) => setLeagues((data as League[]) || []));
   }, [session]);
-
-  useEffect(() => {
-    if (!profile) { setCompletedTiers(new Set()); return; }
-    sb.from('league_progress').select('tier_index, completed').eq('user_id', profile.id).eq('completed', true)
-      .then(({ data }) => setCompletedTiers(new Set((data || []).map((r: any) => r.tier_index))));
-  }, [profile?.id]);
 
   useEffect(() => {
     const iv = setInterval(() => setNowTick(Date.now()), 250);
@@ -185,32 +176,12 @@ export default function Live() {
       else { betDelta = -room.bet_amount; betOutcome = 'potlost'; }
     }
 
-    const effectiveTier = Math.min(...participants.map((p) => p.league_tier || 0));
-    const effectiveLeague = leagues.find((l) => l.tier_index === effectiveTier);
-    const effectiveMult = effectiveLeague ? Number(effectiveLeague.weekly_multiplier) : 1;
-
-    let leagueDelta = 0;
-    if (rank === 1) leagueDelta = Math.round(15 * effectiveMult);
-    // League-point risk stays exclusive to ranked duels — room-mode pot betting only affects XP, not league standing.
-    if (betOutcome === 'lost' && room.mode === 'duel') leagueDelta = -Math.round(20 * effectiveMult);
-
     (async () => {
       const finalXp = Math.max(0, profile.total_xp + bonus + betDelta);
-      const { tier: newTier, xp: newLeagueXp } = applyLeagueDelta(profile.league_tier, profile.league_xp || 0, leagueDelta, leagues, completedTiers);
-      await sb.from('profiles').update({ total_xp: finalXp, league_tier: newTier, league_xp: newLeagueXp }).eq('id', profile.id);
+      await sb.from('profiles').update({ total_xp: finalXp }).eq('id', profile.id);
       await sb.from('live_participants').update({ xp_awarded: true }).eq('id', mine.id);
       setAwardedBonus(bonus);
       setBetResult(betOutcome ? { outcome: betOutcome, amount: room.bet_amount, potShare } : null);
-      if (newTier < profile.league_tier) {
-        setLeagueChange({
-          direction: 'down',
-          name: leagues.find((l) => l.tier_index === newTier)?.name,
-          fromName: leagues.find((l) => l.tier_index === profile.league_tier)?.name,
-          lost: Math.abs(leagueDelta),
-        });
-      } else if (newTier > profile.league_tier) {
-        setLeagueChange({ direction: 'up', name: leagues.find((l) => l.tier_index === newTier)?.name });
-      }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [room?.status, participants, profile]);
@@ -349,7 +320,6 @@ export default function Live() {
     setMyAnswer(null);
     setAwardedBonus(null);
     setBetResult(null);
-    setLeagueChange(null);
     setView('menu');
   }
 
@@ -375,7 +345,7 @@ export default function Live() {
       <div className="root wide">
         <div className="eyebrow" style={{ paddingLeft: 46 }}>AI Takip Defteri · {profile.avatar} {profile.username}</div>
         <h1 style={{ paddingLeft: 46 }}>Canlı Yarışma</h1>
-        <p className="panel-sub">Ligin: <strong>{leagues.find((l) => l.tier_index === profile.league_tier)?.name || '—'}</strong>. Herkesle yarışabilirsin — odadaki en düşük ligli kişiye göre kazanılacak lig puanı ayarlanır.</p>
+        <p className="panel-sub">Ligin: <strong>{leagues.find((l) => l.tier_index === profile.league_tier)?.name || '—'}</strong>. Herkesle yarışabilirsin.</p>
 
         <div className="mode-row">
           <div className="panel" style={{ cursor: 'default' }}>
@@ -396,7 +366,7 @@ export default function Live() {
           </div>
           <div className="panel" style={{ cursor: 'default' }}>
             <p className="panel-title">⚔ Düello Başlat</p>
-            <p className="panel-sub">Tek bir rakiple 1'e 1 yarış. Kaybeden, bahis miktarı kadar XP'sini kazanana kaptırır. Ayrıca kaybeden lig puanı da kaybeder — yeterince düşerse bir alt lige inebilirsin.</p>
+            <p className="panel-sub">Tek bir rakiple 1'e 1 yarış. Kaybeden, bahis miktarı kadar XP'sini kazanana kaptırır.</p>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
               {[0, 25, 50, 100].map((v) => (
                 <button key={v} className="btn ghost" onClick={() => setDuelBetChoice(v)}
@@ -536,10 +506,6 @@ export default function Live() {
           <p className="panel-sub">💰 Havuzdan {betResult.potShare} XP payına düştü ({betResult.amount} XP koymuştun) — net {(betResult.potShare || 0) - betResult.amount >= 0 ? '+' : ''}{(betResult.potShare || 0) - betResult.amount} XP.</p>
         )}
         {betResult && betResult.outcome === 'potlost' && <p className="panel-sub">💸 İlk 3'e giremediğin için koyduğun {betResult.amount} XP havuza gitti.</p>}
-        {leagueChange && leagueChange.direction === 'up' && <p className="panel-sub">🏆 Lig puanınla terfi ettin: {leagueChange.name}!</p>}
-        {leagueChange && leagueChange.direction === 'down' && (
-          <p className="panel-sub">📉 Bahsi kaybettiğin için {leagueChange.lost} lig puanı kaybettin ve {leagueChange.fromName} liginden {leagueChange.name} ligine düştün.</p>
-        )}
       </div>
       <button className="btn secondary" onClick={leaveRoom}>Yeni Bir Yarışma Başlat</button>
     </div>
