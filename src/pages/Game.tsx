@@ -463,11 +463,13 @@ export default function Game() {
     setLessonFailInfo(null);
   }
 
-  // Evaluates the currently open lesson against the 60% pass threshold. On pass, grants a
-  // per-lesson XP amount (80% of fullBonus split across all lessons, halved again on replay) and
-  // advances to the next lesson — this is the bulk of the tier's reward, so the league-points bar
-  // at the top of the page visibly moves with each unit instead of only jumping at the capstone.
-  // On fail, leaves lessonIndex untouched and surfaces a retry prompt.
+  // Evaluates the currently open lesson against the 60% pass threshold. On pass, grants a small
+  // per-lesson Toplam XP amount (80% of fullBonus split across all lessons, halved again on
+  // replay) and advances to the next lesson. This is a bragging-rights reward only — it does NOT
+  // touch league_xp/promote_threshold. The guide is purely a completion GATE for promotion (see
+  // applyLeagueDelta / finishCurriculum): league points come from weekly quiz and Canlı Yarışma,
+  // and the top-of-page bar shows unit-completion progress, not points. On fail, leaves lessonIndex
+  // untouched and surfaces a retry prompt.
   async function evaluateLesson(lesson: QuizQuestion[], myLeague: League, totalLessons: number, isReplay: boolean) {
     const total = lesson.length;
     const score = lesson.reduce((acc, q, i) => acc + (lessonAnswers[i] === q.correct_index ? 1 : 0), 0);
@@ -499,8 +501,11 @@ export default function Game() {
   // Finishes the tier: fires once the capstone is fully answered (or immediately, when there is
   // no capstone, once every lesson is passed). quiz_score/quiz_total reflect the sum across every
   // lesson attempt that passed plus the capstone, matching the "total across the whole sequence"
-  // requirement. Grants the remaining 20% of fullBonus as a closing bonus — the other 80% was
-  // already paid out per-lesson in evaluateLesson, so a from-scratch clear still totals fullBonus.
+  // requirement. Grants the remaining 20% of fullBonus as Toplam XP (bragging only, same as the
+  // per-lesson grants — see evaluateLesson). league_xp itself is left untouched here; this only
+  // marks the tier's completedTiers gate as open and re-applies applyLeagueDelta with a zero delta
+  // so that if weekly-quiz/duel XP had already crossed the threshold while the gate was closed,
+  // promotion fires immediately instead of waiting for the next unrelated XP-granting event.
   async function finishCurriculum(myLeague: League | undefined, isReplay: boolean, capstone: RiskOrBossQuestion[]) {
     if (!profile || !myLeague || !myLeague.content) return;
     setCurriculumSaving(true);
@@ -523,7 +528,7 @@ export default function Game() {
       // gate — it may not have round-tripped into `completedTiers` state yet.
       const localCompleted = new Set(completedTiers);
       localCompleted.add(myLeague.tier_index);
-      const { tier: newTier, xp: newLeagueXp } = applyLeagueDelta(profile.league_tier, profile.league_xp || 0, completionBonus, leagues, localCompleted);
+      const { tier: newTier, xp: newLeagueXp } = applyLeagueDelta(profile.league_tier, profile.league_xp || 0, 0, leagues, localCompleted);
       if (newTier > profile.league_tier) {
         const promotedTo = leagues.find((l) => l.tier_index === newTier);
         setLastPromotion(promotedTo ? promotedTo.name : null);
@@ -602,8 +607,17 @@ export default function Game() {
 
   const showWeek = currentWeek && !alreadyDone;
   const myLeague = leagues.find((l) => l.tier_index === profile.league_tier);
-  const leaguePct = myLeague && myLeague.promote_threshold ? Math.min(100, Math.round(((profile.league_xp || 0) / myLeague.promote_threshold) * 100)) : 100;
   const curriculumDone = leagueProgress && leagueProgress.completed;
+  // Unit-completion progress for the league guide — shown at the top of the page regardless of
+  // which tab is active. This is deliberately NOT tied to league_xp/promote_threshold: the guide
+  // is a completion gate for promotion (see applyLeagueDelta), not an XP source, so this bar tracks
+  // "how far through this tier's academy am I" rather than a points total.
+  const guideLessons = myLeague && myLeague.content ? groupLessons(myLeague.content.quiz || []) : [];
+  const guideTotalLessons = guideLessons.length;
+  const guideHasCapstone = !!(myLeague && myLeague.content && myLeague.content.capstone && myLeague.content.capstone.length > 0);
+  const guideTotalSteps = guideTotalLessons + (guideHasCapstone ? 1 : 0);
+  const guideCompletedSteps = Math.min(guideTotalSteps, curriculumDone ? guideTotalSteps : passedLessons.size);
+  const guidePct = guideTotalSteps > 0 ? Math.round((guideCompletedSteps / guideTotalSteps) * 100) : 0;
 
   // Ordered list of extra per-week stages that continue the same focused stepper card
   // after the main quiz — number challenge, then risk question, then boss question.
@@ -690,13 +704,15 @@ export default function Game() {
           <span className="tag static">🏅 LİG SEVİYEN</span>
           <p className="panel-title" style={{ marginBottom: myLeague.tagline ? 2 : undefined }}>{myLeague.name}</p>
           {myLeague.tagline && <p className="one-liner" style={{ marginTop: 0, marginBottom: 8 }}>{myLeague.tagline}</p>}
-          {myLeague.promote_threshold ? (
+          {guideTotalSteps > 0 ? (
             <>
-              <p className="panel-sub">{profile.league_xp || 0} / {myLeague.promote_threshold} lig puanı</p>
-              <div className="xp-track"><div className="xp-fill" style={{ width: leaguePct + '%' }} /></div>
+              <p className="panel-sub">{guideCompletedSteps}/{guideTotalSteps} ünite tamamlandı{guideHasCapstone ? ' (bitirme sınavı dahil)' : ''}</p>
+              <div className="xp-track"><div className="xp-fill" style={{ width: guidePct + '%' }} /></div>
             </>
-          ) : (
+          ) : !myLeague.promote_threshold ? (
             <p className="panel-sub">En üst ligdesin.</p>
+          ) : (
+            <p className="panel-sub">Bu lig için henüz rehber içeriği yok.</p>
           )}
         </div>
       )}
@@ -817,20 +833,6 @@ export default function Game() {
             <div className="panel static-curriculum">
               <span className="tag static">📘 SABİT REHBER · AKADEMİ{curriculumDone ? ' · TEKRAR (yarı XP)' : ''}</span>
               <p className="panel-title">{myLeague.name} Rehberi</p>
-
-              {totalLessons > 0 && (() => {
-                const totalSteps = totalLessons + (hasCapstone ? 1 : 0);
-                const completedSteps = Math.min(totalSteps, curriculumDone ? totalSteps : passedLessons.size);
-                const pct = totalSteps > 0 ? Math.round((completedSteps / totalSteps) * 100) : 0;
-                return (
-                  <div style={{ margin: '4px 0 12px' }}>
-                    <p className="panel-sub" style={{ margin: '0 0 4px' }}>
-                      {completedSteps}/{totalSteps} ünite tamamlandı{hasCapstone ? ' (bitirme sınavı dahil)' : ''}
-                    </p>
-                    <div className="xp-track"><div className="xp-fill" style={{ width: pct + '%' }} /></div>
-                  </div>
-                );
-              })()}
 
               {curriculumDone && lessonIndex === 0 && passedLessons.size === 0 && !capstoneOpen && (
                 <p className="panel-sub" style={{ margin: '10px 0' }}>Rehber tamamlandı ✓ ({leagueProgress!.quiz_score}/{leagueProgress!.quiz_total}) — istersen yarı XP için dersleri tekrar geç.</p>
