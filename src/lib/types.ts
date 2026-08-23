@@ -79,6 +79,7 @@ export interface LeagueContent {
 export interface League {
   tier_index: number;
   name: string;
+  tagline: string | null;
   promote_threshold: number | null;
   weekly_multiplier: number;
   content: LeagueContent | null;
@@ -135,4 +136,13 @@ export interface LiveParticipant {
   xp_awarded: boolean;
   league_tier: number;
   joined_at: string;
+}
+
+export interface Feedback {
+  id: number;
+  user_id: string;
+  category: 'general' | 'content_suggestion';
+  message: string;
+  status: 'new' | 'reviewed' | 'resolved';
+  created_at: string;
 }

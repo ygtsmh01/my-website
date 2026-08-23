@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { sb } from '../lib/supabase';
-import type { League, Profile, Week } from '../lib/types';
+import type { Feedback, League, Profile, Week } from '../lib/types';
 import ContentReviewEditor, { keyMustReads, keyQuiz, stripKeys } from '../components/ContentReviewEditor';
 import type { ReviewDraft } from '../components/ContentReviewEditor';
 
@@ -61,7 +61,7 @@ function demoLeagueContent(tierName: string) {
     must_reads.push({
       title: `${i}. [Demo] ${tierName} Kaynağı`,
       url: `https://example.com/league-demo-${i}`,
-      summary: `Bu ${i}. demo kaynağın özeti — gerçek bir API çağrısı yapılmadan test amaçlı üretildi. ${tierName} seviyesine uygun bir AI/kurumsal dönüşüm konusunu özetliyor. Gerçek müfredat admin panelinden linkler girilerek oluşturulduğunda bu metnin yerini kaynağın tam özeti alacak.`,
+      summary: `Bu ${i}. demo kaynağın özeti — gerçek bir API çağrısı yapılmadan test amaçlı üretildi. ${tierName} seviyesine uygun bir AI/kurumsal dönüşüm konusunu özetliyor. Gerçek rehber admin panelinden linkler girilerek oluşturulduğunda bu metnin yerini kaynağın tam özeti alacak.`,
     });
   }
   const quiz = [];
@@ -108,6 +108,28 @@ export default function Admin() {
   const [editorError, setEditorError] = useState('');
   const [editorBusy, setEditorBusy] = useState(false);
 
+  // Lig kademeleri (tier) yönetimi
+  const [tierDrafts, setTierDrafts] = useState<Record<number, { name: string; tagline: string; promote_threshold: string; weekly_multiplier: string }>>({});
+  const [tierSaving, setTierSaving] = useState<number | null>(null);
+  const [tierError, setTierError] = useState('');
+  const [tierOk, setTierOk] = useState('');
+  const [newTierName, setNewTierName] = useState('');
+  const [newTierTagline, setNewTierTagline] = useState('');
+  const [newTierPromote, setNewTierPromote] = useState('');
+  const [newTierMultiplier, setNewTierMultiplier] = useState('1');
+  const [newTierAdding, setNewTierAdding] = useState(false);
+
+  // Geri bildirimler
+  const [feedbackRows, setFeedbackRows] = useState<Feedback[]>([]);
+  const [feedbackUsernames, setFeedbackUsernames] = useState<Record<string, string>>({});
+  const [feedbackError, setFeedbackError] = useState('');
+  const [feedbackVersion, setFeedbackVersion] = useState(0);
+
+  // Pazarlama izni olan kullanıcılar
+  const [marketingRows, setMarketingRows] = useState<{ username: string; email: string; created_at: string }[] | null>(null);
+  const [marketingError, setMarketingError] = useState('');
+  const [marketingLoading, setMarketingLoading] = useState(false);
+
   useEffect(() => {
     sb.auth.getSession().then(({ data }) => {
       setSession(data.session);
@@ -140,6 +162,39 @@ export default function Admin() {
     sb.from('leagues').select('*').order('tier_index', { ascending: true }).then(({ data }) => setLeagues((data as League[]) || []));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile, leagueOk, leaguesVersion]);
+
+  useEffect(() => {
+    setTierDrafts((prev) => {
+      const next = { ...prev };
+      for (const l of leagues) {
+        if (!next[l.tier_index]) {
+          next[l.tier_index] = {
+            name: l.name,
+            tagline: l.tagline || '',
+            promote_threshold: l.promote_threshold === null || l.promote_threshold === undefined ? '' : String(l.promote_threshold),
+            weekly_multiplier: String(l.weekly_multiplier),
+          };
+        }
+      }
+      return next;
+    });
+  }, [leagues]);
+
+  useEffect(() => {
+    if (!profile || !profile.is_admin) return;
+    setFeedbackError('');
+    sb.from('feedback').select('*').order('created_at', { ascending: false }).then(async ({ data, error }) => {
+      if (error) { setFeedbackError('Geri bildirimler yüklenemedi: ' + error.message); return; }
+      const rows = (data as Feedback[]) || [];
+      setFeedbackRows(rows);
+      const userIds = Array.from(new Set(rows.map((r) => r.user_id)));
+      if (userIds.length === 0) { setFeedbackUsernames({}); return; }
+      const { data: profs } = await sb.from('profiles').select('id, username').in('id', userIds);
+      const map: Record<string, string> = {};
+      for (const p of (profs as { id: string; username: string }[]) || []) map[p.id] = p.username;
+      setFeedbackUsernames(map);
+    });
+  }, [profile, feedbackVersion]);
 
   async function login() {
     setAuthError('');
@@ -278,7 +333,7 @@ ${combined}`;
       const content = demoLeagueContent(l.name);
       await sb.from('leagues').update({ content }).eq('tier_index', l.tier_index);
     }
-    setLeagueOk('Tüm liglere demo müfredat yayınlandı (token harcanmadı).');
+    setLeagueOk('Tüm liglere demo rehber yayınlandı (token harcanmadı).');
   }
 
   async function buildLeagueContent() {
@@ -301,9 +356,9 @@ ${combined}`;
     }
 
     const leagueName = leagues.find((l) => l.tier_index === leagueTierChoice)?.name || ('Lig ' + leagueTierChoice);
-    setLeagueStatus('Müfredat hazırlanıyor…');
+    setLeagueStatus('Rehber hazırlanıyor…');
     try {
-      const prompt = `Aşağıda "${leagueName}" ligi için TEMEL/SABİT bir müfredat oluşturacak kaynakların ham metni var, her biri "--- Kaynak N: url ---" başlığıyla ayrılmış. Bu içerik bir kere oluşturulacak ve değişmeyecek (haftalık değil). Bunları işleyip SADECE aşağıdaki şemaya uyan geçerli JSON döndür, başka açıklama, markdown işareti ekleme:
+      const prompt = `Aşağıda "${leagueName}" ligi için TEMEL/SABİT bir rehber oluşturacak kaynakların ham metni var, her biri "--- Kaynak N: url ---" başlığıyla ayrılmış. Bu içerik bir kere oluşturulacak ve değişmeyecek (haftalık değil). Bunları işleyip SADECE aşağıdaki şemaya uyan geçerli JSON döndür, başka açıklama, markdown işareti ekleme:
 
 {
   "must_reads": [ { "title": "başlık", "url": "kaynağın orijinal linki", "summary": "4-6 cümlelik, doğrudan bilgi aktaran ders notu" } ],
@@ -313,8 +368,11 @@ ${combined}`;
 Kurallar:
 - Her kaynak için bir must_reads öğesi oluştur (sırasıyla index 0,1,2,...).
 - "summary" alanı bir "makale tanıtımı" DEĞİL, doğrudan bilgi aktaran bir ders notu olmalı — kaynağı okumadan da o bilgiye sahip olacak şekilde yaz. "Bu makale ... anlatıyor", "Yazar ... belirtiyor" gibi meta-anlatım KULLANMA; doğrudan olguyu, sayıyı, kavramı, sonucu ver.
-- Her kaynak için quiz'de tam olarak 2 soru olsun: 1 "type":"mc" (3 seçenekli, genel anlama), 1 "type":"tf" (Doğru/Yanlış, "options" tam olarak ["Doğru","Yanlış"], "correct_index" 0 veya 1, kaynağın tam metnindeki bir detaya dayanmalı).
-- Bu ligin seviyesine uygun zorlukta sorular üret ("${leagueName}" ne kadar üst seviyeyse o kadar zor olsun).
+- Her kaynak için quiz'de "source_index" o kaynağın must_reads içindeki index'ine eşit olan tam olarak 4 soru olsun:
+  - 2 tanesi "type": "mc", "bonus": false — cevabı summary'den çıkarılabilecek, genel anlama soruları, farklı yönlere odaklansın, 3 seçenekli.
+  - 1 tanesi "type": "tf", "bonus": true — Doğru/Yanlış formatında bir ifade, SADECE kaynağın tam metnindeki spesifik bir detaya dayanmalı, summary'den cevaplanamamalı; "options" tam olarak ["Doğru","Yanlış"] olmalı, "correct_index" 0 (Doğru) veya 1 (Yanlış).
+  - 1 tanesi "type": "mc", "bonus": true — yine kaynağın tam metnindeki bir detaya dayanmalı, summary'den cevaplanamamalı, 3 seçenekli.
+- Bu ligin seviyesine uygun zorlukta sorular üret ("${leagueName}" ne kadar üst seviyeyse o kadar zor olsun). Bu rehber kalıcı ve temel bir referans olacağı için sorular haftalık değil, o seviyeye özgü genel/kalıcı bilgiyi ölçmeli.
 
 Ham içerik:
 ${combined}`;
@@ -344,14 +402,89 @@ ${combined}`;
       const { error: updateError } = await sb.from('leagues').update({ draft_content: parsed }).eq('tier_index', leagueTierChoice);
       if (updateError) throw new Error('Veritabanına yazılamadı: ' + updateError.message);
 
-      setLeagueOk(`${leagueName} müfredatı taslak olarak kaydedildi. Aşağıdan inceleyip yayınlayabilirsin.`);
+      setLeagueOk(`${leagueName} rehberi taslak olarak kaydedildi. Aşağıdan inceleyip yayınlayabilirsin.`);
       setLeagueLinksText('');
     } catch (e: any) {
-      setLeagueError('Müfredat işlenirken bir sorun oldu: ' + e.message);
+      setLeagueError('Rehber işlenirken bir sorun oldu: ' + e.message);
     } finally {
       setLeagueBuilding(false);
       setLeagueStatus('');
     }
+  }
+
+  function updateTierDraftField(tierIndex: number, field: 'name' | 'tagline' | 'promote_threshold' | 'weekly_multiplier', value: string) {
+    setTierDrafts((prev) => ({ ...prev, [tierIndex]: { ...prev[tierIndex], [field]: value } }));
+  }
+
+  async function saveTier(tierIndex: number) {
+    const draft = tierDrafts[tierIndex];
+    if (!draft) return;
+    setTierError(''); setTierOk('');
+    if (!draft.name.trim()) { setTierError('Kademe adı boş olamaz.'); return; }
+    const multiplier = Number(draft.weekly_multiplier);
+    if (!Number.isFinite(multiplier) || multiplier <= 0) { setTierError('Haftalık çarpan geçerli bir sayı olmalı.'); return; }
+    let promoteThreshold: number | null = null;
+    if (draft.promote_threshold.trim() !== '') {
+      const n = Number(draft.promote_threshold);
+      if (!Number.isFinite(n) || !Number.isInteger(n) || n < 0) { setTierError('Yükselme eşiği boş bırakılabilir ya da geçerli bir tam sayı olmalı.'); return; }
+      promoteThreshold = n;
+    }
+    setTierSaving(tierIndex);
+    const { error } = await sb.from('leagues').update({
+      name: draft.name.trim(),
+      tagline: draft.tagline.trim() || null,
+      promote_threshold: promoteThreshold,
+      weekly_multiplier: multiplier,
+    }).eq('tier_index', tierIndex);
+    setTierSaving(null);
+    if (error) { setTierError('Kaydedilemedi: ' + error.message); return; }
+    setTierOk(`${draft.name} kaydedildi.`);
+    setLeaguesVersion((v) => v + 1);
+  }
+
+  async function addTier() {
+    setTierError(''); setTierOk('');
+    if (!newTierName.trim()) { setTierError('Yeni kademe için isim gerekli.'); return; }
+    const multiplier = Number(newTierMultiplier);
+    if (!Number.isFinite(multiplier) || multiplier <= 0) { setTierError('Haftalık çarpan geçerli bir sayı olmalı.'); return; }
+    let promoteThreshold: number | null = null;
+    if (newTierPromote.trim() !== '') {
+      const n = Number(newTierPromote);
+      if (!Number.isFinite(n) || !Number.isInteger(n) || n < 0) { setTierError('Yükselme eşiği boş bırakılabilir ya da geçerli bir tam sayı olmalı.'); return; }
+      promoteThreshold = n;
+    }
+    const nextTierIndex = leagues.length > 0 ? Math.max(...leagues.map((l) => l.tier_index)) + 1 : 0;
+    setNewTierAdding(true);
+    const { error } = await sb.from('leagues').insert({
+      tier_index: nextTierIndex,
+      name: newTierName.trim(),
+      tagline: newTierTagline.trim() || null,
+      promote_threshold: promoteThreshold,
+      weekly_multiplier: multiplier,
+      content: null,
+      draft_content: null,
+    });
+    setNewTierAdding(false);
+    if (error) { setTierError('Kademe eklenemedi: ' + error.message); return; }
+    setTierOk(`"${newTierName.trim()}" kademesi eklendi (kademe sırası ${nextTierIndex}).`);
+    setNewTierName(''); setNewTierTagline(''); setNewTierPromote(''); setNewTierMultiplier('1');
+    setLeaguesVersion((v) => v + 1);
+  }
+
+  async function updateFeedbackStatus(row: Feedback, status: Feedback['status']) {
+    setFeedbackError('');
+    const prevRows = feedbackRows;
+    setFeedbackRows((rows) => rows.map((r) => (r.id === row.id ? { ...r, status } : r)));
+    const { error } = await sb.from('feedback').update({ status }).eq('id', row.id);
+    if (error) { setFeedbackError('Durum güncellenemedi: ' + error.message); setFeedbackRows(prevRows); }
+  }
+
+  async function loadMarketingConsent() {
+    setMarketingError(''); setMarketingLoading(true);
+    const { data, error } = await sb.rpc('admin_marketing_consent_users');
+    setMarketingLoading(false);
+    if (error) { setMarketingError('Yüklenemedi: ' + error.message); return; }
+    setMarketingRows((data as { username: string; email: string; created_at: string }[]) || []);
   }
 
   function weekToDraft(w: Week): ReviewDraft {
@@ -570,15 +703,15 @@ ${combined}`;
 
       <div className="panel">
         <p className="panel-title">Demo Ligler</p>
-        <p className="panel-sub">Tüm ligler için sahte müfredat yayınlar, token harcamaz — kullanıcı panelindeki lig akışını hemen test etmek için.</p>
-        <button className="btn ghost" onClick={publishDemoLeagues} disabled={leagues.length === 0}>Tüm Liglere Demo Müfredat Yayınla</button>
+        <p className="panel-sub">Tüm ligler için sahte rehber yayınlar, token harcamaz — kullanıcı panelindeki lig akışını hemen test etmek için.</p>
+        <button className="btn ghost" onClick={publishDemoLeagues} disabled={leagues.length === 0}>Tüm Liglere Demo Rehber Yayınla</button>
         {leagueError && <div className="error-box">{leagueError}</div>}
         {leagueOk && <div className="ok-box">{leagueOk}</div>}
       </div>
 
       {apiKey && (
         <div className="panel">
-          <p className="panel-title">Lig Müfredatı Oluştur</p>
+          <p className="panel-title">Lig Rehberi Oluştur</p>
           <p className="panel-sub">Her lig için bir kere oluşturulan, haftalık değişmeyen sabit içerik. AI çıktısı önce taslak olarak kaydedilir, aşağıdan inceleyip yayınlarsın.</p>
           <label className="field-label">Lig Seç</label>
           <select value={leagueTierChoice} onChange={(e) => setLeagueTierChoice(Number(e.target.value))}
@@ -589,13 +722,52 @@ ${combined}`;
           </select>
           <textarea value={leagueLinksText} onChange={(e) => setLeagueLinksText(e.target.value)} placeholder={'https://...\nhttps://...\nhttps://...'} />
           <button className="btn" onClick={buildLeagueContent} disabled={leagueBuilding || !leagueLinksText.trim()}>
-            {leagueBuilding ? 'İşleniyor…' : 'Lig Müfredatını Oluştur'}
+            {leagueBuilding ? 'İşleniyor…' : 'Lig Rehberini Oluştur'}
           </button>
           {leagueBuilding && <div className="loading-line">{leagueStatus}</div>}
           {leagueError && <div className="error-box">{leagueError}</div>}
           {leagueOk && <div className="ok-box">{leagueOk}</div>}
         </div>
       )}
+
+      <div className="panel">
+        <p className="panel-title">Lig Kademeleri</p>
+        <p className="panel-sub">Mevcut kademelerin adını, alt başlığını, yükselme eşiğini ve haftalık çarpanını düzenle, ya da en üste yeni bir kademe ekle. Sıralamayı bozmamak için kademe silinemez/yeniden sıralanamaz — sadece yeniden adlandırma ve ekleme yapılabilir.</p>
+        {leagues.map((l) => {
+          const d = tierDrafts[l.tier_index] || { name: l.name, tagline: l.tagline || '', promote_threshold: l.promote_threshold === null ? '' : String(l.promote_threshold), weekly_multiplier: String(l.weekly_multiplier) };
+          return (
+            <div key={l.tier_index} style={{ border: '1px solid var(--hairline)', padding: 12, marginBottom: 10 }}>
+              <p className="field-label">Kademe {l.tier_index} — {l.name}</p>
+              <label className="field-label">Ad</label>
+              <input type="text" value={d.name} onChange={(e) => updateTierDraftField(l.tier_index, 'name', e.target.value)} />
+              <label className="field-label">Alt Başlık (tagline)</label>
+              <input type="text" value={d.tagline} onChange={(e) => updateTierDraftField(l.tier_index, 'tagline', e.target.value)} placeholder="Örn: AI gündemini sıkı takip eden" />
+              <label className="field-label">Yükselme Eşiği (boş = en üst kademe)</label>
+              <input type="text" inputMode="numeric" value={d.promote_threshold} onChange={(e) => updateTierDraftField(l.tier_index, 'promote_threshold', e.target.value)} placeholder="Örn: 500" />
+              <label className="field-label">Haftalık Çarpan</label>
+              <input type="text" inputMode="decimal" value={d.weekly_multiplier} onChange={(e) => updateTierDraftField(l.tier_index, 'weekly_multiplier', e.target.value)} />
+              <button className="btn ghost" style={{ marginTop: 10 }} onClick={() => saveTier(l.tier_index)} disabled={tierSaving === l.tier_index}>
+                {tierSaving === l.tier_index ? 'Kaydediliyor…' : 'Kaydet'}
+              </button>
+            </div>
+          );
+        })}
+
+        <p className="field-label" style={{ marginTop: 18 }}>Yeni Kademe Ekle (kademe sırası {leagues.length > 0 ? Math.max(...leagues.map((l) => l.tier_index)) + 1 : 0})</p>
+        <label className="field-label">Ad</label>
+        <input type="text" value={newTierName} onChange={(e) => setNewTierName(e.target.value)} placeholder="Örn: Efsane Ligi" />
+        <label className="field-label">Alt Başlık (tagline)</label>
+        <input type="text" value={newTierTagline} onChange={(e) => setNewTierTagline(e.target.value)} placeholder="Örn: AI gündemini sıkı takip eden" />
+        <label className="field-label">Yükselme Eşiği (boş = en üst kademe)</label>
+        <input type="text" inputMode="numeric" value={newTierPromote} onChange={(e) => setNewTierPromote(e.target.value)} placeholder="Örn: 500" />
+        <label className="field-label">Haftalık Çarpan</label>
+        <input type="text" inputMode="decimal" value={newTierMultiplier} onChange={(e) => setNewTierMultiplier(e.target.value)} />
+        <button className="btn" style={{ marginTop: 10 }} onClick={addTier} disabled={newTierAdding || !newTierName.trim()}>
+          {newTierAdding ? 'Ekleniyor…' : 'Kademe Ekle'}
+        </button>
+        {tierError && <div className="error-box">{tierError}</div>}
+        {tierOk && <div className="ok-box">{tierOk}</div>}
+      </div>
 
       <div className="panel">
         <p className="panel-title">Lig İçerikleri</p>
@@ -631,6 +803,53 @@ ${combined}`;
           {editorError && <div className="error-box">{editorError}</div>}
         </div>
       )}
+
+      <div className="panel">
+        <p className="panel-title">Geri Bildirimler</p>
+        <p className="panel-sub">Kullanıcıların gönderdiği genel geri bildirimler ve kaynak/rehber önerileri.</p>
+        {feedbackError && <div className="error-box">{feedbackError}</div>}
+        {feedbackRows.length === 0 && !feedbackError && <p className="panel-sub">Henüz geri bildirim yok.</p>}
+        {feedbackRows.map((f) => (
+          <div key={f.id} style={{ border: '1px solid var(--hairline)', padding: 12, marginBottom: 10 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+              <span>
+                <span className="field-label" style={{ display: 'inline', marginRight: 8 }}>
+                  {f.category === 'content_suggestion' ? 'Kaynak-Rehber Önerisi' : 'Genel'}
+                </span>
+                {feedbackUsernames[f.user_id] || f.user_id} · {new Date(f.created_at).toLocaleDateString('tr-TR')}
+              </span>
+              <select value={f.status} onChange={(e) => updateFeedbackStatus(f, e.target.value as Feedback['status'])}
+                style={{ background: 'var(--ink)', border: '1px solid var(--hairline)', color: 'var(--paper)', fontFamily: 'var(--mono)', fontSize: '12.5px', padding: '8px' }}>
+                <option value="new">Yeni</option>
+                <option value="reviewed">İncelendi</option>
+                <option value="resolved">Çözüldü</option>
+              </select>
+            </div>
+            <p style={{ marginTop: 8 }}>{f.message}</p>
+          </div>
+        ))}
+        <button className="btn ghost" onClick={() => setFeedbackVersion((v) => v + 1)}>Yenile</button>
+      </div>
+
+      <div className="panel">
+        <p className="panel-title">Pazarlama İzni Olan Kullanıcılar</p>
+        <p className="panel-sub">Pazarlama/güncelleme e-postalarına izin veren kullanıcıların listesi.</p>
+        <button className="btn ghost" onClick={loadMarketingConsent} disabled={marketingLoading}>
+          {marketingLoading ? 'Yükleniyor…' : 'Listele'}
+        </button>
+        {marketingError && <div className="error-box">{marketingError}</div>}
+        {marketingRows && marketingRows.length === 0 && <p className="panel-sub" style={{ marginTop: 10 }}>İzin veren kullanıcı yok.</p>}
+        {marketingRows && marketingRows.length > 0 && (
+          <div style={{ marginTop: 10 }}>
+            {marketingRows.map((r) => (
+              <div className="week-row" key={r.email}>
+                <span>{r.username} · {r.email}</span>
+                <span>{new Date(r.created_at).toLocaleDateString('tr-TR')}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
