@@ -40,6 +40,9 @@ function AdminLeaguesContent() {
   const [newTierMultiplier, setNewTierMultiplier] = useState('1');
   const [newTierAdding, setNewTierAdding] = useState(false);
 
+  // Kademeler: per-tier expand (settings form)
+  const [expandedTierSettings, setExpandedTierSettings] = useState<number | null>(null);
+
   // Rehberler: per-tier expand
   const [expandedTier, setExpandedTier] = useState<number | null>(null);
   const [leagueLinksText, setLeagueLinksText] = useState('');
@@ -296,20 +299,27 @@ ${combined}`;
           <p className="panel-sub">Mevcut kademelerin adını, alt başlığını, yükselme eşiğini ve haftalık çarpanını düzenle, ya da en üste yeni bir kademe ekle. Sıralamayı bozmamak için kademe silinemez/yeniden sıralanamaz — sadece yeniden adlandırma ve ekleme yapılabilir.</p>
           {leagues.map((l) => {
             const d = tierDrafts[l.tier_index] || { name: l.name, tagline: l.tagline || '', promote_threshold: l.promote_threshold === null ? '' : String(l.promote_threshold), weekly_multiplier: String(l.weekly_multiplier) };
+            const isOpen = expandedTierSettings === l.tier_index;
             return (
-              <div key={l.tier_index} style={{ border: '1px solid var(--hairline)', padding: 12, marginBottom: 10 }}>
-                <p className="field-label">Kademe {l.tier_index} — {l.name}</p>
-                <label className="field-label">Ad</label>
-                <input type="text" value={d.name} onChange={(e) => updateTierDraftField(l.tier_index, 'name', e.target.value)} />
-                <label className="field-label">Alt Başlık (tagline)</label>
-                <input type="text" value={d.tagline} onChange={(e) => updateTierDraftField(l.tier_index, 'tagline', e.target.value)} placeholder="Örn: AI gündemini sıkı takip eden" />
-                <label className="field-label">Yükselme Eşiği (boş = en üst kademe)</label>
-                <input type="text" inputMode="numeric" value={d.promote_threshold} onChange={(e) => updateTierDraftField(l.tier_index, 'promote_threshold', e.target.value)} placeholder="Örn: 500" />
-                <label className="field-label">Haftalık Çarpan</label>
-                <input type="text" inputMode="decimal" value={d.weekly_multiplier} onChange={(e) => updateTierDraftField(l.tier_index, 'weekly_multiplier', e.target.value)} />
-                <button className="btn ghost" style={{ marginTop: 10 }} onClick={() => saveTier(l.tier_index)} disabled={tierSaving === l.tier_index}>
-                  {tierSaving === l.tier_index ? 'Kaydediliyor…' : 'Kaydet'}
-                </button>
+              <div key={l.tier_index} style={{ marginBottom: 10 }}>
+                <div className="week-row" style={{ cursor: 'pointer' }} onClick={() => setExpandedTierSettings(isOpen ? null : l.tier_index)}>
+                  <span>{isOpen ? '▾' : '▸'} Kademe {l.tier_index} — {l.name}{l.tagline ? ' — ' + l.tagline : ''}</span>
+                </div>
+                {isOpen && (
+                  <div style={{ border: '1px solid var(--hairline)', padding: 12, marginTop: 8 }}>
+                    <label className="field-label">Ad</label>
+                    <input type="text" value={d.name} onChange={(e) => updateTierDraftField(l.tier_index, 'name', e.target.value)} />
+                    <label className="field-label">Alt Başlık (tagline)</label>
+                    <input type="text" value={d.tagline} onChange={(e) => updateTierDraftField(l.tier_index, 'tagline', e.target.value)} placeholder="Örn: AI gündemini sıkı takip eden" />
+                    <label className="field-label">Yükselme Eşiği (boş = en üst kademe)</label>
+                    <input type="text" inputMode="numeric" value={d.promote_threshold} onChange={(e) => updateTierDraftField(l.tier_index, 'promote_threshold', e.target.value)} placeholder="Örn: 500" />
+                    <label className="field-label">Haftalık Çarpan</label>
+                    <input type="text" inputMode="decimal" value={d.weekly_multiplier} onChange={(e) => updateTierDraftField(l.tier_index, 'weekly_multiplier', e.target.value)} />
+                    <button className="btn ghost" style={{ marginTop: 10 }} onClick={() => saveTier(l.tier_index)} disabled={tierSaving === l.tier_index}>
+                      {tierSaving === l.tier_index ? 'Kaydediliyor…' : 'Kaydet'}
+                    </button>
+                  </div>
+                )}
               </div>
             );
           })}

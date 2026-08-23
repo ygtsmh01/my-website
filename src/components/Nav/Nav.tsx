@@ -13,10 +13,17 @@ const LINKS = [
   { to: '/guide', label: '❓ Kılavuz' },
 ];
 
+const ADMIN_SUBLINKS = [
+  { to: '/admin/haftalik-icerik', label: '🗞️ Haftalık İçerik' },
+  { to: '/admin/lig-yonetimi', label: '🏅 Lig Yönetimi' },
+  { to: '/admin/kullanicilar', label: '💬 Kullanıcılar & Geri Bildirim' },
+];
+
 export default function Nav() {
   const [uid, setUid] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [open, setOpen] = useState(false);
+  const [adminSubOpen, setAdminSubOpen] = useState(false);
   const { theme, toggleTheme } = useTheme();
   const location = useLocation();
   const navigate = useNavigate();
@@ -57,18 +64,24 @@ export default function Nav() {
         ))}
         {isAdmin && (
           <>
-            <Link to="/admin" className={location.pathname === '/admin' ? 'active' : ''} onClick={() => setOpen(false)}>
-              🛠 Admin Paneli
-            </Link>
-            <Link to="/admin/haftalik-icerik" className={location.pathname === '/admin/haftalik-icerik' ? 'active' : ''} onClick={() => setOpen(false)}>
-              🗞️ Haftalık İçerik
-            </Link>
-            <Link to="/admin/lig-yonetimi" className={location.pathname === '/admin/lig-yonetimi' ? 'active' : ''} onClick={() => setOpen(false)}>
-              🏅 Lig Yönetimi
-            </Link>
-            <Link to="/admin/kullanicilar" className={location.pathname === '/admin/kullanicilar' ? 'active' : ''} onClick={() => setOpen(false)}>
-              💬 Kullanıcılar &amp; Geri Bildirim
-            </Link>
+            <div className="aitakip-admin-row">
+              <Link to="/admin" className={'aitakip-admin-link' + (location.pathname === '/admin' ? ' active' : '')} onClick={() => setOpen(false)}>
+                🛠 Admin Paneli
+              </Link>
+              <button
+                type="button"
+                className={'aitakip-admin-toggle' + (adminSubOpen ? ' open' : '')}
+                aria-label={adminSubOpen ? 'Admin alt menüsünü kapat' : 'Admin alt menüsünü aç'}
+                onClick={() => setAdminSubOpen((v) => !v)}
+              >
+                ▾
+              </button>
+            </div>
+            {adminSubOpen && ADMIN_SUBLINKS.map((l) => (
+              <Link key={l.to} to={l.to} className={'aitakip-admin-sublink' + (location.pathname === l.to ? ' active' : '')} onClick={() => setOpen(false)}>
+                {l.label}
+              </Link>
+            ))}
           </>
         )}
         <div className="aitakip-nav-sep" />
