@@ -248,7 +248,6 @@ export default function Admin() {
   "must_reads": [ { "title": "başlık", "url": "kaynağın orijinal linki", "summary": "4-6 cümlelik, doğrudan bilgi aktaran ders notu" } ],
   "quiz": [ { "source_index": 0, "type": "mc", "bonus": false, "question": "soru metni", "options": ["seçenek1","seçenek2","seçenek3"], "correct_index": 0, "explanation": "kısa açıklama" } ],
   "number_challenge": { "source_index": 0, "question": "kaynakta geçen bir sayıyı soran soru metni", "correct_value": 42, "tolerance": 5, "explanation": "kısa açıklama" },
-  "matching": { "pairs": [ { "source_index": 0, "detail": "o kaynağa özgü kısa, ayırt edici bir detay/olgu cümlesi" } ] },
   "risk_question": { "question": "orta-zor bir soru", "options": ["seçenek1","seçenek2","seçenek3"], "correct_index": 0, "explanation": "kısa açıklama" }${isBossWeek ? ',\n  "boss_question": { "question": "birden fazla kaynaktaki bilgiyi birleştirmeyi gerektiren zor bir sentez sorusu", "options": ["seçenek1","seçenek2","seçenek3"], "correct_index": 0, "explanation": "kısa açıklama" }' : ''}
 }
 
@@ -260,10 +259,14 @@ Kurallar:
   - 2 tanesi "type": "mc", "bonus": false — cevabı summary'den çıkarılabilecek, genel anlama soruları, farklı yönlere odaklansın, 3 seçenekli.
   - 1 tanesi "type": "tf", "bonus": true — Doğru/Yanlış formatında bir ifade, SADECE kaynağın tam metnindeki spesifik bir detaya dayanmalı, summary'den cevaplanamamalı; "options" tam olarak ["Doğru","Yanlış"] olmalı, "correct_index" 0 (Doğru) veya 1 (Yanlış).
   - 1 tanesi "type": "mc", "bonus": true — yine kaynağın tam metnindeki bir detaya dayanmalı, summary'den cevaplanamamalı, 3 seçenekli.
-- "number_challenge": haftada sadece 1 tane, kaynaklardan birinde geçen somut bir sayıyı/istatistiği sorsun, makul bir "tolerance" belirle.
-- "matching": kaynak sayısı 2 veya daha fazlaysa doldur, "pairs" uzunluğu kaynak sayısına eşit olsun, her "detail" sadece o kaynağa ait, kısa ve ayırt edici olsun. Kaynak sayısı 1 ise "pairs": [] olarak boş bırak.
-- "risk_question": kaynaklardan herhangi birine dayanan, normal sorulardan biraz daha zor, 3 seçenekli tek bir soru.
-${isBossWeek ? '- "boss_question": bu bir BOSS HAFTASI, birden fazla kaynaktaki bilgiyi birlikte kullanmayı gerektiren en zor soruyu üret.' : ''}
+- SORU KALİTESİ — ÇOK ÖNEMLİ, kesinlikle uy: Bu bir bilgi yarışması/trivia sınavı DEĞİL, okuyucunun konuyu gerçekten ANLAYIP ANLAMADIĞINI ölçen bir sınav. Şunları KESİNLİKLE YAPMA:
+  - "X ne kadardı/kaçtı?", "Y'nin rakamı neydi?" gibi salt bir sayıyı/istatistiği ezberden sorma soruları YASAK — sayı sorusu SADECE "number_challenge" alanında olur, quiz'de asla tekrar sorulmaz.
+  - Birbiriyle ilgisiz 2-3 olguyu yan yana koyup "aşağıdakilerden hangisi doğrudur?" diye sorma — bu şans/ezber sorusu üretir, anlama ölçmez.
+  - Bir ismi, tarihi veya terimi salt hatırlamayı test eden soru yazma.
+  Bunun yerine şu kalıplarda sorular kur: "Bu gelişme neden önemli/riskli?", "Bu iki bilgi arasındaki ilişki/çelişki nedir?", "Bu durumun en olası sonucu/etkisi nedir?", "Kaynağa göre bu neden böyle oldu/olacak?", "Bu bilgi [ilgili kavram] açısından ne ifade ediyor?" — yani NEDEN, SONUÇ, ÖNEM veya İLİŞKİ soran sorular yaz. Yanlış şıklar rastgele değil, konuyu yüzeysel/yanlış anlayan birinin makul şekilde seçebileceği çeldiriciler olsun.
+- "number_challenge": haftada sadece 1 tane, kaynaklardan birinde geçen somut bir sayıyı/istatistiği sorsun (rakam sorusu SADECE burada olur), makul bir "tolerance" belirle.
+- "risk_question": kaynaklardan herhangi birine dayanan, yukarıdaki SORU KALİTESİ kuralına uyan (neden/sonuç/ilişki soran, ezber değil), normal sorulardan biraz daha zor, 3 seçenekli tek bir soru.
+${isBossWeek ? '- "boss_question": bu bir BOSS HAFTASI, birden fazla kaynaktaki bilgiyi birlikte kullanmayı ve aralarındaki ilişkiyi/sonucu kavramayı gerektiren, yukarıdaki SORU KALİTESİ kuralına uyan en zor soruyu üret.' : ''}
 
 Ham içerik:
 ${combined}`;
@@ -372,6 +375,10 @@ Kurallar:
   - 2 tanesi "type": "mc", "bonus": false — cevabı summary'den çıkarılabilecek, genel anlama soruları, farklı yönlere odaklansın, 3 seçenekli.
   - 1 tanesi "type": "tf", "bonus": true — Doğru/Yanlış formatında bir ifade, SADECE kaynağın tam metnindeki spesifik bir detaya dayanmalı, summary'den cevaplanamamalı; "options" tam olarak ["Doğru","Yanlış"] olmalı, "correct_index" 0 (Doğru) veya 1 (Yanlış).
   - 1 tanesi "type": "mc", "bonus": true — yine kaynağın tam metnindeki bir detaya dayanmalı, summary'den cevaplanamamalı, 3 seçenekli.
+- SORU KALİTESİ — ÇOK ÖNEMLİ, kesinlikle uy: Bu bir bilgi yarışması/trivia sınavı DEĞİL, okuyucunun konuyu gerçekten ANLAYIP ANLAMADIĞINI ölçen bir sınav. Şunları KESİNLİKLE YAPMA:
+  - Bir sayıyı/istatistiği/ismi/tarihi ezberden sorma (örn. "X ne kadardı?", "Y kaç kişiydi?") — bu bir kalıcı rehber, güncel bir sayıya dayanmak zaten yanlış olur.
+  - Birbiriyle ilgisiz 2-3 olguyu yan yana koyup "aşağıdakilerden hangisi doğrudur?" diye sorma — bu şans/ezber sorusu üretir, anlama ölçmez.
+  Bunun yerine şu kalıplarda sorular kur: "Bu neden önemli?", "Bu iki kavram arasındaki ilişki/fark nedir?", "Bu, [ilgili kavram] açısından ne ifade eder?", "Bu bilgiye göre en olası sonuç/uygulama nedir?" — yani NEDEN, SONUÇ, ÖNEM veya İLİŞKİ soran, o seviyeye özgü kavramsal anlayışı test eden sorular. Yanlış şıklar rastgele değil, konuyu yüzeysel anlayan birinin makul şekilde seçebileceği çeldiriciler olsun.
 - Bu ligin seviyesine uygun zorlukta sorular üret ("${leagueName}" ne kadar üst seviyeyse o kadar zor olsun). Bu rehber kalıcı ve temel bir referans olacağı için sorular haftalık değil, o seviyeye özgü genel/kalıcı bilgiyi ölçmeli.
 
 Ham içerik:
