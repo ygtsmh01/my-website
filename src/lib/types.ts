@@ -41,6 +41,14 @@ export interface RiskOrBossQuestion {
   explanation: string;
 }
 
+export interface CapstoneQuestion extends RiskOrBossQuestion {
+  // Which units (source_index values into the league's must_reads/quiz) this
+  // synthesis question draws on — lets the admin panel show, and lets a
+  // single-unit regeneration surgically drop only the capstone questions that
+  // reference the unit being replaced, without touching the rest.
+  source_indices: number[];
+}
+
 export interface Week {
   week_number: number;
   week_theme: string | null;
@@ -78,7 +86,7 @@ export interface LeagueContent {
   // finishes the tier's "academy" lesson path. Absent/null on older content
   // generated before this field existed — the player-side flow must fall back
   // gracefully (e.g. a mixed-question capstone) when this is missing.
-  capstone: RiskOrBossQuestion[] | null;
+  capstone: CapstoneQuestion[] | null;
 }
 
 export interface League {

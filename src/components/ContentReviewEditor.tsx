@@ -1,10 +1,10 @@
-import type { MustRead, QuizQuestion, NumberChallenge, Matching, RiskOrBossQuestion } from '../lib/types';
+import type { MustRead, QuizQuestion, NumberChallenge, Matching, RiskOrBossQuestion, CapstoneQuestion } from '../lib/types';
 
 // Client-only editing shapes — same fields as the DB types plus a synthetic `_key`
 // used for stable React list keys while editing. Strip `_key` before writing back.
 export type EditableMustRead = MustRead & { _key: string };
 export type EditableQuizQuestion = QuizQuestion & { _key: string };
-export type EditableCapstoneQuestion = RiskOrBossQuestion & { _key: string };
+export type EditableCapstoneQuestion = CapstoneQuestion & { _key: string };
 
 export interface ReviewDraft {
   must_reads: EditableMustRead[];
@@ -32,8 +32,8 @@ export function keyMustReads(list: MustRead[]): EditableMustRead[] {
 export function keyQuiz(list: QuizQuestion[]): EditableQuizQuestion[] {
   return list.map((q) => ({ ...q, _key: newKey() }));
 }
-export function keyCapstone(list: RiskOrBossQuestion[]): EditableCapstoneQuestion[] {
-  return list.map((q) => ({ ...q, _key: newKey() }));
+export function keyCapstone(list: CapstoneQuestion[]): EditableCapstoneQuestion[] {
+  return list.map((q) => ({ ...q, source_indices: q.source_indices || [], _key: newKey() }));
 }
 export function stripKeys(draft: ReviewDraft) {
   return {
@@ -125,7 +125,7 @@ export default function ContentReviewEditor({ draft, onChange, showWeekFields, i
     update({ quiz: draft.quiz.filter((q) => q._key !== key) });
   }
 
-  function updateCapstone(key: string, patch: Partial<RiskOrBossQuestion>) {
+  function updateCapstone(key: string, patch: Partial<CapstoneQuestion>) {
     update({ capstone: (draft.capstone || []).map((q) => (q._key === key ? { ...q, ...patch } : q)) });
   }
 
@@ -155,7 +155,7 @@ export default function ContentReviewEditor({ draft, onChange, showWeekFields, i
     update({
       capstone: [
         ...(draft.capstone || []),
-        { _key: newKey(), question: '', options: ['', '', ''], correct_index: 0, explanation: '' },
+        { _key: newKey(), question: '', options: ['', '', ''], correct_index: 0, explanation: '', source_indices: [] },
       ],
     });
   }
@@ -245,6 +245,13 @@ export default function ContentReviewEditor({ draft, onChange, showWeekFields, i
               <div className="editor-subrow-head">
                 <span className="tag">Bitirme Sorusu</span>
                 <button className="btn ghost" onClick={() => removeCapstone(q._key)}>Soruyu Sil</button>
+              </div>
+              <div className="field-label" style={{ marginBottom: 10 }}>
+                Kapsar: {(q.source_indices && q.source_indices.length > 0)
+                  ? q.source_indices
+                      .map((si) => draft.must_reads[si]?.title ? `${draft.must_reads[si].title}` : `Ünite ${si}`)
+                      .join(', ')
+                  : '(belirtilmemiş)'}
               </div>
               <label className="field-label">Soru</label>
               <textarea value={q.question} onChange={(e) => updateCapstone(q._key, { question: e.target.value })} />

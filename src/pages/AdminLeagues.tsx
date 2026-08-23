@@ -6,7 +6,7 @@ import ContentReviewEditor, { keyMustReads, keyQuiz, keyCapstone, stripKeys } fr
 import type { ReviewDraft } from '../components/ContentReviewEditor';
 import AdminGuard from '../components/AdminGuard';
 import { APIKEY_SESSION_KEY } from './Admin';
-import { runLeagueGeneration, useBackgroundTasks } from '../lib/backgroundTasks';
+import { runLeagueGeneration, runUnitRegeneration, useBackgroundTasks } from '../lib/backgroundTasks';
 
 function leagueContentToDraft(c: { must_reads: any[]; quiz: any[]; capstone?: any[] | null } | null): ReviewDraft {
   return {
@@ -47,6 +47,13 @@ function AdminLeaguesContent() {
   const leagueTasks = bgTasks.filter((t) => t.kind === 'league');
   const anyLeagueRunning = leagueTasks.some((t) => t.status === 'running');
 
+  // Tek Ünite Yenile: per-tier selected unit index + single URL input.
+  const unitTasks = bgTasks.filter((t) => t.kind === 'unit');
+  const anyUnitRunning = unitTasks.some((t) => t.status === 'running');
+  const [unitSourceIndex, setUnitSourceIndex] = useState<Record<number, number>>({});
+  const [unitUrlText, setUnitUrlText] = useState<Record<number, string>>({});
+  const [unitError, setUnitError] = useState<Record<number, string>>({});
+
   const [editMode, setEditMode] = useState<'draft_content' | 'content' | null>(null);
   const [editDraft, setEditDraft] = useState<ReviewDraft | null>(null);
   const [editorError, setEditorError] = useState('');
@@ -69,6 +76,17 @@ function AdminLeaguesContent() {
       }
     }
   }, [leagueTasks]);
+
+  // Same refetch-on-completion pattern for single-unit regeneration tasks.
+  const refetchedForUnitTask = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    for (const t of unitTasks) {
+      if (t.status === 'done' && !refetchedForUnitTask.current.has(t.id)) {
+        refetchedForUnitTask.current.add(t.id);
+        setLeaguesVersion((v) => v + 1);
+      }
+    }
+  }, [unitTasks]);
 
   useEffect(() => {
     setTierDrafts((prev) => {
@@ -180,6 +198,41 @@ function AdminLeaguesContent() {
     // been successfully handed off.
     void runLeagueGeneration({ urls, apiKey, tierIndex: l.tier_index, leagueName: l.name });
     setLeagueLinksText('');
+  }
+
+  // The tier's "current" content for purposes of picking a unit to regenerate:
+  // draft_content is preferred when both exist (matches how the rest of this
+  // admin surface already treats a draft as the in-progress/current state).
+  function authoritativeContent(l: League) {
+    return l.draft_content || l.content;
+  }
+
+  function regenerateUnit(l: League) {
+    const content = authoritativeContent(l);
+    const sourceIndex = unitSourceIndex[l.tier_index] ?? 0;
+    const url = (unitUrlText[l.tier_index] || '').trim();
+    setUnitError((prev) => ({ ...prev, [l.tier_index]: '' }));
+    if (!content || !content.must_reads[sourceIndex]) {
+      setUnitError((prev) => ({ ...prev, [l.tier_index]: 'Geçerli bir ünite seçilmedi.' }));
+      return;
+    }
+    if (!url) {
+      setUnitError((prev) => ({ ...prev, [l.tier_index]: 'Yeni kaynak linki gerekli.' }));
+      return;
+    }
+    if (!apiKey) return;
+    // Fire-and-forget, same pattern as buildLeagueContent — survives navigation
+    // via the shared background-task store.
+    void runUnitRegeneration({
+      url,
+      apiKey,
+      tierIndex: l.tier_index,
+      leagueName: l.name,
+      sourceIndex,
+      unitTitle: content.must_reads[sourceIndex].title,
+      currentContent: content,
+    });
+    setUnitUrlText((prev) => ({ ...prev, [l.tier_index]: '' }));
   }
 
   async function saveLeagueEditor(l: League, publish: boolean) {
@@ -314,6 +367,41 @@ function AdminLeaguesContent() {
                         ? <div key={t.id} className="error-box">{t.message}</div>
                         : <div key={t.id} className="ok-box">{t.message}</div>
                     ))}
+
+                    {authoritativeContent(l) && authoritativeContent(l)!.must_reads.length > 0 && (
+                      <div style={{ marginTop: 20 }}>
+                        <p className="panel-title" style={{ fontSize: 15 }}>Tek Ünite Yenile</p>
+                        <p className="panel-sub">Mevcut rehberdeki tek bir üniteyi, tek bir yeni link ile yenile — diğer üniteler ve bitirme sınavının kalan soruları aynen kalır, sadece bu üniteyi referans alan bitirme soruları yenisiyle değiştirilir.</p>
+                        <label className="field-label">Yenilenecek Ünite</label>
+                        <select
+                          value={unitSourceIndex[l.tier_index] ?? 0}
+                          onChange={(e) => setUnitSourceIndex((prev) => ({ ...prev, [l.tier_index]: Number(e.target.value) }))}
+                          style={{ width: '100%', background: 'var(--ink)', border: '1px solid var(--hairline)', color: 'var(--paper)', fontFamily: 'var(--mono)', fontSize: '12.5px', padding: '12px', marginBottom: 10 }}
+                        >
+                          {authoritativeContent(l)!.must_reads.map((m, i) => (
+                            <option key={i} value={i}>{i}. {m.title || '(başlıksız)'}</option>
+                          ))}
+                        </select>
+                        <label className="field-label">Yeni Kaynak Linki (tek link)</label>
+                        <input
+                          type="text"
+                          value={unitUrlText[l.tier_index] || ''}
+                          onChange={(e) => setUnitUrlText((prev) => ({ ...prev, [l.tier_index]: e.target.value }))}
+                          placeholder="https://..."
+                        />
+                        <button className="btn" onClick={() => regenerateUnit(l)} disabled={anyUnitRunning || !(unitUrlText[l.tier_index] || '').trim() || !apiKey}>
+                          {anyUnitRunning ? 'İşleniyor…' : 'Üniteyi Yenile'}
+                        </button>
+                        {unitError[l.tier_index] && <div className="error-box">{unitError[l.tier_index]}</div>}
+                        {unitTasks.filter((t) => t.label.startsWith(l.name + ' ·')).map((t) => (
+                          t.status === 'running'
+                            ? <div key={t.id} className="loading-line">{t.message}</div>
+                            : t.status === 'error'
+                            ? <div key={t.id} className="error-box">{t.message}</div>
+                            : <div key={t.id} className="ok-box">{t.message}</div>
+                        ))}
+                      </div>
+                    )}
 
                     {editDraft && editMode && (
                       <>
