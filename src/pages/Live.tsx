@@ -229,7 +229,10 @@ export default function Live() {
   }
 
   async function fetchQuestionPool(leagueTier: number) {
-    const { data } = await sb.from('weeks').select('quiz');
+    // Cap how many past weeks we pull questions from — without this, the pool
+    // (and the network payload) grows without bound as weeks accumulate.
+    const { data } = await sb.from('weeks').select('quiz').eq('status', 'published')
+      .order('week_number', { ascending: false }).limit(26);
     let all: any[] = [];
     (data || []).forEach((w: any) => {
       (w.quiz || []).forEach((q: any) => {

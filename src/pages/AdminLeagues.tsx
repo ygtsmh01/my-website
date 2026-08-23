@@ -172,7 +172,7 @@ function AdminLeaguesContent() {
   function buildLeagueContent(l: League) {
     const urls = leagueLinksText.split('\n').map((s) => s.trim()).filter(Boolean);
     if (urls.length === 0 || !apiKey) return;
-    if (urls.length > 6) { setLeagueError('En fazla 6 link ekleyebilirsin.'); return; }
+    if (urls.length > 15) { setLeagueError('En fazla 15 link ekleyebilirsin.'); return; }
     setLeagueError('');
     // Fire-and-forget: runs in the shared background-task store, independent
     // of this component's lifecycle, so it keeps going if the admin navigates
@@ -300,7 +300,7 @@ function AdminLeaguesContent() {
                 {isOpen && (
                   <div className="panel" style={{ marginTop: 8 }}>
                     <p className="panel-title" style={{ fontSize: 15 }}>Rehber Oluştur</p>
-                    <label className="field-label">Kaynak Linkleri (en fazla 6)</label>
+                    <label className="field-label">Kaynak Linkleri (en fazla 15)</label>
                     <textarea value={leagueLinksText} onChange={(e) => setLeagueLinksText(e.target.value)} placeholder={'https://...\nhttps://...\nhttps://...'} />
                     <button className="btn" onClick={() => buildLeagueContent(l)} disabled={anyLeagueRunning || !leagueLinksText.trim() || !apiKey}>
                       {anyLeagueRunning ? 'İşleniyor…' : 'Rehber Oluştur'}

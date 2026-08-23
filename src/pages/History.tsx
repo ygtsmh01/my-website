@@ -45,7 +45,11 @@ export default function History() {
     if (!session) return;
     refreshHistory();
     sb.from('profiles').select('*').eq('id', session.user.id).single().then(({ data }) => setProfile(data));
-    sb.from('weeks').select('week_number, created_at, week_theme, week_label, quiz').order('week_number', { ascending: false })
+    // Capped so the payload (which includes each week's full quiz) doesn't grow
+    // without bound as weeks accumulate — generous enough to cover ~4 years
+    // of weekly content, well past any realistic "catch up on a missed week" need.
+    sb.from('weeks').select('week_number, created_at, week_theme, week_label, quiz').eq('status', 'published')
+      .order('week_number', { ascending: false }).limit(200)
       .then(({ data }) => {
         setAllWeeks((data as WeekListItem[]) || []);
         const map: Record<number, WeekDateInfo> = {};

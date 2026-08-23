@@ -245,7 +245,7 @@ ${combined}`;
         'anthropic-version': '2023-06-01',
         'anthropic-dangerous-direct-browser-access': 'true',
       },
-      body: JSON.stringify({ model: MODEL, max_tokens: 20000, messages: [{ role: 'user', content: prompt }] }),
+      body: JSON.stringify({ model: MODEL, max_tokens: 48000, messages: [{ role: 'user', content: prompt }] }),
     });
     const data = await response.json();
     if (data.error) throw new Error(data.error.message || 'api-error');
