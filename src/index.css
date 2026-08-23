@@ -202,6 +202,12 @@ label.field-label { display: block; font-family: var(--mono); font-size: 10.5px;
 a { color: var(--azure); }
 .editor-subrow { border: 1px solid var(--hairline-soft); padding: 14px; margin-bottom: 12px; }
 .editor-subrow-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.editor-group { border: 1px solid var(--hairline); margin-bottom: 14px; }
+.editor-group-summary { cursor: pointer; list-style: none; font-family: var(--serif); font-size: 15px; font-weight: 600; padding: 12px 14px; }
+.editor-group-summary::-webkit-details-marker { display: none; }
+.editor-group-summary::before { content: '▸ '; }
+details[open] > .editor-group-summary::before { content: '▾ '; }
+.editor-group-body { padding: 0 14px 14px; }
 
 /* guide.html */
 .root h2 { font-family: var(--serif); font-weight: 600; font-size: 18px; margin: 0 0 4px; }

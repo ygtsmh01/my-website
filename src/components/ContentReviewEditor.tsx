@@ -119,16 +119,9 @@ export default function ContentReviewEditor({ draft, onChange, showWeekFields, i
 
   return (
     <div>
-      {showWeekFields && (
-        <>
-          <label className="field-label">Hafta İsmi</label>
-          <input type="text" placeholder="17-24 Ağustos 2026" value={draft.week_label || ''} onChange={(e) => update({ week_label: e.target.value })} />
-          <label className="field-label">Hafta Teması</label>
-          <input type="text" value={draft.week_theme || ''} onChange={(e) => update({ week_theme: e.target.value })} />
-        </>
-      )}
-
-      <p className="panel-title" style={{ fontSize: 14, marginTop: 16 }}>Kaynaklar</p>
+      <details className="editor-group">
+        <summary className="editor-group-summary">📚 Özetler / Kaynaklar</summary>
+        <div className="editor-group-body">
       {draft.must_reads.map((m, i) => (
         <div className="editor-subrow" key={m._key}>
           <div className="editor-subrow-head">
@@ -144,8 +137,12 @@ export default function ContentReviewEditor({ draft, onChange, showWeekFields, i
         </div>
       ))}
       <button className="btn ghost" onClick={addMustRead}>+ Kaynak Ekle</button>
+        </div>
+      </details>
 
-      <p className="panel-title" style={{ fontSize: 14, marginTop: 16 }}>Quiz Soruları</p>
+      <details className="editor-group">
+        <summary className="editor-group-summary">❓ Quiz Soruları</summary>
+        <div className="editor-group-body">
       {draft.quiz.map((q) => (
         <div className="editor-subrow" key={q._key}>
           <div className="editor-subrow-head">
@@ -189,9 +186,18 @@ export default function ContentReviewEditor({ draft, onChange, showWeekFields, i
         </div>
       ))}
       <button className="btn ghost" onClick={addQuiz}>+ Soru Ekle</button>
+        </div>
+      </details>
 
       {showWeekFields && (
-        <>
+        <details className="editor-group">
+          <summary className="editor-group-summary">🔢 Ek Sorular</summary>
+          <div className="editor-group-body">
+          <label className="field-label">Hafta İsmi</label>
+          <input type="text" placeholder="17-24 Ağustos 2026" value={draft.week_label || ''} onChange={(e) => update({ week_label: e.target.value })} />
+          <label className="field-label">Hafta Teması</label>
+          <input type="text" value={draft.week_theme || ''} onChange={(e) => update({ week_theme: e.target.value })} />
+
           <p className="panel-title" style={{ fontSize: 14, marginTop: 16 }}>Sayı Tahmini</p>
           <div className="editor-subrow">
             <label className="field-label">Kaynak İndeksi</label>
@@ -245,7 +251,8 @@ export default function ContentReviewEditor({ draft, onChange, showWeekFields, i
               <RiskEditor value={draft.boss_question || null} onChange={(v) => update({ boss_question: v })} />
             </>
           )}
-        </>
+          </div>
+        </details>
       )}
     </div>
   );

@@ -56,9 +56,20 @@ export default function Nav() {
           </Link>
         ))}
         {isAdmin && (
-          <Link to="/admin" className={location.pathname === '/admin' ? 'active' : ''} onClick={() => setOpen(false)}>
-            🛠 Admin Paneli
-          </Link>
+          <>
+            <Link to="/admin" className={location.pathname === '/admin' ? 'active' : ''} onClick={() => setOpen(false)}>
+              🛠 Admin Paneli
+            </Link>
+            <Link to="/admin/haftalik-icerik" className={location.pathname === '/admin/haftalik-icerik' ? 'active' : ''} onClick={() => setOpen(false)}>
+              🗞️ Haftalık İçerik
+            </Link>
+            <Link to="/admin/lig-yonetimi" className={location.pathname === '/admin/lig-yonetimi' ? 'active' : ''} onClick={() => setOpen(false)}>
+              🏅 Lig Yönetimi
+            </Link>
+            <Link to="/admin/kullanicilar" className={location.pathname === '/admin/kullanicilar' ? 'active' : ''} onClick={() => setOpen(false)}>
+              💬 Kullanıcılar &amp; Geri Bildirim
+            </Link>
+          </>
         )}
         <div className="aitakip-nav-sep" />
         <button className="aitakip-item" onClick={toggleTheme}>
