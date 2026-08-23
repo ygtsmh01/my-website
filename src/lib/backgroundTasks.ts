@@ -212,7 +212,8 @@ export async function runLeagueGeneration(params: LeagueGenerationParams): Promi
 
 {
   "must_reads": [ { "title": "başlık", "url": "kaynağın orijinal linki", "summary": "4-6 cümlelik, doğrudan bilgi aktaran ders notu" } ],
-  "quiz": [ { "source_index": 0, "type": "mc", "bonus": false, "question": "soru metni", "options": ["seçenek1","seçenek2","seçenek3"], "correct_index": 0, "explanation": "kısa açıklama" } ]
+  "quiz": [ { "source_index": 0, "type": "mc", "bonus": false, "question": "soru metni", "options": ["seçenek1","seçenek2","seçenek3"], "correct_index": 0, "explanation": "kısa açıklama" } ],
+  "capstone": [ { "question": "soru metni", "options": ["seçenek1","seçenek2","seçenek3"], "correct_index": 0, "explanation": "kısa açıklama" } ]
 }
 
 Kurallar:
@@ -222,7 +223,12 @@ Kurallar:
   - 2 tanesi "type": "mc", "bonus": false — cevabı summary'den çıkarılabilecek, genel anlama soruları, farklı yönlere odaklansın, 3 seçenekli.
   - 1 tanesi "type": "tf", "bonus": true — Doğru/Yanlış formatında bir ifade, SADECE kaynağın tam metnindeki spesifik bir detaya dayanmalı, summary'den cevaplanamamalı; "options" tam olarak ["Doğru","Yanlış"] olmalı, "correct_index" 0 (Doğru) veya 1 (Yanlış).
   - 1 tanesi "type": "mc", "bonus": true — yine kaynağın tam metnindeki bir detaya dayanmalı, summary'den cevaplanamamalı, 3 seçenekli.
-- SORU KALİTESİ — ÇOK ÖNEMLİ, kesinlikle uy: Bu bir bilgi yarışması/trivia sınavı DEĞİL, okuyucunun konuyu gerçekten ANLAYIP ANLAMADIĞINI ölçen bir sınav. Şunları KESİNLİKLE YAPMA:
+- "capstone": bu ligin TÜM rehberini kapatan final sınavı, tam olarak 3 soru üret:
+  - En az 2 kaynak varsa, HER capstone sorusu en az İKİ FARKLI kaynaktaki bilgiyi birbirine bağlamayı gerektirmeli — tek bir kaynağın özetinden cevaplanamamalı. Örnek kalıplar: "Kaynak A'daki X kavramı ile Kaynak B'deki Y arasındaki ilişki nedir?", "Bu iki kaynaktaki bilgiler birlikte değerlendirildiğinde en olası sonuç nedir?", "Kaynak A ve Kaynak B'deki yaklaşımlar birleştirilirse ortaya çıkan çıkarım nedir?".
+  - Kaynak sayısı 1-2 gibi çok azsa (gerçek bir "birden fazla kaynağı birleştirme" sorusu kurulamıyorsa) yine de tam 3 soru üret, ama bu durumda sorular mevcut tek kaynaktaki EN DERİN/EN ÖNEMLİ kavramı test etsin (kaynaklar arası sentez zaten mümkün değil).
+  - Bu, ligin final sınavı olduğu için rehberdeki EN ZOR sorular bunlar olmalı — quiz'deki bonus sorulardan bile daha zor.
+  - Aşağıdaki SORU KALİTESİ kuralına (trivia/ezber/sayı sorusu yasak, rastgele olgu yan yana koyma yasak) capstone için de aynen uy.
+- SORU KALİTESİ — ÇOK ÖNEMLİ, kesinlikle uy (quiz VE capstone için geçerli): Bu bir bilgi yarışması/trivia sınavı DEĞİL, okuyucunun konuyu gerçekten ANLAYIP ANLAMADIĞINI ölçen bir sınav. Şunları KESİNLİKLE YAPMA:
   - Bir sayıyı/istatistiği/ismi/tarihi ezberden sorma (örn. "X ne kadardı?", "Y kaç kişiydi?") — bu bir kalıcı rehber, güncel bir sayıya dayanmak zaten yanlış olur.
   - Birbiriyle ilgisiz 2-3 olguyu yan yana koyup "aşağıdakilerden hangisi doğrudur?" diye sorma — bu şans/ezber sorusu üretir, anlama ölçmez.
   Bunun yerine şu kalıplarda sorular kur: "Bu neden önemli?", "Bu iki kavram arasındaki ilişki/fark nedir?", "Bu, [ilgili kavram] açısından ne ifade eder?", "Bu bilgiye göre en olası sonuç/uygulama nedir?" — yani NEDEN, SONUÇ, ÖNEM veya İLİŞKİ soran, o seviyeye özgü kavramsal anlayışı test eden sorular. Yanlış şıklar rastgele değil, konuyu yüzeysel anlayan birinin makul şekilde seçebileceği çeldiriciler olsun.
@@ -239,7 +245,7 @@ ${combined}`;
         'anthropic-version': '2023-06-01',
         'anthropic-dangerous-direct-browser-access': 'true',
       },
-      body: JSON.stringify({ model: MODEL, max_tokens: 16000, messages: [{ role: 'user', content: prompt }] }),
+      body: JSON.stringify({ model: MODEL, max_tokens: 20000, messages: [{ role: 'user', content: prompt }] }),
     });
     const data = await response.json();
     if (data.error) throw new Error(data.error.message || 'api-error');
@@ -253,7 +259,13 @@ ${combined}`;
     cleaned = cleaned.replace(/,(\s*[}\]])/g, '$1');
     const parsed = JSON.parse(cleaned);
 
-    const { error: updateError } = await sb.from('leagues').update({ draft_content: parsed }).eq('tier_index', tierIndex);
+    const { error: updateError } = await sb.from('leagues').update({
+      draft_content: {
+        must_reads: parsed.must_reads,
+        quiz: parsed.quiz,
+        capstone: parsed.capstone || null,
+      },
+    }).eq('tier_index', tierIndex);
     if (updateError) throw new Error('Veritabanına yazılamadı: ' + updateError.message);
 
     upsertTask({

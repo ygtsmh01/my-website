@@ -2,14 +2,18 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { sb } from '../lib/supabase';
 import type { League } from '../lib/types';
-import ContentReviewEditor, { keyMustReads, keyQuiz, stripKeys } from '../components/ContentReviewEditor';
+import ContentReviewEditor, { keyMustReads, keyQuiz, keyCapstone, stripKeys } from '../components/ContentReviewEditor';
 import type { ReviewDraft } from '../components/ContentReviewEditor';
 import AdminGuard from '../components/AdminGuard';
 import { APIKEY_SESSION_KEY } from './Admin';
 import { runLeagueGeneration, useBackgroundTasks } from '../lib/backgroundTasks';
 
-function leagueContentToDraft(c: { must_reads: any[]; quiz: any[] } | null): ReviewDraft {
-  return { must_reads: keyMustReads(c?.must_reads || []), quiz: keyQuiz(c?.quiz || []) };
+function leagueContentToDraft(c: { must_reads: any[]; quiz: any[]; capstone?: any[] | null } | null): ReviewDraft {
+  return {
+    must_reads: keyMustReads(c?.must_reads || []),
+    quiz: keyQuiz(c?.quiz || []),
+    capstone: keyCapstone(c?.capstone || []),
+  };
 }
 
 type SubTab = 'tiers' | 'guides';
