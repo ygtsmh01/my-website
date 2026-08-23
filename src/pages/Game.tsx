@@ -96,6 +96,7 @@ export default function Game() {
   const [onboardingStep, setOnboardingStep] = useState<number | null>(null);
   const [curriculumAnswers, setCurriculumAnswers] = useState<Record<number, number>>({});
   const [curriculumStepIndex, setCurriculumStepIndex] = useState(0);
+  const [guideTestModeOpen, setGuideTestModeOpen] = useState(false);
   const [curriculumSaving, setCurriculumSaving] = useState(false);
   const [weeklyReplayActive, setWeeklyReplayActive] = useState(false);
   const [replayQuizAnswers, setReplayQuizAnswers] = useState<Record<number, number>>({});
@@ -411,6 +412,7 @@ export default function Game() {
     setCurriculumSaving(false);
     setCurriculumAnswers({});
     setCurriculumStepIndex(0);
+    setGuideTestModeOpen(false);
     refreshProfile();
   }
 
@@ -592,23 +594,9 @@ export default function Game() {
         const cStepQ = cq[curriculumStepIndex];
         const cAnswered = cStepQ && curriculumAnswers[curriculumStepIndex] !== undefined;
         const cAllAnswered = cq.length > 0 && cq.every((_, i) => curriculumAnswers[i] !== undefined);
-        return (
-          <div className="panel static-curriculum">
-            <span className="tag static">📘 SABİT REHBER{curriculumDone ? ' · TEKRAR (yarı XP)' : ''}</span>
-            <p className="panel-title">{myLeague.name} Rehberi</p>
-            {myLeague.content.must_reads && myLeague.content.must_reads.map((mr, i) => (
-              <div className="read-row" key={i}>
-                <div>
-                  {mr.url ? <a href={mr.url} target="_blank" rel="noopener noreferrer">{mr.title}</a> : <strong>{mr.title}</strong>}
-                  <div className="one-liner">{mr.summary}</div>
-                </div>
-              </div>
-            ))}
 
-            {curriculumDone && !cAllAnswered && curriculumStepIndex === 0 && Object.keys(curriculumAnswers).length === 0 && (
-              <p className="panel-sub" style={{ margin: '10px 0' }}>Rehber tamamlandı ✓ ({leagueProgress!.quiz_score}/{leagueProgress!.quiz_total})</p>
-            )}
-
+        const testModeStage = (
+          <>
             {cStepQ && !cAllAnswered && (
               <div className="quiz-stage" style={{ marginTop: 14 }}>
                 <div className="quiz-progress">Soru {curriculumStepIndex + 1} / {cq.length}</div>
@@ -642,10 +630,51 @@ export default function Game() {
                 {curriculumSaving ? 'Kaydediliyor…' : 'Rehberi Bitir'}
               </button>
             )}
-            {cq.length === 0 && curriculumDone && (
-              <p className="panel-sub" style={{ marginTop: 10 }}>Rehber tamamlandı ✓</p>
+          </>
+        );
+
+        return (
+          <>
+            <div className="panel static-curriculum">
+              <span className="tag static">📘 SABİT REHBER{curriculumDone ? ' · TEKRAR (yarı XP)' : ''}</span>
+              <p className="panel-title">{myLeague.name} Rehberi</p>
+              {myLeague.content.must_reads && myLeague.content.must_reads.map((mr, i) => (
+                <div className="read-row" key={i}>
+                  <div>
+                    {mr.url ? <a href={mr.url} target="_blank" rel="noopener noreferrer">{mr.title}</a> : <strong>{mr.title}</strong>}
+                    <div className="one-liner">{mr.summary}</div>
+                  </div>
+                </div>
+              ))}
+
+              {curriculumDone && !cAllAnswered && curriculumStepIndex === 0 && Object.keys(curriculumAnswers).length === 0 && (
+                <p className="panel-sub" style={{ margin: '10px 0' }}>Rehber tamamlandı ✓ ({leagueProgress!.quiz_score}/{leagueProgress!.quiz_total})</p>
+              )}
+
+              {cq.length > 0 && !cAllAnswered && (
+                <button className="btn secondary" style={{ marginTop: 14 }} onClick={() => setGuideTestModeOpen(true)}>
+                  ✅ Özetleri Okudum, Kendimi Test Et
+                </button>
+              )}
+
+              {cq.length === 0 && curriculumDone && (
+                <p className="panel-sub" style={{ marginTop: 10 }}>Rehber tamamlandı ✓</p>
+              )}
+            </div>
+
+            {guideTestModeOpen && (
+              <div className="speed-overlay">
+                <button className="overlay-close-btn" onClick={() => setGuideTestModeOpen(false)} aria-label="Kapat">✕ Kapat</button>
+                <div className="speed-overlay-panel">
+                  <div className="panel quiz-stage">
+                    <span className="tag static">📘 SABİT REHBER · TEST MODU</span>
+                    <p className="panel-title" style={{ textAlign: 'center' }}>{myLeague.name} Rehberi Sınavı</p>
+                    {testModeStage}
+                  </div>
+                </div>
+              </div>
             )}
-          </div>
+          </>
         );
       })()}
 

@@ -130,6 +130,14 @@ label.field-label { display: block; font-family: var(--mono); font-size: 10.5px;
 .speed-overlay-panel { width: 100%; max-width: 560px; }
 .speed-overlay-panel .panel { margin-bottom: 0; }
 
+/* Small self-dismiss control for overlays that allow backing out early (e.g. guide test mode). */
+.overlay-close-btn {
+  align-self: flex-end; width: auto; margin: 0 0 10px; padding: 6px 12px;
+  background: transparent; border: 1px solid var(--hairline); color: var(--paper-dim);
+  font-family: var(--mono); font-size: 11px; letter-spacing: .04em; cursor: pointer;
+}
+.overlay-close-btn:hover { color: var(--paper); border-color: var(--paper-dim); }
+
 .section-divider { margin: 30px 0 14px; padding-top: 18px; border-top: 1px solid var(--hairline); }
 
 .promotion-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.75); z-index: 2100; display: flex; align-items: center; justify-content: center; padding: 20px; }
