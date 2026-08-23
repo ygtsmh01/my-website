@@ -4,6 +4,7 @@ import type { MustRead, QuizQuestion, NumberChallenge, Matching, RiskOrBossQuest
 // used for stable React list keys while editing. Strip `_key` before writing back.
 export type EditableMustRead = MustRead & { _key: string };
 export type EditableQuizQuestion = QuizQuestion & { _key: string };
+export type EditableCapstoneQuestion = RiskOrBossQuestion & { _key: string };
 
 export interface ReviewDraft {
   must_reads: EditableMustRead[];
@@ -14,6 +15,9 @@ export interface ReviewDraft {
   matching?: Matching | null;
   risk_question?: RiskOrBossQuestion | null;
   boss_question?: RiskOrBossQuestion | null;
+  // League-only: capstone exam questions (no source_index/bonus/type — synthesis
+  // questions spanning multiple sources). Absent/undefined for weeks.
+  capstone?: EditableCapstoneQuestion[];
 }
 
 let keySeq = 0;
@@ -28,10 +32,14 @@ export function keyMustReads(list: MustRead[]): EditableMustRead[] {
 export function keyQuiz(list: QuizQuestion[]): EditableQuizQuestion[] {
   return list.map((q) => ({ ...q, _key: newKey() }));
 }
+export function keyCapstone(list: RiskOrBossQuestion[]): EditableCapstoneQuestion[] {
+  return list.map((q) => ({ ...q, _key: newKey() }));
+}
 export function stripKeys(draft: ReviewDraft) {
   return {
     must_reads: draft.must_reads.map(({ _key, ...rest }) => rest),
     quiz: draft.quiz.map(({ _key, ...rest }) => rest),
+    ...(draft.capstone ? { capstone: draft.capstone.map(({ _key, ...rest }) => rest) } : {}),
   };
 }
 
@@ -117,6 +125,45 @@ export default function ContentReviewEditor({ draft, onChange, showWeekFields, i
     update({ quiz: draft.quiz.filter((q) => q._key !== key) });
   }
 
+  function updateCapstone(key: string, patch: Partial<RiskOrBossQuestion>) {
+    update({ capstone: (draft.capstone || []).map((q) => (q._key === key ? { ...q, ...patch } : q)) });
+  }
+
+  function updateCapstoneOption(key: string, optIdx: number, value: string) {
+    const q = (draft.capstone || []).find((qq) => qq._key === key);
+    if (!q) return;
+    const options = q.options.slice();
+    options[optIdx] = value;
+    updateCapstone(key, { options });
+  }
+
+  function addCapstoneOption(key: string) {
+    const q = (draft.capstone || []).find((qq) => qq._key === key);
+    if (!q) return;
+    updateCapstone(key, { options: [...q.options, ''] });
+  }
+
+  function removeCapstoneOption(key: string, optIdx: number) {
+    const q = (draft.capstone || []).find((qq) => qq._key === key);
+    if (!q) return;
+    const options = q.options.filter((_, i) => i !== optIdx);
+    const correct_index = q.correct_index >= options.length ? 0 : q.correct_index === optIdx ? 0 : q.correct_index > optIdx ? q.correct_index - 1 : q.correct_index;
+    updateCapstone(key, { options, correct_index });
+  }
+
+  function addCapstone() {
+    update({
+      capstone: [
+        ...(draft.capstone || []),
+        { _key: newKey(), question: '', options: ['', '', ''], correct_index: 0, explanation: '' },
+      ],
+    });
+  }
+
+  function removeCapstone(key: string) {
+    update({ capstone: (draft.capstone || []).filter((q) => q._key !== key) });
+  }
+
   return (
     <div>
       <details className="editor-group">
@@ -188,6 +235,38 @@ export default function ContentReviewEditor({ draft, onChange, showWeekFields, i
       <button className="btn ghost" onClick={addQuiz}>+ Soru Ekle</button>
         </div>
       </details>
+
+      {!showWeekFields && (
+        <details className="editor-group">
+          <summary className="editor-group-summary">🎓 Bitirme Sınavı</summary>
+          <div className="editor-group-body">
+          {(draft.capstone || []).map((q) => (
+            <div className="editor-subrow" key={q._key}>
+              <div className="editor-subrow-head">
+                <span className="tag">Bitirme Sorusu</span>
+                <button className="btn ghost" onClick={() => removeCapstone(q._key)}>Soruyu Sil</button>
+              </div>
+              <label className="field-label">Soru</label>
+              <textarea value={q.question} onChange={(e) => updateCapstone(q._key, { question: e.target.value })} />
+              <label className="field-label">Seçenekler (doğru olanı işaretle)</label>
+              {q.options.map((opt, oi) => (
+                <div key={oi} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+                  <input type="radio" name={'capstone_correct_' + q._key} checked={q.correct_index === oi} onChange={() => updateCapstone(q._key, { correct_index: oi })} style={{ width: 'auto' }} />
+                  <input type="text" value={opt} onChange={(e) => updateCapstoneOption(q._key, oi, e.target.value)} style={{ marginBottom: 0, flex: 1 }} />
+                  {q.options.length > 2 && (
+                    <button className="btn ghost" onClick={() => removeCapstoneOption(q._key, oi)}>Sil</button>
+                  )}
+                </div>
+              ))}
+              <button className="btn ghost" onClick={() => addCapstoneOption(q._key)}>+ Seçenek</button>
+              <label className="field-label" style={{ marginTop: 10 }}>Açıklama</label>
+              <textarea value={q.explanation} onChange={(e) => updateCapstone(q._key, { explanation: e.target.value })} />
+            </div>
+          ))}
+          <button className="btn ghost" onClick={addCapstone}>+ Bitirme Sorusu Ekle</button>
+          </div>
+        </details>
+      )}
 
       {showWeekFields && (
         <details className="editor-group">

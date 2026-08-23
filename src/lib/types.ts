@@ -74,6 +74,11 @@ export interface Profile {
 export interface LeagueContent {
   must_reads: MustRead[];
   quiz: QuizQuestion[];
+  // Synthesis questions spanning multiple sources, for the capstone exam that
+  // finishes the tier's "academy" lesson path. Absent/null on older content
+  // generated before this field existed — the player-side flow must fall back
+  // gracefully (e.g. a mixed-question capstone) when this is missing.
+  capstone: RiskOrBossQuestion[] | null;
 }
 
 export interface League {

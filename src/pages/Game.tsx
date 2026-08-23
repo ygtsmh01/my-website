@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { sb } from '../lib/supabase';
 import TimerRing from '../components/TimerRing';
 import { useTheme } from '../lib/ThemeContext';
-import type { League, LeagueProgress, Profile, Week } from '../lib/types';
+import type { League, LeagueProgress, Profile, QuizQuestion, RiskOrBossQuestion, Week } from '../lib/types';
 
 const BOSS_EVERY = 5;
 const SPEED_SECONDS_PER_QUESTION = 15;
@@ -99,9 +99,25 @@ export default function Game() {
   const [leagueProgress, setLeagueProgress] = useState<LeagueProgress | null>(null);
   const [activeTab, setActiveTab] = useState<'week' | 'guide'>('week');
   const [onboardingStep, setOnboardingStep] = useState<number | null>(null);
-  const [curriculumAnswers, setCurriculumAnswers] = useState<Record<number, number>>({});
-  const [curriculumStepIndex, setCurriculumStepIndex] = useState(0);
+  // Lesson-path (academy) state for the league guide: lessonIndex is the currently open/active
+  // lesson (0-based, into the grouped-by-source_index lessons array); passedLessons tracks which
+  // lesson indices have cleared the 60% threshold this session; lessonAnswers holds in-progress
+  // answers for the currently open lesson only (cleared on pass/retry/lesson switch).
+  const [lessonIndex, setLessonIndex] = useState(0);
+  const [passedLessons, setPassedLessons] = useState<Set<number>>(new Set());
+  // Correct/total per lesson, recorded once that lesson is passed — used to sum the total
+  // score/total across the whole sequence (lessons + capstone) for the league_progress row.
+  const [lessonResults, setLessonResults] = useState<Record<number, { score: number; total: number }>>({});
+  const [lessonAnswers, setLessonAnswers] = useState<Record<number, number>>({});
+  const [lessonStepIndex, setLessonStepIndex] = useState(0);
   const [guideTestModeOpen, setGuideTestModeOpen] = useState(false);
+  // Which lesson's must-read page is currently shown inline below the course path
+  // (the current unlocked lesson, or a previously-passed one clicked for review).
+  const [viewedLessonIndex, setViewedLessonIndex] = useState<number | null>(null);
+  const [lessonFailInfo, setLessonFailInfo] = useState<{ score: number; total: number } | null>(null);
+  const [capstoneAnswers, setCapstoneAnswers] = useState<Record<number, number>>({});
+  const [capstoneStepIndex, setCapstoneStepIndex] = useState(0);
+  const [capstoneOpen, setCapstoneOpen] = useState(false);
   const [curriculumSaving, setCurriculumSaving] = useState(false);
   const [weeklyReplayActive, setWeeklyReplayActive] = useState(false);
   const [replayQuizAnswers, setReplayQuizAnswers] = useState<Record<number, number>>({});
@@ -149,6 +165,22 @@ export default function Game() {
     if (!profile) return;
     if (!localStorage.getItem(ONBOARDING_KEY)) setOnboardingStep(0);
   }, [profile?.id]);
+
+  // Reset the lesson-path (academy) progress whenever the active league tier changes —
+  // a fresh tier always starts from lesson 0 with nothing passed yet.
+  useEffect(() => {
+    setLessonIndex(0);
+    setPassedLessons(new Set());
+    setLessonResults({});
+    setLessonAnswers({});
+    setLessonStepIndex(0);
+    setGuideTestModeOpen(false);
+    setViewedLessonIndex(null);
+    setLessonFailInfo(null);
+    setCapstoneAnswers({});
+    setCapstoneStepIndex(0);
+    setCapstoneOpen(false);
+  }, [profile?.league_tier]);
 
   useEffect(() => {
     setSessionXp(0);
@@ -424,22 +456,78 @@ export default function Game() {
     refreshProfile();
   }
 
-  function selectCurriculumAnswer(qIdx: number, optIdx: number) {
-    if (curriculumAnswers[qIdx] !== undefined) return;
-    setCurriculumAnswers((prev) => ({ ...prev, [qIdx]: optIdx }));
+  // Groups a league's flat quiz array into one lesson per distinct source_index, in ascending
+  // source_index order — lesson i's must_read is myLeague.content.must_reads[lessons[i].sourceIndex].
+  function groupLessons(quiz: QuizQuestion[]): { sourceIndex: number; questions: QuizQuestion[] }[] {
+    const bySource = new Map<number, QuizQuestion[]>();
+    for (const q of quiz) {
+      if (!bySource.has(q.source_index)) bySource.set(q.source_index, []);
+      bySource.get(q.source_index)!.push(q);
+    }
+    return Array.from(bySource.keys()).sort((a, b) => a - b).map((k) => ({ sourceIndex: k, questions: bySource.get(k)! }));
   }
 
-  async function finishCurriculum(myLeague: League | undefined, isReplay: boolean) {
+  function selectLessonAnswer(qIdx: number, optIdx: number) {
+    if (lessonAnswers[qIdx] !== undefined) return;
+    setLessonAnswers((prev) => ({ ...prev, [qIdx]: optIdx }));
+  }
+
+  function retryLesson() {
+    setLessonAnswers({});
+    setLessonStepIndex(0);
+    setLessonFailInfo(null);
+  }
+
+  // Evaluates the currently open lesson against the 60% pass threshold. On pass, grants a small
+  // per-lesson XP amount (fullBonus / (totalLessons * 2), halved again on replay) and advances to
+  // the next lesson. On fail, leaves lessonIndex untouched and surfaces a retry prompt.
+  async function evaluateLesson(lesson: QuizQuestion[], myLeague: League, totalLessons: number, isReplay: boolean) {
+    const total = lesson.length;
+    const score = lesson.reduce((acc, q, i) => acc + (lessonAnswers[i] === q.correct_index ? 1 : 0), 0);
+    const passed = total > 0 && score / total >= 0.6;
+    if (!passed) {
+      setLessonFailInfo({ score, total });
+      setGuideTestModeOpen(false);
+      return;
+    }
+    const fullBonus = myLeague.promote_threshold ? Math.round(myLeague.promote_threshold * 0.4) : 150;
+    const perLessonXp = Math.round(fullBonus / (Math.max(1, totalLessons) * 2));
+    const grantedXp = isReplay ? Math.round(perLessonXp / 2) : perLessonXp;
+    await grantXp(grantedXp);
+    setLessonResults((prev) => ({ ...prev, [lessonIndex]: { score, total } }));
+    setPassedLessons((prev) => new Set(prev).add(lessonIndex));
+    setLessonAnswers({});
+    setLessonStepIndex(0);
+    setLessonFailInfo(null);
+    setGuideTestModeOpen(false);
+    setViewedLessonIndex(null);
+    setLessonIndex((i) => i + 1);
+  }
+
+  function selectCapstoneAnswer(qIdx: number, optIdx: number) {
+    if (capstoneAnswers[qIdx] !== undefined) return;
+    setCapstoneAnswers((prev) => ({ ...prev, [qIdx]: optIdx }));
+  }
+
+  // Finishes the tier: fires once the capstone is fully answered (or immediately, when there is
+  // no capstone, once every lesson is passed). quiz_score/quiz_total reflect the sum across every
+  // lesson attempt that passed plus the capstone, matching the "total across the whole sequence"
+  // requirement. This is unchanged from the old finishCurriculum's completion-bonus/promotion logic.
+  async function finishCurriculum(myLeague: League | undefined, isReplay: boolean, capstone: RiskOrBossQuestion[]) {
     if (!profile || !myLeague || !myLeague.content) return;
     setCurriculumSaving(true);
-    const quiz = myLeague.content.quiz || [];
-    const score = quiz.reduce((acc, q, i) => acc + (curriculumAnswers[i] === q.correct_index ? 1 : 0), 0);
+    const capstoneTotal = capstone.length;
+    const capstoneScore = capstone.reduce((acc, q, i) => acc + (capstoneAnswers[i] === q.correct_index ? 1 : 0), 0);
+    const lessonScoreSum = Object.values(lessonResults).reduce((a, r) => a + r.score, 0);
+    const lessonTotalSum = Object.values(lessonResults).reduce((a, r) => a + r.total, 0);
+    const score = lessonScoreSum + capstoneScore;
+    const total = lessonTotalSum + capstoneTotal;
     const fullBonus = myLeague.promote_threshold ? Math.round(myLeague.promote_threshold * 0.4) : 150;
     const completionBonus = isReplay ? Math.round(fullBonus / 2) : fullBonus;
 
     const { error: progErr } = await sb.from('league_progress').upsert({
       user_id: profile.id, tier_index: myLeague.tier_index, completed: true,
-      quiz_score: score, quiz_total: quiz.length, completed_at: new Date().toISOString(),
+      quiz_score: score, quiz_total: total, completed_at: new Date().toISOString(),
     }, { onConflict: 'user_id,tier_index' });
     if (!progErr) {
       // The guide we just upserted as completed needs to count immediately for the promotion
@@ -454,12 +542,13 @@ export default function Game() {
       const newTotalXp = Math.max(0, profile.total_xp + completionBonus);
       await sb.from('profiles').update({ total_xp: newTotalXp, league_tier: newTier, league_xp: newLeagueXp }).eq('id', profile.id);
       setProfile((p) => (p ? { ...p, total_xp: newTotalXp, league_tier: newTier, league_xp: newLeagueXp } : p));
-      setLeagueProgress({ user_id: profile.id, tier_index: myLeague.tier_index, completed: true, quiz_score: score, quiz_total: quiz.length, completed_at: new Date().toISOString() });
+      setLeagueProgress({ user_id: profile.id, tier_index: myLeague.tier_index, completed: true, quiz_score: score, quiz_total: total, completed_at: new Date().toISOString() });
       setCompletedTiers(localCompleted);
     }
     setCurriculumSaving(false);
-    setCurriculumAnswers({});
-    setCurriculumStepIndex(0);
+    setCapstoneAnswers({});
+    setCapstoneStepIndex(0);
+    setCapstoneOpen(false);
     setGuideTestModeOpen(false);
     refreshProfile();
   }
@@ -638,43 +727,96 @@ export default function Game() {
             </div>
           );
         }
-        const cq = myLeague.content.quiz || [];
-        const cStepQ = cq[curriculumStepIndex];
-        const cAnswered = cStepQ && curriculumAnswers[curriculumStepIndex] !== undefined;
-        const cAllAnswered = cq.length > 0 && cq.every((_, i) => curriculumAnswers[i] !== undefined);
+        const content = myLeague.content;
+        const lessons = groupLessons(content.quiz || []);
+        const totalLessons = lessons.length;
+        // Backward compatibility: capstone is null/empty on older league content (or content whose
+        // generation prompt hasn't been updated yet) — treat the tier as complete once every
+        // lesson is passed instead of blocking on a capstone that will never arrive.
+        const capstoneQuestions = content.capstone && content.capstone.length > 0 ? content.capstone : [];
+        const hasCapstone = capstoneQuestions.length > 0;
+        const allLessonsPassed = totalLessons === 0 || lessonIndex >= totalLessons;
+        const currentLesson = lessonIndex < totalLessons ? lessons[lessonIndex] : null;
+        const effectiveViewedIndex = viewedLessonIndex !== null ? viewedLessonIndex : (currentLesson ? lessonIndex : null);
+        const viewedLesson = effectiveViewedIndex !== null && effectiveViewedIndex < totalLessons ? lessons[effectiveViewedIndex] : null;
+        const viewedMustRead = viewedLesson ? content.must_reads[viewedLesson.sourceIndex] : null;
+        const isViewingCurrentLesson = effectiveViewedIndex !== null && effectiveViewedIndex === lessonIndex;
 
-        const testModeStage = (
+        const lStepQ = currentLesson ? currentLesson.questions[lessonStepIndex] : undefined;
+        const lAnswered = !!lStepQ && lessonAnswers[lessonStepIndex] !== undefined;
+        const lAllAnswered = !!currentLesson && currentLesson.questions.length > 0 && currentLesson.questions.every((_, i) => lessonAnswers[i] !== undefined);
+
+        const lessonTestStage = currentLesson && (
           <>
-            {cStepQ && !cAllAnswered && (
+            {lStepQ && !lAllAnswered && (
               <div className="quiz-stage" style={{ marginTop: 14 }}>
-                <div className="quiz-progress">Soru {curriculumStepIndex + 1} / {cq.length}</div>
-                {cAnswered && (
-                  <div className={'feedback-banner ' + (curriculumAnswers[curriculumStepIndex] === cStepQ.correct_index ? 'correct' : 'wrong')}>
-                    {curriculumAnswers[curriculumStepIndex] === cStepQ.correct_index ? '🎉 Harika, doğru bildin!' : '💥 Olmadı, bir dahakine!'}
+                <div className="quiz-progress">Ders {lessonIndex + 1}/{totalLessons} · Soru {lessonStepIndex + 1} / {currentLesson.questions.length}</div>
+                {lAnswered && (
+                  <div className={'feedback-banner ' + (lessonAnswers[lessonStepIndex] === lStepQ.correct_index ? 'correct' : 'wrong')}>
+                    {lessonAnswers[lessonStepIndex] === lStepQ.correct_index ? '🎉 Harika, doğru bildin!' : '💥 Olmadı, bir dahakine!'}
                   </div>
                 )}
                 <div className="quiz-card">
                   <div className="quiz-q">
-                    {cStepQ.type === 'tf' && <span className="tag tf">DOĞRU/YANLIŞ</span>}
-                    <div>{cStepQ.question}</div>
+                    {lStepQ.type === 'tf' && <span className="tag tf">DOĞRU/YANLIŞ</span>}
+                    <div>{lStepQ.question}</div>
                   </div>
-                  {cStepQ.options.map((opt, oi) => {
+                  {lStepQ.options.map((opt, oi) => {
                     let cls = 'quiz-opt opt-' + oi;
-                    if (cAnswered && oi === cStepQ.correct_index) cls += ' correct';
-                    else if (cAnswered && oi === curriculumAnswers[curriculumStepIndex]) cls += ' wrong';
-                    return <button key={oi} className={cls} disabled={cAnswered} onClick={() => selectCurriculumAnswer(curriculumStepIndex, oi)}>{opt}</button>;
+                    if (lAnswered && oi === lStepQ.correct_index) cls += ' correct';
+                    else if (lAnswered && oi === lessonAnswers[lessonStepIndex]) cls += ' wrong';
+                    return <button key={oi} className={cls} disabled={lAnswered} onClick={() => selectLessonAnswer(lessonStepIndex, oi)}>{opt}</button>;
                   })}
-                  {cAnswered && <div className="quiz-explain">{cStepQ.explanation}</div>}
+                  {lAnswered && <div className="quiz-explain">{lStepQ.explanation}</div>}
                 </div>
-                {cAnswered && (
-                  <button className="btn secondary" onClick={() => setCurriculumStepIndex((i) => i + 1)}>
-                    {curriculumStepIndex + 1 < cq.length ? 'Sonraki Soru' : 'Devam Et'}
+                {lAnswered && (
+                  <button className="btn secondary" onClick={() => setLessonStepIndex((i) => i + 1)}>
+                    {lessonStepIndex + 1 < currentLesson.questions.length ? 'Sonraki Soru' : 'Devam Et'}
                   </button>
                 )}
               </div>
             )}
-            {cAllAnswered && (
-              <button className="btn secondary" style={{ marginTop: 14 }} onClick={() => finishCurriculum(myLeague, !!curriculumDone)} disabled={curriculumSaving}>
+            {lAllAnswered && (
+              <button className="btn secondary" style={{ marginTop: 14 }} onClick={() => evaluateLesson(currentLesson.questions, myLeague!, totalLessons, !!curriculumDone)} disabled={curriculumSaving}>
+                {curriculumSaving ? 'Kaydediliyor…' : 'Sonucu Gör'}
+              </button>
+            )}
+          </>
+        );
+
+        const capStepQ = capstoneQuestions[capstoneStepIndex];
+        const capAnswered = !!capStepQ && capstoneAnswers[capstoneStepIndex] !== undefined;
+        const capAllAnswered = capstoneQuestions.length > 0 && capstoneQuestions.every((_, i) => capstoneAnswers[i] !== undefined);
+
+        const capstoneTestStage = (
+          <>
+            {capStepQ && !capAllAnswered && (
+              <div className="quiz-stage" style={{ marginTop: 14 }}>
+                <div className="quiz-progress">🎓 Bitirme Sınavı · Soru {capstoneStepIndex + 1} / {capstoneQuestions.length}</div>
+                {capAnswered && (
+                  <div className={'feedback-banner ' + (capstoneAnswers[capstoneStepIndex] === capStepQ.correct_index ? 'correct' : 'wrong')}>
+                    {capstoneAnswers[capstoneStepIndex] === capStepQ.correct_index ? '🎉 Harika, doğru bildin!' : '💥 Olmadı, bir dahakine!'}
+                  </div>
+                )}
+                <div className="quiz-card">
+                  <div className="quiz-q"><span className="tag boss">BİTİRME SORUSU</span><div>{capStepQ.question}</div></div>
+                  {capStepQ.options.map((opt, oi) => {
+                    let cls = 'quiz-opt opt-' + oi;
+                    if (capAnswered && oi === capStepQ.correct_index) cls += ' correct';
+                    else if (capAnswered && oi === capstoneAnswers[capstoneStepIndex]) cls += ' wrong';
+                    return <button key={oi} className={cls} disabled={capAnswered} onClick={() => selectCapstoneAnswer(capstoneStepIndex, oi)}>{opt}</button>;
+                  })}
+                  {capAnswered && <div className="quiz-explain">{capStepQ.explanation}</div>}
+                </div>
+                {capAnswered && (
+                  <button className="btn secondary" onClick={() => setCapstoneStepIndex((i) => i + 1)}>
+                    {capstoneStepIndex + 1 < capstoneQuestions.length ? 'Sonraki Soru' : 'Devam Et'}
+                  </button>
+                )}
+              </div>
+            )}
+            {capAllAnswered && (
+              <button className="btn secondary" style={{ marginTop: 14 }} onClick={() => finishCurriculum(myLeague, !!curriculumDone, capstoneQuestions)} disabled={curriculumSaving}>
                 {curriculumSaving ? 'Kaydediliyor…' : 'Rehberi Bitir'}
               </button>
             )}
@@ -684,40 +826,96 @@ export default function Game() {
         return (
           <>
             <div className="panel static-curriculum">
-              <span className="tag static">📘 SABİT REHBER{curriculumDone ? ' · TEKRAR (yarı XP)' : ''}</span>
+              <span className="tag static">📘 SABİT REHBER · AKADEMİ{curriculumDone ? ' · TEKRAR (yarı XP)' : ''}</span>
               <p className="panel-title">{myLeague.name} Rehberi</p>
-              {myLeague.content.must_reads && myLeague.content.must_reads.map((mr, i) => (
-                <div className="read-row" key={i}>
-                  <div>
-                    {mr.url ? <a href={mr.url} target="_blank" rel="noopener noreferrer">{mr.title}</a> : <strong>{mr.title}</strong>}
-                    <div className="one-liner">{mr.summary}</div>
-                  </div>
-                </div>
-              ))}
 
-              {curriculumDone && !cAllAnswered && curriculumStepIndex === 0 && Object.keys(curriculumAnswers).length === 0 && (
-                <p className="panel-sub" style={{ margin: '10px 0' }}>Rehber tamamlandı ✓ ({leagueProgress!.quiz_score}/{leagueProgress!.quiz_total})</p>
+              {curriculumDone && lessonIndex === 0 && passedLessons.size === 0 && !capstoneOpen && (
+                <p className="panel-sub" style={{ margin: '10px 0' }}>Rehber tamamlandı ✓ ({leagueProgress!.quiz_score}/{leagueProgress!.quiz_total}) — istersen yarı XP için dersleri tekrar geç.</p>
               )}
 
-              {cq.length > 0 && !cAllAnswered && (
+              {totalLessons > 0 && (
+                <div className="lesson-path">
+                  {lessons.map((lg, i) => {
+                    const status = i < lessonIndex ? 'passed' : i === lessonIndex ? 'current' : 'locked';
+                    const title = content.must_reads[lg.sourceIndex] ? content.must_reads[lg.sourceIndex].title : `Ders ${i + 1}`;
+                    const prevTitle = i > 0 && content.must_reads[lessons[i - 1].sourceIndex] ? content.must_reads[lessons[i - 1].sourceIndex].title : 'önceki ders';
+                    return (
+                      <button key={i} type="button" className={'lesson-row lesson-row-' + status}
+                        disabled={status === 'locked'}
+                        onClick={() => { if (status !== 'locked') setViewedLessonIndex(i); }}>
+                        <span className="lesson-row-icon">{status === 'passed' ? '✓' : status === 'current' ? '🔓' : '🔒'}</span>
+                        <span className="lesson-row-title">{title}</span>
+                        {status === 'locked' && <span className="lesson-row-hint">Bu ders şu an kilitli, önce "{prevTitle}" dersini geç</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {viewedLesson && viewedMustRead && (
+                <div className="read-row" style={{ marginTop: 12 }}>
+                  <div>
+                    {viewedMustRead.url ? <a href={viewedMustRead.url} target="_blank" rel="noopener noreferrer">{viewedMustRead.title}</a> : <strong>{viewedMustRead.title}</strong>}
+                    <div className="one-liner">{viewedMustRead.summary}</div>
+                  </div>
+                </div>
+              )}
+
+              {viewedLesson && isViewingCurrentLesson && !lessonFailInfo && (
                 <button className="btn secondary" style={{ marginTop: 14 }} onClick={() => setGuideTestModeOpen(true)}>
-                  ✅ Özetleri Okudum, Kendimi Test Et
+                  ✅ Özeti Okudum, Kendimi Test Et
                 </button>
               )}
 
-              {cq.length === 0 && curriculumDone && (
-                <p className="panel-sub" style={{ marginTop: 10 }}>Rehber tamamlandı ✓</p>
+              {viewedLesson && !isViewingCurrentLesson && effectiveViewedIndex !== null && (
+                <p className="panel-sub" style={{ marginTop: 10 }}>
+                  Bu dersi geçtin ✓{lessonResults[effectiveViewedIndex] ? ` (${lessonResults[effectiveViewedIndex].score}/${lessonResults[effectiveViewedIndex].total})` : ''}
+                </p>
+              )}
+
+              {viewedLesson && isViewingCurrentLesson && lessonFailInfo && (
+                <div style={{ marginTop: 14 }}>
+                  <p className="panel-sub" style={{ color: 'var(--coral)' }}>
+                    Bu dersi geçemedin ({lessonFailInfo.score}/{lessonFailInfo.total}), özeti tekrar oku ve tekrar dene.
+                  </p>
+                  <button className="btn danger" onClick={retryLesson}>Tekrar Dene</button>
+                </div>
+              )}
+
+              {allLessonsPassed && hasCapstone && (
+                <button className="btn secondary" style={{ marginTop: 14 }} onClick={() => setCapstoneOpen(true)}>
+                  🎓 Bitirme Sınavına Gir
+                </button>
+              )}
+
+              {allLessonsPassed && !hasCapstone && (
+                <button className="btn secondary" style={{ marginTop: 14 }} onClick={() => finishCurriculum(myLeague, !!curriculumDone, [])} disabled={curriculumSaving}>
+                  {curriculumSaving ? 'Kaydediliyor…' : 'Rehberi Bitir'}
+                </button>
               )}
             </div>
 
-            {guideTestModeOpen && (
+            {guideTestModeOpen && currentLesson && (
               <div className="speed-overlay">
                 <button className="overlay-close-btn" onClick={() => setGuideTestModeOpen(false)} aria-label="Kapat">✕ Kapat</button>
                 <div className="speed-overlay-panel">
                   <div className="panel quiz-stage">
-                    <span className="tag static">📘 SABİT REHBER · TEST MODU</span>
-                    <p className="panel-title" style={{ textAlign: 'center' }}>{myLeague.name} Rehberi Sınavı</p>
-                    {testModeStage}
+                    <span className="tag static">📘 DERS {lessonIndex + 1} · TEST MODU</span>
+                    <p className="panel-title" style={{ textAlign: 'center' }}>{content.must_reads[currentLesson.sourceIndex] ? content.must_reads[currentLesson.sourceIndex].title : ''}</p>
+                    {lessonTestStage}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {capstoneOpen && (
+              <div className="speed-overlay">
+                <button className="overlay-close-btn" onClick={() => setCapstoneOpen(false)} aria-label="Kapat">✕ Kapat</button>
+                <div className="speed-overlay-panel">
+                  <div className="panel quiz-stage boss">
+                    <span className="tag boss">🎓 BİTİRME SINAVI</span>
+                    <p className="panel-title" style={{ textAlign: 'center' }}>{myLeague.name} Bitirme Sınavı</p>
+                    {capstoneTestStage}
                   </div>
                 </div>
               </div>
