@@ -8,9 +8,10 @@ const BOSS_EVERY = 5;
 const SPEED_SECONDS = 90;
 const AVATAR_OPTIONS = ['🙂', '🦊', '🐙', '🐼', '🦉', '🐳', '🦁', '🐸', '🤖', '👾', '🦄', '🐢'];
 const ONBOARDING_KEY = 'aitakip_onboarding_seen_v1';
+const SWIPE_THRESHOLD = 45;
 const ONBOARDING_SLIDES = [
   { emoji: '🎮', title: 'Haftalık Oyun', text: 'Her hafta yeni kaynaklar gelir. Okuyup soru soru ilerleyen sınavı çöz, XP kazan.' },
-  { emoji: '🏅', title: 'Lig Sistemi', text: 'Sabit müfredatını tamamla, haftalık quizlerle puan topla, ligini yükselt.' },
+  { emoji: '🏅', title: 'Lig Sistemi', text: 'Sabit rehberini tamamla, haftalık quizlerle puan topla, ligini yükselt.' },
   { emoji: '⚡', title: 'Canlı Yarışma', text: "Arkadaşlarınla oda kur ya da düello yap, gerçek zamanlı yarış." },
   { emoji: '☰', title: 'Her An Kılavuza Dön', text: 'Sol üstteki menüden Profil, Sıralama, Geçmiş ve Kılavuz sayfalarına ulaşabilirsin.' },
 ];
@@ -26,33 +27,12 @@ function formatWeekRange(createdAt?: string | null) {
   return sm === em ? `${sd}-${ed} ${sm}` : `${sd} ${sm} - ${ed} ${em}`;
 }
 
-const LEVEL_TITLES = [
-  { min: 0, name: 'Çırak' },
-  { min: 100, name: 'Pratisyen' },
-  { min: 250, name: 'Kıdemli Pratisyen' },
-  { min: 450, name: 'Uzman' },
-  { min: 700, name: 'Stratejist' },
-  { min: 1000, name: 'Risk + AI Mimarı' },
-];
-function levelFor(xp: number) {
-  let idx = 0;
-  for (let i = 0; i < LEVEL_TITLES.length; i++) if (xp >= LEVEL_TITLES[i].min) idx = i;
-  return { level: idx + 1, name: LEVEL_TITLES[idx].name, floor: LEVEL_TITLES[idx].min, next: LEVEL_TITLES[idx + 1] as { min: number; name: string } | undefined };
-}
-function shuffle<T>(arr: T[]): T[] {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-}
 function applyLeagueDelta(tier: number, xp: number, delta: number, leagues: League[], completedTiers: Set<number>) {
   let t = tier, x = xp + delta;
   while (x < 0 && t > 0) { t -= 1; x = 0; }
   if (x < 0) x = 0;
-  // Promotion requires BOTH crossing the XP threshold AND having completed the current tier's curriculum —
-  // XP can keep accumulating past the threshold, but the tier only advances once the curriculum is done.
+  // Promotion requires BOTH crossing the XP threshold AND having completed the current tier's guide —
+  // XP can keep accumulating past the threshold, but the tier only advances once the guide is done.
   while (
     t < leagues.length - 1 && leagues[t] && leagues[t].promote_threshold != null &&
     x >= (leagues[t].promote_threshold as number) && completedTiers.has(t)
@@ -62,6 +42,9 @@ function applyLeagueDelta(tier: number, xp: number, delta: number, leagues: Leag
   }
   return { tier: t, xp: x };
 }
+
+// Extra per-week stages that follow the main quiz, run inside the same focused stepper card.
+type ExtraStage = 'number' | 'risk' | 'boss';
 
 export default function Game() {
   const [session, setSession] = useState<any>(null);
@@ -94,12 +77,10 @@ export default function Game() {
   const [numberGuess, setNumberGuess] = useState('');
   const [numberSubmitted, setNumberSubmitted] = useState(false);
   const [numberCorrectDisplay, setNumberCorrectDisplay] = useState(false);
-  const [shuffledDetails, setShuffledDetails] = useState<string[]>([]);
-  const [matchSelectedSource, setMatchSelectedSource] = useState<number | null>(null);
-  const [matchAssignments, setMatchAssignments] = useState<Record<number, { detail: string; correct: boolean }>>({});
   const [riskChoice, setRiskChoice] = useState<'bet' | 'skip' | null>(null);
   const [riskAnswer, setRiskAnswer] = useState<number | null>(null);
   const [bossAnswer, setBossAnswer] = useState<number | null>(null);
+  const [extraStepIndex, setExtraStepIndex] = useState(0);
   const [speedActive, setSpeedActive] = useState(false);
   const [speedTimeLeft, setSpeedTimeLeft] = useState(SPEED_SECONDS);
   const [speedResult, setSpeedResult] = useState<boolean | null>(null);
@@ -111,8 +92,7 @@ export default function Game() {
 
   const [leagues, setLeagues] = useState<League[]>([]);
   const [leagueProgress, setLeagueProgress] = useState<LeagueProgress | null>(null);
-  const [showCurriculum, setShowCurriculum] = useState(false);
-  const [showAllCurricula, setShowAllCurricula] = useState(false);
+  const [activeTab, setActiveTab] = useState<'week' | 'guide'>('week');
   const [onboardingStep, setOnboardingStep] = useState<number | null>(null);
   const [curriculumAnswers, setCurriculumAnswers] = useState<Record<number, number>>({});
   const [curriculumStepIndex, setCurriculumStepIndex] = useState(0);
@@ -123,9 +103,8 @@ export default function Game() {
   const [lastPromotion, setLastPromotion] = useState<string | null>(null);
   const [completedTiers, setCompletedTiers] = useState<Set<number>>(new Set());
 
-  const curriculumSectionRef = useRef<HTMLDivElement | null>(null);
-  const allCurriculaSectionRef = useRef<HTMLDivElement | null>(null);
   const weekSectionRef = useRef<HTMLDivElement | null>(null);
+  const touchStartX = useRef<number | null>(null);
 
   useEffect(() => {
     sb.auth.getSession().then(({ data }) => { setSession(data.session); setLoadingAuth(false); });
@@ -152,7 +131,7 @@ export default function Game() {
       .then(({ data }) => setLeagueProgress(data));
   }, [profile?.id, profile?.league_tier]);
 
-  // Full set of tiers this user has completed the curriculum for — needed to gate league promotion
+  // Full set of tiers this user has completed the guide for — needed to gate league promotion
   // (crossing the XP threshold alone is not enough, see applyLeagueDelta).
   useEffect(() => {
     if (!profile) { setCompletedTiers(new Set()); return; }
@@ -166,16 +145,9 @@ export default function Game() {
   }, [profile?.id]);
 
   useEffect(() => {
-    if (currentWeek && currentWeek.matching && currentWeek.matching.pairs) {
-      setShuffledDetails(shuffle(currentWeek.matching.pairs.map((p) => p.detail)));
-    } else {
-      setShuffledDetails([]);
-    }
-  }, [currentWeek]);
-
-  useEffect(() => {
     setSessionXp(0);
     setReadBonusGranted(false);
+    setExtraStepIndex(0);
   }, [currentWeek?.week_number]);
 
   useEffect(() => {
@@ -191,14 +163,6 @@ export default function Game() {
     }
   }, [speedActive, speedTimeLeft, speedResult]);
 
-  // Scroll newly-revealed major sections into view instead of leaving the user staring at
-  // unchanged content while something new appeared further down the page.
-  useEffect(() => {
-    if (showCurriculum) curriculumSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, [showCurriculum]);
-  useEffect(() => {
-    if (showAllCurricula) allCurriculaSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, [showAllCurricula]);
   useEffect(() => {
     if (showSources) weekSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, [showSources]);
@@ -247,6 +211,28 @@ export default function Game() {
     localStorage.setItem(ONBOARDING_KEY, '1');
     setOnboardingStep(null);
   }
+  function onboardingNext() {
+    setOnboardingStep((s) => {
+      if (s === null) return s;
+      if (s < ONBOARDING_SLIDES.length - 1) return s + 1;
+      closeOnboarding();
+      return s;
+    });
+  }
+  function onboardingBack() {
+    setOnboardingStep((s) => (s === null || s === 0 ? s : s - 1));
+  }
+  function onOnboardingTouchStart(e: React.TouchEvent) {
+    touchStartX.current = e.touches[0].clientX;
+  }
+  function onOnboardingTouchEnd(e: React.TouchEvent) {
+    if (touchStartX.current === null) return;
+    const delta = e.changedTouches[0].clientX - touchStartX.current;
+    touchStartX.current = null;
+    if (Math.abs(delta) < SWIPE_THRESHOLD) return;
+    if (delta < 0) onboardingNext();
+    else onboardingBack();
+  }
 
   function startSpeedRound() {
     setSpeedActive(true);
@@ -285,21 +271,6 @@ export default function Game() {
     setReplayQuizAnswers((prev) => ({ ...prev, [qIdx]: optIdx }));
     const q = currentWeek!.quiz[qIdx];
     if (optIdx === q.correct_index) grantXp(Math.round((q.bonus ? 20 : 10) / 2));
-  }
-
-  function selectMatchSource(sourceIndex: number) {
-    if (weekClosed || matchAssignments[sourceIndex]) return;
-    setMatchSelectedSource(sourceIndex);
-  }
-
-  function assignMatchDetail(detail: string, used: boolean) {
-    if (weekClosed || used || matchSelectedSource === null) return;
-    const pairs = (currentWeek?.matching && currentWeek.matching.pairs) || [];
-    const pair = pairs.find((p) => p.source_index === matchSelectedSource);
-    const correct = !!pair && pair.detail === detail;
-    setMatchAssignments((prev) => ({ ...prev, [matchSelectedSource as number]: { detail, correct } }));
-    setMatchSelectedSource(null);
-    grantXp(correct ? 10 : -5);
   }
 
   function selectBossAnswer(oi: number) {
@@ -422,7 +393,7 @@ export default function Game() {
       quiz_score: score, quiz_total: quiz.length, completed_at: new Date().toISOString(),
     }, { onConflict: 'user_id,tier_index' });
     if (!progErr) {
-      // The curriculum we just upserted as completed needs to count immediately for the promotion
+      // The guide we just upserted as completed needs to count immediately for the promotion
       // gate — it may not have round-tripped into `completedTiers` state yet.
       const localCompleted = new Set(completedTiers);
       localCompleted.add(myLeague.tier_index);
@@ -438,7 +409,6 @@ export default function Game() {
       setCompletedTiers(localCompleted);
     }
     setCurriculumSaving(false);
-    setShowCurriculum(false);
     setCurriculumAnswers({});
     setCurriculumStepIndex(0);
     refreshProfile();
@@ -485,7 +455,7 @@ export default function Game() {
           {authMode === 'register' && (
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: 'var(--paper-dim)', marginBottom: 10, cursor: 'pointer' }}>
               <input type="checkbox" style={{ width: 'auto', margin: 0 }} checked={marketingConsent} onChange={(e) => setMarketingConsent(e.target.checked)} />
-              Kampanya ve duyurularla ilgili e-posta almak istiyorum (isteğe bağlı).
+              Yeni haftalık kaynaklar yayınlandığında ve önemli hatırlatmalarda bana e-posta gönderin (isteğe bağlı).
             </label>
           )}
           {authMode === 'login' ? (
@@ -502,18 +472,30 @@ export default function Game() {
 
   if (!profile) return <div className="root"><p className="panel-sub">Profil yükleniyor…</p></div>;
 
-  const lvl = levelFor(profile.total_xp);
-  const usedDetails = new Set(Object.values(matchAssignments).map((a) => a.detail));
   const showWeek = currentWeek && !alreadyDone;
   const myLeague = leagues.find((l) => l.tier_index === profile.league_tier);
   const leaguePct = myLeague && myLeague.promote_threshold ? Math.min(100, Math.round(((profile.league_xp || 0) / myLeague.promote_threshold) * 100)) : 100;
   const curriculumDone = leagueProgress && leagueProgress.completed;
 
+  // Ordered list of extra per-week stages that continue the same focused stepper card
+  // after the main quiz — number challenge, then risk question, then boss question.
+  const extraStages: ExtraStage[] = [];
+  if (currentWeek?.number_challenge) extraStages.push('number');
+  if (currentWeek?.risk_question) extraStages.push('risk');
+  if (currentWeek?.is_boss && currentWeek?.boss_question) extraStages.push('boss');
+
+  function isExtraStageDone(stage: ExtraStage): boolean {
+    if (stage === 'number') return numberSubmitted;
+    if (stage === 'risk') return riskChoice === 'skip' || (riskChoice === 'bet' && riskAnswer !== null);
+    return bossAnswer !== null;
+  }
+  const extraStagesAllDone = extraStages.every(isExtraStageDone);
+
   return (
     <div className="root">
       {onboardingStep !== null && (
         <div className="onboarding-overlay">
-          <div className="onboarding-card">
+          <div className="onboarding-card" onTouchStart={onOnboardingTouchStart} onTouchEnd={onOnboardingTouchEnd}>
             <div className="onboarding-emoji">{ONBOARDING_SLIDES[onboardingStep].emoji}</div>
             <p className="onboarding-title">{ONBOARDING_SLIDES[onboardingStep].title}</p>
             <p className="onboarding-text">{ONBOARDING_SLIDES[onboardingStep].text}</p>
@@ -522,11 +504,14 @@ export default function Game() {
             </div>
             <div className="onboarding-actions">
               <button className="btn ghost" onClick={closeOnboarding}>Atla</button>
-              {onboardingStep < ONBOARDING_SLIDES.length - 1 ? (
-                <button className="btn secondary" onClick={() => setOnboardingStep((s) => (s as number) + 1)}>İleri</button>
-              ) : (
-                <button className="btn secondary" onClick={closeOnboarding}>Başla</button>
-              )}
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button className="btn ghost" onClick={onboardingBack} disabled={onboardingStep === 0}>◀ Geri</button>
+                {onboardingStep < ONBOARDING_SLIDES.length - 1 ? (
+                  <button className="btn secondary" onClick={onboardingNext}>İleri</button>
+                ) : (
+                  <button className="btn secondary" onClick={closeOnboarding}>Başla</button>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -549,8 +534,7 @@ export default function Game() {
           <h1>{currentWeek ? (currentWeek.week_label || formatWeekRange(currentWeek.created_at)) : 'AI Takip Defteri'}</h1>
         </div>
         <div style={{ textAlign: 'right' }}>
-          <div className="level-tag">Seviye {lvl.level}<div className="level-name">{lvl.name}</div></div>
-          <button className="btn ghost" style={{ marginTop: 8 }} onClick={() => setOnboardingStep(0)}>❔ Nasıl Kullanılır</button>
+          <button className="btn ghost" onClick={() => setOnboardingStep(0)}>❔ Nasıl Kullanılır</button>
         </div>
       </div>
 
@@ -575,69 +559,43 @@ export default function Game() {
 
       {myLeague && (
         <div className="panel static-curriculum">
-          <span className="tag static">📘 STATİK MÜFREDAT</span>
-          <p className="panel-title">{myLeague.name}</p>
+          <span className="tag static">🏅 LİG SEVİYEN</span>
+          <p className="panel-title" style={{ marginBottom: myLeague.tagline ? 2 : undefined }}>{myLeague.name}</p>
+          {myLeague.tagline && <p className="one-liner" style={{ marginTop: 0, marginBottom: 8 }}>{myLeague.tagline}</p>}
           {myLeague.promote_threshold ? (
             <>
               <p className="panel-sub">{profile.league_xp || 0} / {myLeague.promote_threshold} lig puanı</p>
-              <div className="xp-track" style={{ marginBottom: 14 }}><div className="xp-fill" style={{ width: leaguePct + '%' }} /></div>
+              <div className="xp-track"><div className="xp-fill" style={{ width: leaguePct + '%' }} /></div>
             </>
           ) : (
             <p className="panel-sub">En üst ligdesin.</p>
           )}
-          {myLeague.content && (
-            curriculumDone ? (
-              <>
-                <p className="panel-sub" style={{ margin: '0 0 8px' }}>Müfredat tamamlandı ✓ ({leagueProgress!.quiz_score}/{leagueProgress!.quiz_total})</p>
-                <button className="btn ghost" onClick={() => { setCurriculumAnswers({}); setCurriculumStepIndex(0); setShowCurriculum(true); }}>🔁 Tekrar Çöz (yarı XP)</button>
-              </>
-            ) : (
-              <button className="btn secondary" onClick={() => setShowCurriculum(true)}>Lig Müfredatını Tamamla</button>
-            )
-          )}
         </div>
       )}
 
-      <div className="panel static-curriculum">
-        <span className="tag static">📘 STATİK MÜFREDAT</span>
-        <p className="panel-title">📖 Tüm Lig Müfredatları</p>
-        <p className="panel-sub">Her ligin kaynak başlıklarını görebilirsin, ama sadece kendi liginin müfredatını açıp tamamlayabilirsin.</p>
-        <button className="btn ghost" onClick={() => setShowAllCurricula((v) => !v)}>{showAllCurricula ? 'Gizle' : 'Tüm Ligleri Gör'}</button>
-        {showAllCurricula && (
-          <div style={{ marginTop: 14 }} ref={allCurriculaSectionRef}>
-            {leagues.map((l) => {
-              const isMine = l.tier_index === profile.league_tier;
-              const reads = l.content && l.content.must_reads ? l.content.must_reads : [];
-              return (
-                <div key={l.tier_index} style={{ marginBottom: 16 }}>
-                  <p className="panel-title" style={{ fontSize: 14 }}>
-                    {isMine ? '▶ ' : '🔒 '}{l.name}{isMine ? ' (senin ligin)' : ''}
-                  </p>
-                  {reads.length === 0 ? (
-                    <p className="empty-hint">Henüz içerik yok.</p>
-                  ) : (
-                    reads.map((mr, i) => (
-                      <div className="one-liner" key={i} style={{ marginBottom: 4, opacity: isMine ? 1 : 0.6 }}>
-                        {i + 1}. {mr.title}
-                      </div>
-                    ))
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
+      <div className="tabs">
+        <button className={activeTab === 'week' ? 'btn secondary' : 'btn ghost'} onClick={() => setActiveTab('week')}>🗞️ Bu Hafta</button>
+        <button className={activeTab === 'guide' ? 'btn secondary' : 'btn ghost'} onClick={() => setActiveTab('guide')}>
+          📖 {myLeague ? myLeague.name : 'Lig'} Rehberi
+        </button>
       </div>
 
-      {showCurriculum && myLeague && myLeague.content && (() => {
+      {activeTab === 'guide' && (() => {
+        if (!myLeague || !myLeague.content) {
+          return (
+            <div className="panel static-curriculum">
+              <p className="panel-sub">Bu lig için henüz rehber içeriği yok.</p>
+            </div>
+          );
+        }
         const cq = myLeague.content.quiz || [];
         const cStepQ = cq[curriculumStepIndex];
         const cAnswered = cStepQ && curriculumAnswers[curriculumStepIndex] !== undefined;
-        const cAllAnswered = cq.every((_, i) => curriculumAnswers[i] !== undefined);
+        const cAllAnswered = cq.length > 0 && cq.every((_, i) => curriculumAnswers[i] !== undefined);
         return (
-          <div className="panel static-curriculum" ref={curriculumSectionRef}>
-            <span className="tag static">📘 STATİK MÜFREDAT{curriculumDone ? ' · TEKRAR (yarı XP)' : ''}</span>
-            <p className="panel-title">{myLeague.name} Müfredatı</p>
+          <div className="panel static-curriculum">
+            <span className="tag static">📘 SABİT REHBER{curriculumDone ? ' · TEKRAR (yarı XP)' : ''}</span>
+            <p className="panel-title">{myLeague.name} Rehberi</p>
             {myLeague.content.must_reads && myLeague.content.must_reads.map((mr, i) => (
               <div className="read-row" key={i}>
                 <div>
@@ -646,6 +604,11 @@ export default function Game() {
                 </div>
               </div>
             ))}
+
+            {curriculumDone && !cAllAnswered && curriculumStepIndex === 0 && Object.keys(curriculumAnswers).length === 0 && (
+              <p className="panel-sub" style={{ margin: '10px 0' }}>Rehber tamamlandı ✓ ({leagueProgress!.quiz_score}/{leagueProgress!.quiz_total})</p>
+            )}
+
             {cStepQ && !cAllAnswered && (
               <div className="quiz-stage" style={{ marginTop: 14 }}>
                 <div className="quiz-progress">Soru {curriculumStepIndex + 1} / {cq.length}</div>
@@ -676,268 +639,192 @@ export default function Game() {
             )}
             {cAllAnswered && (
               <button className="btn secondary" style={{ marginTop: 14 }} onClick={() => finishCurriculum(myLeague, !!curriculumDone)} disabled={curriculumSaving}>
-                {curriculumSaving ? 'Kaydediliyor…' : 'Müfredatı Bitir'}
+                {curriculumSaving ? 'Kaydediliyor…' : 'Rehberi Bitir'}
               </button>
+            )}
+            {cq.length === 0 && curriculumDone && (
+              <p className="panel-sub" style={{ marginTop: 10 }}>Rehber tamamlandı ✓</p>
             )}
           </div>
         );
       })()}
 
-      {!currentWeek && (
-        <div className="panel">
-          <p className="panel-title">Henüz hafta yayınlanmadı</p>
-          <p className="panel-sub">Admin bu haftanın kaynaklarını yükleyince burada görünecek.</p>
-        </div>
-      )}
+      {activeTab === 'week' && (
+        <>
+          {!currentWeek && (
+            <div className="panel">
+              <p className="panel-title">Henüz hafta yayınlanmadı</p>
+              <p className="panel-sub">Admin bu haftanın kaynaklarını yükleyince burada görünecek.</p>
+            </div>
+          )}
 
-      {currentWeek && alreadyDone && (() => {
-        const rq = replayQuizStepIndex < currentWeek.quiz.length ? currentWeek.quiz[replayQuizStepIndex] : null;
-        const rAnswered = !!rq && replayQuizAnswers[replayQuizStepIndex] !== undefined;
-        const rAllAnswered = currentWeek.quiz.every((_, i) => replayQuizAnswers[i] !== undefined);
-        return (
-          <div className="panel">
-            <span className="tag fresh">🗞️ GÜNCEL · BU HAFTA</span>
-            <p className="panel-title">{(currentWeek.week_label || formatWeekRange(currentWeek.created_at))} tamamlandı ✓</p>
-            <p className="panel-sub">Bir sonraki hafta admin tarafından yayınlandığında burada görünecek. Kaynakları ve özetleri Geçmiş sayfasından tekrar okuyabilirsin.</p>
-            {!weeklyReplayActive ? (
-              <button className="btn ghost" onClick={startWeeklyReplay}>🔁 Soruları Tekrar Çöz (yarı XP)</button>
-            ) : rAllAnswered ? (
-              <p className="panel-sub" style={{ marginTop: 10 }}>Tekrar tamamladın! XP zaten hesabına işlendi. <button className="btn ghost" onClick={startWeeklyReplay}>Tekrar Başlat</button></p>
-            ) : rq && (
-              <div className="quiz-stage" style={{ marginTop: 14 }}>
-                <div className="quiz-progress">Soru {replayQuizStepIndex + 1} / {currentWeek.quiz.length}</div>
-                {rAnswered && (
-                  <div className={'feedback-banner ' + (replayQuizAnswers[replayQuizStepIndex] === rq.correct_index ? 'correct' : 'wrong')}>
-                    {replayQuizAnswers[replayQuizStepIndex] === rq.correct_index ? '🎉 Doğru!' : '💥 Olmadı.'}
+          {currentWeek && alreadyDone && (() => {
+            const rq = replayQuizStepIndex < currentWeek.quiz.length ? currentWeek.quiz[replayQuizStepIndex] : null;
+            const rAnswered = !!rq && replayQuizAnswers[replayQuizStepIndex] !== undefined;
+            const rAllAnswered = currentWeek.quiz.every((_, i) => replayQuizAnswers[i] !== undefined);
+            return (
+              <div className="panel">
+                <span className="tag fresh">🗞️ GÜNCEL · BU HAFTA</span>
+                <p className="panel-title">{(currentWeek.week_label || formatWeekRange(currentWeek.created_at))} tamamlandı ✓</p>
+                <p className="panel-sub">Bir sonraki hafta admin tarafından yayınlandığında burada görünecek. Kaynakları ve özetleri Geçmiş sayfasından tekrar okuyabilirsin.</p>
+                {!weeklyReplayActive ? (
+                  <button className="btn ghost" onClick={startWeeklyReplay}>🔁 Soruları Tekrar Çöz (yarı XP)</button>
+                ) : rAllAnswered ? (
+                  <p className="panel-sub" style={{ marginTop: 10 }}>Tekrar tamamladın! XP zaten hesabına işlendi. <button className="btn ghost" onClick={startWeeklyReplay}>Tekrar Başlat</button></p>
+                ) : rq && (
+                  <div className="quiz-stage" style={{ marginTop: 14 }}>
+                    <div className="quiz-progress">Soru {replayQuizStepIndex + 1} / {currentWeek.quiz.length}</div>
+                    {rAnswered && (
+                      <div className={'feedback-banner ' + (replayQuizAnswers[replayQuizStepIndex] === rq.correct_index ? 'correct' : 'wrong')}>
+                        {replayQuizAnswers[replayQuizStepIndex] === rq.correct_index ? '🎉 Doğru!' : '💥 Olmadı.'}
+                      </div>
+                    )}
+                    <div className="quiz-card">
+                      <div className="quiz-q">
+                        {rq.type === 'tf' && <span className="tag tf">DOĞRU/YANLIŞ</span>}
+                        <div>{rq.question}</div>
+                      </div>
+                      {rq.options.map((opt, oi) => {
+                        let cls = 'quiz-opt opt-' + oi;
+                        if (rAnswered && oi === rq.correct_index) cls += ' correct';
+                        else if (rAnswered && oi === replayQuizAnswers[replayQuizStepIndex]) cls += ' wrong';
+                        return <button key={oi} className={cls} disabled={rAnswered} onClick={() => selectReplayQuizAnswer(replayQuizStepIndex, oi)}>{opt}</button>;
+                      })}
+                      {rAnswered && <div className="quiz-explain">{rq.explanation}</div>}
+                    </div>
+                    {rAnswered && (
+                      <button className="btn secondary" onClick={() => setReplayQuizStepIndex((i) => i + 1)}>
+                        {replayQuizStepIndex + 1 < currentWeek.quiz.length ? 'Sonraki Soru' : 'Devam Et'}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {currentWeek && currentWeek.is_boss && (
+            <div className="panel boss">
+              <p className="panel-title">👑 BOSS HAFTASI</p>
+              <p className="panel-sub">Bu hafta her şey daha zor ve daha ödüllü. Kaynakları dikkatlice oku.</p>
+            </div>
+          )}
+
+          {currentWeek && (
+            <div className="panel" ref={weekSectionRef}>
+              <span className="tag fresh">🗞️ GÜNCEL · BU HAFTA</span>
+              <p className="panel-title">{currentWeek.week_theme || 'Bu haftanın okumaları'}</p>
+              <button className="btn ghost" onClick={() => setShowSources((v) => !v)}>
+                {showSources ? 'Kaynakları Gizle' : `📚 Kaynakları Göster (${currentWeek.must_reads.length})`}
+              </button>
+              {showSources && currentWeek.must_reads.map((mr, i) => (
+                <div className="read-row" key={i} style={{ marginTop: 10 }}>
+                  <input type="checkbox" checked={!!checkedReads[i]} disabled={weekClosed || alreadyDone}
+                    onChange={() => {
+                      setCheckedReads((prev) => {
+                        const next = { ...prev, [i]: !prev[i] };
+                        const allNow = currentWeek.must_reads.every((_, idx) => next[idx]);
+                        if (allNow && !readBonusGranted) { setReadBonusGranted(true); grantXp(15); }
+                        return next;
+                      });
+                    }} />
+                  <div>
+                    {mr.url ? <a href={mr.url} target="_blank" rel="noopener noreferrer">{mr.title}</a> : <strong>{mr.title}</strong>}
+                    <div className="one-liner">{mr.summary}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {showWeek && (profile.freezes || 0) > 0 && (
+            <div className="panel">
+              <button className="btn ghost" onClick={useFreeze} disabled={saving}>❄ Bu Haftayı Dondur ({profile.freezes} hak kaldı, seri bozulmaz)</button>
+            </div>
+          )}
+
+          {showWeek && (() => {
+            const totalQ = currentWeek!.quiz.length;
+            const allQuizAnswered = currentWeek!.quiz.every((_, i) => quizAnswers[i] !== undefined);
+            const stepQ = currentWeek!.quiz[quizStepIndex];
+            const stepAnswered = stepQ && quizAnswers[quizStepIndex] !== undefined;
+            const currentExtra = allQuizAnswered && !weekClosed ? extraStages[extraStepIndex] : undefined;
+            const readyToClose = allQuizAnswered && extraStagesAllDone;
+
+            const quizStagePanel = (
+              <div className="panel quiz-stage">
+                <p className="panel-sub" style={{ textAlign: 'center', margin: '0 0 2px', textTransform: 'uppercase', letterSpacing: '.06em', fontFamily: 'var(--mono)', fontSize: 11 }}>
+                  Bu haftanın sınavı{currentWeek!.week_label ? ` · ${currentWeek!.week_label}` : ''}
+                </p>
+                <p className="panel-title" style={{ textAlign: 'center' }}>Sınav · {currentWeek!.must_reads[stepQ.source_index] ? currentWeek!.must_reads[stepQ.source_index].title : ''}</p>
+                <div className="quiz-progress">Soru {quizStepIndex + 1} / {totalQ} · +{sessionXp} XP</div>
+                <div className="xp-track" style={{ marginBottom: 14 }}>
+                  <div className="xp-fill" style={{ width: Math.round((Object.keys(quizAnswers).length / totalQ) * 100) + '%' }} />
+                </div>
+                {stepAnswered && (
+                  <div className={'feedback-banner ' + (quizAnswers[quizStepIndex] === stepQ.correct_index ? 'correct' : 'wrong')}>
+                    {quizAnswers[quizStepIndex] === stepQ.correct_index ? '🎉 Harika, doğru bildin!' : '💥 Olmadı, bir dahakine!'}
                   </div>
                 )}
                 <div className="quiz-card">
                   <div className="quiz-q">
-                    {rq.type === 'tf' && <span className="tag tf">DOĞRU/YANLIŞ</span>}
-                    <div>{rq.question}</div>
+                    {stepQ.type === 'tf' && <span className="tag tf">DOĞRU/YANLIŞ</span>}
+                    {stepQ.bonus && <span className="tag bonus">BONUS · +20 XP · Cevap özetlerde yok, kaynağı okuman gerekir</span>}
+                    <div>{stepQ.question}</div>
                   </div>
-                  {rq.options.map((opt, oi) => {
+                  {stepQ.options.map((opt, oi) => {
                     let cls = 'quiz-opt opt-' + oi;
-                    if (rAnswered && oi === rq.correct_index) cls += ' correct';
-                    else if (rAnswered && oi === replayQuizAnswers[replayQuizStepIndex]) cls += ' wrong';
-                    return <button key={oi} className={cls} disabled={rAnswered} onClick={() => selectReplayQuizAnswer(replayQuizStepIndex, oi)}>{opt}</button>;
+                    if (stepAnswered && oi === stepQ.correct_index) cls += ' correct';
+                    else if (stepAnswered && oi === quizAnswers[quizStepIndex]) cls += ' wrong';
+                    return <button key={oi} className={cls} disabled={stepAnswered} onClick={() => selectQuizAnswer(quizStepIndex, oi)}>{opt}</button>;
                   })}
-                  {rAnswered && <div className="quiz-explain">{rq.explanation}</div>}
+                  {stepAnswered && <div className="quiz-explain">{stepQ.explanation}</div>}
                 </div>
-                {rAnswered && (
-                  <button className="btn secondary" onClick={() => setReplayQuizStepIndex((i) => i + 1)}>
-                    {replayQuizStepIndex + 1 < currentWeek.quiz.length ? 'Sonraki Soru' : 'Devam Et'}
+                {stepAnswered && (
+                  <button className="btn secondary" onClick={() => setQuizStepIndex((i) => i + 1)}>
+                    {quizStepIndex + 1 < totalQ ? 'Sonraki Soru' : 'Devam Et'}
                   </button>
                 )}
               </div>
-            )}
-          </div>
-        );
-      })()}
+            );
 
-      {currentWeek && currentWeek.is_boss && (
-        <div className="panel boss">
-          <p className="panel-title">👑 BOSS HAFTASI</p>
-          <p className="panel-sub">Bu hafta her şey daha zor ve daha ödüllü. Kaynakları dikkatlice oku.</p>
-        </div>
-      )}
-
-      {currentWeek && (
-        <div className="eyebrow section-divider" ref={weekSectionRef}>◆ HAFTALIK QUİZ — lig müfredatından bağımsız, bu haftaya özel</div>
-      )}
-
-      {currentWeek && (
-        <div className="panel">
-          <span className="tag fresh">🗞️ GÜNCEL · BU HAFTA</span>
-          <p className="panel-title">{currentWeek.week_theme || 'Bu haftanın okumaları'}</p>
-          <button className="btn ghost" onClick={() => setShowSources((v) => !v)}>
-            {showSources ? 'Kaynakları Gizle' : `📚 Kaynakları Göster (${currentWeek.must_reads.length})`}
-          </button>
-          {showSources && currentWeek.must_reads.map((mr, i) => (
-            <div className="read-row" key={i} style={{ marginTop: 10 }}>
-              <input type="checkbox" checked={!!checkedReads[i]} disabled={weekClosed || alreadyDone}
-                onChange={() => {
-                  setCheckedReads((prev) => {
-                    const next = { ...prev, [i]: !prev[i] };
-                    const allNow = currentWeek.must_reads.every((_, idx) => next[idx]);
-                    if (allNow && !readBonusGranted) { setReadBonusGranted(true); grantXp(15); }
-                    return next;
-                  });
-                }} />
-              <div>
-                {mr.url ? <a href={mr.url} target="_blank" rel="noopener noreferrer">{mr.title}</a> : <strong>{mr.title}</strong>}
-                <div className="one-liner">{mr.summary}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {showWeek && (profile.freezes || 0) > 0 && (
-        <div className="panel">
-          <button className="btn ghost" onClick={useFreeze} disabled={saving}>❄ Bu Haftayı Dondur ({profile.freezes} hak kaldı, seri bozulmaz)</button>
-        </div>
-      )}
-
-      {showWeek && (() => {
-        const totalQ = currentWeek!.quiz.length;
-        const allQuizAnswered = currentWeek!.quiz.every((_, i) => quizAnswers[i] !== undefined);
-        const stepQ = currentWeek!.quiz[quizStepIndex];
-        const stepAnswered = stepQ && quizAnswers[quizStepIndex] !== undefined;
-
-        const quizStagePanel = (
-          <div className="panel quiz-stage">
-            <p className="panel-sub" style={{ textAlign: 'center', margin: '0 0 2px', textTransform: 'uppercase', letterSpacing: '.06em', fontFamily: 'var(--mono)', fontSize: 11 }}>
-              Bu haftanın sınavı{currentWeek!.week_label ? ` · ${currentWeek!.week_label}` : ''}
-            </p>
-            <p className="panel-title" style={{ textAlign: 'center' }}>Sınav · {currentWeek!.must_reads[stepQ.source_index] ? currentWeek!.must_reads[stepQ.source_index].title : ''}</p>
-            <div className="quiz-progress">Soru {quizStepIndex + 1} / {totalQ} · +{sessionXp} XP</div>
-            <div className="xp-track" style={{ marginBottom: 14 }}>
-              <div className="xp-fill" style={{ width: Math.round((Object.keys(quizAnswers).length / totalQ) * 100) + '%' }} />
-            </div>
-            {stepAnswered && (
-              <div className={'feedback-banner ' + (quizAnswers[quizStepIndex] === stepQ.correct_index ? 'correct' : 'wrong')}>
-                {quizAnswers[quizStepIndex] === stepQ.correct_index ? '🎉 Harika, doğru bildin!' : '💥 Olmadı, bir dahakine!'}
-              </div>
-            )}
-            <div className="quiz-card">
-              <div className="quiz-q">
-                {stepQ.type === 'tf' && <span className="tag tf">DOĞRU/YANLIŞ</span>}
-                {stepQ.bonus && <span className="tag bonus">BONUS · +20 XP · Cevap özetlerde yok, kaynağı okuman gerekir</span>}
-                <div>{stepQ.question}</div>
-              </div>
-              {stepQ.options.map((opt, oi) => {
-                let cls = 'quiz-opt opt-' + oi;
-                if (stepAnswered && oi === stepQ.correct_index) cls += ' correct';
-                else if (stepAnswered && oi === quizAnswers[quizStepIndex]) cls += ' wrong';
-                return <button key={oi} className={cls} disabled={stepAnswered} onClick={() => selectQuizAnswer(quizStepIndex, oi)}>{opt}</button>;
-              })}
-              {stepAnswered && <div className="quiz-explain">{stepQ.explanation}</div>}
-            </div>
-            {stepAnswered && (
-              <button className="btn secondary" onClick={() => setQuizStepIndex((i) => i + 1)}>
-                {quizStepIndex + 1 < totalQ ? 'Sonraki Soru' : 'Devam Et'}
-              </button>
-            )}
-          </div>
-        );
-
-        return (
-          <>
-            {!speedActive && !weekClosed && !allQuizAnswered && speedResult === null && (
-              <div className="panel">
-                <p className="panel-title">⏱ Hız Turu</p>
-                <p className="panel-sub">{SPEED_SECONDS} saniyede tüm quiz sorularını bitirirsen +30 XP bonus kazanırsın. Tek deneme hakkın var. BONUS etiketli soruların cevabı özetlerde yok — kaynağı önceden okumuş olman gerekir.</p>
-                <button className="btn secondary" onClick={startSpeedRound}>Hız Turunu Başlat</button>
-              </div>
-            )}
-
-            {speedActive ? (
-              <div className="speed-overlay">
-                <div className="speed-overlay-timer">
-                  <TimerRing seconds={speedTimeLeft} total={SPEED_SECONDS} size={56} />
-                  <span>HIZ TURU — tüm soruları bitir, +30 XP kazan</span>
-                </div>
-                <div className="speed-overlay-panel">
-                  {!weekClosed && !allQuizAnswered && stepQ && quizStagePanel}
-                </div>
-              </div>
-            ) : (
-              !weekClosed && !allQuizAnswered && stepQ && quizStagePanel
-            )}
-
-            {weekClosed && (
-              <div className="panel">
-                <p className="panel-title">Sınav Özeti</p>
-                {currentWeek!.quiz.map((q, qi) => (
-                  <div className="quiz-card" key={qi}>
-                    <div className="quiz-q">
-                      {q.type === 'tf' && <span className="tag tf">DOĞRU/YANLIŞ</span>}
-                      {q.bonus && <span className="tag bonus">BONUS · +20 XP</span>}
-                      <div>{q.question}</div>
+            // The extra stages (number challenge, risk, boss) render inside the same focused
+            // card flow that the main quiz uses, one at a time, driven by extraStepIndex.
+            const numberStagePanel = currentWeek!.number_challenge && (
+              <div className="panel quiz-stage">
+                <div className="quiz-progress">Sayı Tahmini</div>
+                <p className="panel-title" style={{ textAlign: 'center' }}>🔢 Sayı Tahmini</p>
+                <div className="quiz-card">
+                  <div className="quiz-q"><div>{currentWeek!.number_challenge.question}</div></div>
+                  <input type="number" value={numberGuess} disabled={weekClosed || numberSubmitted}
+                    onChange={(e) => setNumberGuess(e.target.value)} placeholder="Tahminin…" />
+                  {!numberSubmitted && !weekClosed && (
+                    <button className="btn secondary" onClick={submitNumberGuess} disabled={!numberGuess.trim()}>Tahmin Et</button>
+                  )}
+                  {numberSubmitted && (
+                    <div className={'feedback-banner ' + (numberCorrectDisplay ? 'correct' : 'wrong')}>
+                      {numberCorrectDisplay ? '🎉 Doğru tahmin!' : `Yanlış. Doğru cevap: ${currentWeek!.number_challenge.correct_value} (±${currentWeek!.number_challenge.tolerance}).`} {currentWeek!.number_challenge.explanation}
                     </div>
-                    {q.options.map((opt, oi) => {
-                      let cls = 'quiz-opt opt-' + oi;
-                      if (oi === q.correct_index) cls += ' correct';
-                      else if (oi === quizAnswers[qi]) cls += ' wrong';
-                      return <button key={oi} className={cls} disabled>{opt}</button>;
-                    })}
-                    <div className="quiz-explain">{q.explanation}</div>
+                  )}
+                </div>
+                {currentWeek!.must_reads[currentWeek!.number_challenge.source_index] && (
+                  <div className="read-row" style={{ marginTop: 10 }}>
+                    <div>
+                      <strong>{currentWeek!.must_reads[currentWeek!.number_challenge.source_index].title}</strong>
+                      <div className="one-liner">{currentWeek!.must_reads[currentWeek!.number_challenge.source_index].summary}</div>
+                    </div>
                   </div>
-                ))}
-              </div>
-            )}
-
-            {(allQuizAnswered || weekClosed) && currentWeek!.number_challenge && (
-              <div className="panel">
-                <p className="panel-title">🔢 Sayı Tahmini</p>
-                <p className="panel-sub">{currentWeek!.number_challenge.question}</p>
-                <input type="number" value={numberGuess} disabled={weekClosed || numberSubmitted}
-                  onChange={(e) => setNumberGuess(e.target.value)} placeholder="Tahminin…" />
-                {!numberSubmitted && !weekClosed && (
-                  <button className="btn secondary" onClick={submitNumberGuess} disabled={!numberGuess.trim()}>Tahmin Et</button>
                 )}
                 {numberSubmitted && (
-                  <div className={'feedback-banner ' + (numberCorrectDisplay ? 'correct' : 'wrong')}>
-                    {numberCorrectDisplay ? '🎉 Doğru tahmin!' : `Yanlış. Doğru cevap: ${currentWeek!.number_challenge.correct_value} (±${currentWeek!.number_challenge.tolerance}).`} {currentWeek!.number_challenge.explanation}
-                  </div>
+                  <button className="btn secondary" onClick={() => setExtraStepIndex((i) => i + 1)}>Devam Et</button>
                 )}
               </div>
-            )}
+            );
 
-            {(allQuizAnswered || weekClosed) && currentWeek!.matching && currentWeek!.matching.pairs && currentWeek!.matching.pairs.length > 0 && (
-              <div className="panel">
-                <p className="panel-title">🔗 Eşleştirme</p>
-                <p className="panel-sub match-hint">👉 Bir kaynağa dokun, sonra doğru detayı seç. Doğruysa yeşil yanar, yanlışsa kırmızı yanar ve hemen XP kaybedersin.</p>
-                {currentWeek!.matching.pairs.map((p, pi) => {
-                  const assigned = matchAssignments[p.source_index];
-                  const isSelected = matchSelectedSource === p.source_index;
-                  let slotCls = 'match-slot' + (assigned ? ' filled' : '');
-                  if (assigned) slotCls += assigned.correct ? ' correct' : ' wrong';
-                  let sourceCls = 'match-source' + (isSelected ? ' selected' : '');
-                  return (
-                    <div className="match-item" key={pi}>
-                      <div className="match-row">
-                        <div className={sourceCls} onClick={() => selectMatchSource(p.source_index)} style={{ cursor: assigned ? 'default' : 'pointer' }}>
-                          {currentWeek!.must_reads[p.source_index] ? currentWeek!.must_reads[p.source_index].title : 'Kaynak ' + p.source_index}
-                        </div>
-                        <div className={slotCls}>
-                          {assigned ? `${assigned.correct ? '✓' : '✗'} ${assigned.detail}` : (isSelected ? 'Aşağıdan doğru detayı seç…' : 'Önce buraya tıkla')}
-                        </div>
-                      </div>
-                      {isSelected && !assigned && (
-                        <div className="match-pool-inline">
-                          {shuffledDetails.filter((d) => !usedDetails.has(d)).map((d, di) => (
-                            <span key={di} className="match-chip" onClick={() => assignMatchDetail(d, weekClosed)}>{d}</span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {(allQuizAnswered || weekClosed) && currentWeek!.is_boss && currentWeek!.boss_question && (
-              <div className="panel boss">
-                <p className="panel-title">👑 Boss Sorusu · +30 XP</p>
-                <div className="quiz-card">
-                  <div className="quiz-q"><span className="tag boss">SENTEZ SORUSU</span><div>{currentWeek!.boss_question.question}</div></div>
-                  {currentWeek!.boss_question.options.map((opt, oi) => {
-                    const answered = bossAnswer !== null;
-                    let cls = 'quiz-opt opt-' + oi;
-                    if (answered && oi === currentWeek!.boss_question!.correct_index) cls += ' correct';
-                    else if (answered && oi === bossAnswer) cls += ' wrong';
-                    return <button key={oi} className={cls} disabled={answered || weekClosed} onClick={() => selectBossAnswer(oi)}>{opt}</button>;
-                  })}
-                  {bossAnswer !== null && <div className="quiz-explain">{currentWeek!.boss_question.explanation}</div>}
-                </div>
-              </div>
-            )}
-
-            {(allQuizAnswered || weekClosed) && currentWeek!.risk_question && (
-              <div className="panel">
-                <p className="panel-title">🎲 Çift Yap ya da Kaybet</p>
+            const riskStagePanel = currentWeek!.risk_question && (
+              <div className="panel quiz-stage">
+                <div className="quiz-progress">Çift Yap ya da Kaybet</div>
+                <p className="panel-title" style={{ textAlign: 'center' }}>🎲 Çift Yap ya da Kaybet</p>
                 <p className="panel-sub">Bu hafta oyun içinde kazandığın XP'nin yarısını bahse yatır. Soruyu cevaplar cevaplamaz sonuç anında belli olur, XP hemen işlenir.</p>
                 {riskChoice === null && !weekClosed && (
                   <div className="risk-choice-row">
@@ -959,35 +846,115 @@ export default function Game() {
                   </div>
                 )}
                 {riskChoice === 'skip' && <p className="one-liner">Riske girmedin, bahis mekaniği bu hafta devre dışı.</p>}
-              </div>
-            )}
-
-            {(allQuizAnswered || weekClosed) && (
-              <div className="panel">
-                {!weekClosed ? (
-                  <>
-                    <button className="btn secondary" onClick={closeWeek} disabled={saving || (riskChoice === 'bet' && riskAnswer === null)}>
-                      {saving ? 'Kaydediliyor…' : 'Haftayı Bitir ve Bonus Al'}
-                    </button>
-                    <p className="panel-sub" style={{ marginTop: 8 }}>Sorulardan kazandığın XP zaten hesabına işlendi ({sessionXp} XP). Bu buton sadece bitirme bonusunu ekler ve seriyi ilerletir.</p>
-                  </>
-                ) : (
-                  <div>
-                    <div className="closed-stamp">ONAYLANDI · +{lastGain} XP</div>
-                    {lastCritical && <div className="critical-tag">⚡ KRİTİK BAŞARI! 1.5× bonus uygulandı</div>}
-                    {lastFreezeEarned && <div className="critical-tag">❄ Yeni dondurma hakkı kazandın!</div>}
-                    {lastStreakBonus > 0 && <div className="critical-tag">🔥 3 haftalık seri bonusu: +{lastStreakBonus} XP</div>}
-                    {lastRiskResult === true && <div className="critical-tag">🎲 Bahsi kazandın!</div>}
-                    {lastRiskResult === false && <div className="critical-tag">🎲 Bahsi kaybettin.</div>}
-                    {speedResult === true && <div className="critical-tag">⏱ Hız turu bonusu kazandın!</div>}
-                    <p className="panel-sub" style={{ marginTop: 10 }}>Gelecek hafta admin yeni içerik yayınladığında burada görünecek.</p>
-                  </div>
+                {(riskChoice === 'skip' || (riskChoice === 'bet' && riskAnswer !== null)) && (
+                  <button className="btn secondary" onClick={() => setExtraStepIndex((i) => i + 1)}>Devam Et</button>
                 )}
               </div>
-            )}
-          </>
-        );
-      })()}
+            );
+
+            const bossStagePanel = currentWeek!.boss_question && (
+              <div className="panel boss quiz-stage">
+                <div className="quiz-progress">Boss Sorusu</div>
+                <p className="panel-title" style={{ textAlign: 'center' }}>👑 Boss Sorusu · +30 XP</p>
+                <div className="quiz-card">
+                  <div className="quiz-q"><span className="tag boss">SENTEZ SORUSU</span><div>{currentWeek!.boss_question.question}</div></div>
+                  {currentWeek!.boss_question.options.map((opt, oi) => {
+                    const answered = bossAnswer !== null;
+                    let cls = 'quiz-opt opt-' + oi;
+                    if (answered && oi === currentWeek!.boss_question!.correct_index) cls += ' correct';
+                    else if (answered && oi === bossAnswer) cls += ' wrong';
+                    return <button key={oi} className={cls} disabled={answered || weekClosed} onClick={() => selectBossAnswer(oi)}>{opt}</button>;
+                  })}
+                  {bossAnswer !== null && <div className="quiz-explain">{currentWeek!.boss_question.explanation}</div>}
+                </div>
+                {bossAnswer !== null && (
+                  <button className="btn secondary" onClick={() => setExtraStepIndex((i) => i + 1)}>Devam Et</button>
+                )}
+              </div>
+            );
+
+            function extraStagePanelFor(stage: ExtraStage) {
+              if (stage === 'number') return numberStagePanel;
+              if (stage === 'risk') return riskStagePanel;
+              return bossStagePanel;
+            }
+
+            return (
+              <>
+                {!speedActive && !weekClosed && !allQuizAnswered && speedResult === null && (
+                  <div className="panel">
+                    <p className="panel-title">⏱ Hız Turu</p>
+                    <p className="panel-sub">{SPEED_SECONDS} saniyede tüm quiz sorularını bitirirsen +30 XP bonus kazanırsın. Tek deneme hakkın var. BONUS etiketli soruların cevabı özetlerde yok — kaynağı önceden okumuş olman gerekir.</p>
+                    <button className="btn secondary" onClick={startSpeedRound}>Hız Turunu Başlat</button>
+                  </div>
+                )}
+
+                {speedActive ? (
+                  <div className="speed-overlay">
+                    <div className="speed-overlay-timer">
+                      <TimerRing seconds={speedTimeLeft} total={SPEED_SECONDS} size={56} />
+                      <span>HIZ TURU — tüm soruları bitir, +30 XP kazan</span>
+                    </div>
+                    <div className="speed-overlay-panel">
+                      {!weekClosed && !allQuizAnswered && stepQ && quizStagePanel}
+                    </div>
+                  </div>
+                ) : (
+                  !weekClosed && !allQuizAnswered && stepQ && quizStagePanel
+                )}
+
+                {!weekClosed && currentExtra && extraStagePanelFor(currentExtra)}
+
+                {weekClosed && (
+                  <div className="panel">
+                    <p className="panel-title">Sınav Özeti</p>
+                    {currentWeek!.quiz.map((q, qi) => (
+                      <div className="quiz-card" key={qi}>
+                        <div className="quiz-q">
+                          {q.type === 'tf' && <span className="tag tf">DOĞRU/YANLIŞ</span>}
+                          {q.bonus && <span className="tag bonus">BONUS · +20 XP</span>}
+                          <div>{q.question}</div>
+                        </div>
+                        {q.options.map((opt, oi) => {
+                          let cls = 'quiz-opt opt-' + oi;
+                          if (oi === q.correct_index) cls += ' correct';
+                          else if (oi === quizAnswers[qi]) cls += ' wrong';
+                          return <button key={oi} className={cls} disabled>{opt}</button>;
+                        })}
+                        <div className="quiz-explain">{q.explanation}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {(readyToClose || weekClosed) && (
+                  <div className="panel">
+                    {!weekClosed ? (
+                      <>
+                        <button className="btn secondary" onClick={closeWeek} disabled={saving || (riskChoice === 'bet' && riskAnswer === null)}>
+                          {saving ? 'Kaydediliyor…' : 'Haftayı Bitir ve Bonus Al'}
+                        </button>
+                        <p className="panel-sub" style={{ marginTop: 8 }}>Sorulardan kazandığın XP zaten hesabına işlendi ({sessionXp} XP). Bu buton sadece bitirme bonusunu ekler ve seriyi ilerletir.</p>
+                      </>
+                    ) : (
+                      <div>
+                        <div className="closed-stamp">ONAYLANDI · +{lastGain} XP</div>
+                        {lastCritical && <div className="critical-tag">⚡ KRİTİK BAŞARI! 1.5× bonus uygulandı</div>}
+                        {lastFreezeEarned && <div className="critical-tag">❄ Yeni dondurma hakkı kazandın!</div>}
+                        {lastStreakBonus > 0 && <div className="critical-tag">🔥 3 haftalık seri bonusu: +{lastStreakBonus} XP</div>}
+                        {lastRiskResult === true && <div className="critical-tag">🎲 Bahsi kazandın!</div>}
+                        {lastRiskResult === false && <div className="critical-tag">🎲 Bahsi kaybettin.</div>}
+                        {speedResult === true && <div className="critical-tag">⏱ Hız turu bonusu kazandın!</div>}
+                        <p className="panel-sub" style={{ marginTop: 10 }}>Gelecek hafta admin yeni içerik yayınladığında burada görünecek.</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
+            );
+          })()}
+        </>
+      )}
     </div>
   );
 }
