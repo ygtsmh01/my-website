@@ -5,7 +5,7 @@ import { useTheme } from '../lib/ThemeContext';
 import type { League, LeagueProgress, Profile, Week } from '../lib/types';
 
 const BOSS_EVERY = 5;
-const SPEED_SECONDS = 90;
+const SPEED_SECONDS_PER_QUESTION = 15;
 const AVATAR_OPTIONS = ['🙂', '🦊', '🐙', '🐼', '🦉', '🐳', '🦁', '🐸', '🤖', '👾', '🦄', '🐢'];
 const ONBOARDING_KEY = 'aitakip_onboarding_seen_v1';
 const SWIPE_THRESHOLD = 45;
@@ -82,8 +82,13 @@ export default function Game() {
   const [bossAnswer, setBossAnswer] = useState<number | null>(null);
   const [extraStepIndex, setExtraStepIndex] = useState(0);
   const [speedActive, setSpeedActive] = useState(false);
-  const [speedTimeLeft, setSpeedTimeLeft] = useState(SPEED_SECONDS);
+  const [speedTimeLeft, setSpeedTimeLeft] = useState(0);
   const [speedResult, setSpeedResult] = useState<boolean | null>(null);
+  // Tracks which mode the weekly test overlay is running in — persists across manual close/reopen,
+  // unlike speedActive which only meaningfully means "actively running the timed round right now".
+  const [weekTestMode, setWeekTestMode] = useState<'none' | 'untimed' | 'timed'>('none');
+  const [weekTestOverlayOpen, setWeekTestOverlayOpen] = useState(false);
+  const [weeklyReplayOverlayOpen, setWeeklyReplayOverlayOpen] = useState(false);
   const [lastRiskResult, setLastRiskResult] = useState<boolean | null>(null);
   const [saving, setSaving] = useState(false);
   const [sessionXp, setSessionXp] = useState(0);
@@ -149,6 +154,9 @@ export default function Game() {
     setSessionXp(0);
     setReadBonusGranted(false);
     setExtraStepIndex(0);
+    setWeekTestMode('none');
+    setWeekTestOverlayOpen(false);
+    setWeeklyReplayOverlayOpen(false);
   }, [currentWeek?.week_number]);
 
   useEffect(() => {
@@ -164,9 +172,30 @@ export default function Game() {
     }
   }, [speedActive, speedTimeLeft, speedResult]);
 
+  // Timed round now covers the main quiz AND the extra stages (number/risk/boss) — it only
+  // ends successfully once everything is answered, not just the main quiz (see SPEED_SECONDS_PER_QUESTION).
+  useEffect(() => {
+    if (!speedActive || speedTimeLeft <= 0 || !currentWeek) return;
+    const allQuizDone = currentWeek.quiz.every((_, i) => quizAnswers[i] !== undefined);
+    const numberDone = !currentWeek.number_challenge || numberSubmitted;
+    const riskDone = !currentWeek.risk_question || riskChoice === 'skip' || (riskChoice === 'bet' && riskAnswer !== null);
+    const bossDone = !(currentWeek.is_boss && currentWeek.boss_question) || bossAnswer !== null;
+    if (allQuizDone && numberDone && riskDone && bossDone) {
+      setSpeedActive(false);
+      setSpeedResult(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [speedActive, speedTimeLeft, quizAnswers, numberSubmitted, riskChoice, riskAnswer, bossAnswer, currentWeek]);
+
   useEffect(() => {
     if (showSources) weekSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, [showSources]);
+
+  // Once the week is actually closed, drop back to the normal page view (the "Sınav Özeti" /
+  // closing summary panel already renders outside the overlay, after this section).
+  useEffect(() => {
+    if (weekClosed) setWeekTestOverlayOpen(false);
+  }, [weekClosed]);
 
   async function refreshProfile() {
     const { data: sessionData } = await sb.auth.getSession();
@@ -235,10 +264,30 @@ export default function Game() {
     else onboardingBack();
   }
 
+  function computeSpeedSecondsForWeek(w: Week | null): number {
+    if (!w) return 0;
+    let count = w.quiz.length;
+    if (w.number_challenge) count += 1;
+    if (w.risk_question) count += 1;
+    if (w.is_boss && w.boss_question) count += 1;
+    return count * SPEED_SECONDS_PER_QUESTION;
+  }
+
   function startSpeedRound() {
+    setWeekTestMode('timed');
+    setWeekTestOverlayOpen(true);
     setSpeedActive(true);
-    setSpeedTimeLeft(SPEED_SECONDS);
+    setSpeedTimeLeft(computeSpeedSecondsForWeek(currentWeek));
     setSpeedResult(null);
+  }
+
+  function startUntimedWeekTest() {
+    setWeekTestMode('untimed');
+    setWeekTestOverlayOpen(true);
+  }
+
+  function resumeWeekTest() {
+    setWeekTestOverlayOpen(true);
   }
 
   async function grantXp(delta: number) {
@@ -253,18 +302,17 @@ export default function Game() {
     setQuizAnswers((prev) => ({ ...prev, [qIdx]: optIdx }));
     const q = currentWeek!.quiz[qIdx];
     if (optIdx === q.correct_index) grantXp(q.bonus ? 20 : 10);
-    if (speedActive) {
-      setTimeout(() => {
-        const allAnswered = currentWeek!.quiz.every((_, i) => (i === qIdx ? true : quizAnswers[i] !== undefined));
-        if (allAnswered && speedTimeLeft > 0) { setSpeedActive(false); setSpeedResult(true); }
-      }, 0);
-    }
   }
 
   function startWeeklyReplay() {
     setReplayQuizAnswers({});
     setReplayQuizStepIndex(0);
     setWeeklyReplayActive(true);
+    setWeeklyReplayOverlayOpen(true);
+  }
+
+  function resumeWeeklyReplay() {
+    setWeeklyReplayOverlayOpen(true);
   }
 
   function selectReplayQuizAnswer(qIdx: number, optIdx: number) {
@@ -576,7 +624,7 @@ export default function Game() {
       )}
 
       <div className="tabs">
-        <button className={activeTab === 'week' ? 'btn secondary' : 'btn ghost'} onClick={() => setActiveTab('week')}>🗞️ Bu Hafta</button>
+        <button className={activeTab === 'week' ? 'btn secondary' : 'btn ghost'} onClick={() => setActiveTab('week')}>📡 Takip Et, Güncel Kal</button>
         <button className={activeTab === 'guide' ? 'btn secondary' : 'btn ghost'} onClick={() => setActiveTab('guide')}>
           📖 {myLeague ? myLeague.name : 'Lig'} Rehberi
         </button>
@@ -700,32 +748,42 @@ export default function Game() {
                   <button className="btn ghost" onClick={startWeeklyReplay}>🔁 Soruları Tekrar Çöz (yarı XP)</button>
                 ) : rAllAnswered ? (
                   <p className="panel-sub" style={{ marginTop: 10 }}>Tekrar tamamladın! XP zaten hesabına işlendi. <button className="btn ghost" onClick={startWeeklyReplay}>Tekrar Başlat</button></p>
-                ) : rq && (
-                  <div className="quiz-stage" style={{ marginTop: 14 }}>
-                    <div className="quiz-progress">Soru {replayQuizStepIndex + 1} / {currentWeek.quiz.length}</div>
-                    {rAnswered && (
-                      <div className={'feedback-banner ' + (replayQuizAnswers[replayQuizStepIndex] === rq.correct_index ? 'correct' : 'wrong')}>
-                        {replayQuizAnswers[replayQuizStepIndex] === rq.correct_index ? '🎉 Doğru!' : '💥 Olmadı.'}
+                ) : !weeklyReplayOverlayOpen ? (
+                  <button className="btn ghost" onClick={resumeWeeklyReplay}>▶ Kaldığın Yerden Devam Et</button>
+                ) : null}
+
+                {weeklyReplayActive && !rAllAnswered && weeklyReplayOverlayOpen && rq && (
+                  <div className="speed-overlay">
+                    <button className="overlay-close-btn" onClick={() => setWeeklyReplayOverlayOpen(false)} aria-label="Kapat">✕ Kapat</button>
+                    <div className="speed-overlay-panel">
+                      <div className="panel quiz-stage">
+                        <p className="panel-title" style={{ textAlign: 'center' }}>Tekrar Sınavı (yarı XP)</p>
+                        <div className="quiz-progress">Soru {replayQuizStepIndex + 1} / {currentWeek.quiz.length}</div>
+                        {rAnswered && (
+                          <div className={'feedback-banner ' + (replayQuizAnswers[replayQuizStepIndex] === rq.correct_index ? 'correct' : 'wrong')}>
+                            {replayQuizAnswers[replayQuizStepIndex] === rq.correct_index ? '🎉 Doğru!' : '💥 Olmadı.'}
+                          </div>
+                        )}
+                        <div className="quiz-card">
+                          <div className="quiz-q">
+                            {rq.type === 'tf' && <span className="tag tf">DOĞRU/YANLIŞ</span>}
+                            <div>{rq.question}</div>
+                          </div>
+                          {rq.options.map((opt, oi) => {
+                            let cls = 'quiz-opt opt-' + oi;
+                            if (rAnswered && oi === rq.correct_index) cls += ' correct';
+                            else if (rAnswered && oi === replayQuizAnswers[replayQuizStepIndex]) cls += ' wrong';
+                            return <button key={oi} className={cls} disabled={rAnswered} onClick={() => selectReplayQuizAnswer(replayQuizStepIndex, oi)}>{opt}</button>;
+                          })}
+                          {rAnswered && <div className="quiz-explain">{rq.explanation}</div>}
+                        </div>
+                        {rAnswered && (
+                          <button className="btn secondary" onClick={() => setReplayQuizStepIndex((i) => i + 1)}>
+                            {replayQuizStepIndex + 1 < currentWeek.quiz.length ? 'Sonraki Soru' : 'Devam Et'}
+                          </button>
+                        )}
                       </div>
-                    )}
-                    <div className="quiz-card">
-                      <div className="quiz-q">
-                        {rq.type === 'tf' && <span className="tag tf">DOĞRU/YANLIŞ</span>}
-                        <div>{rq.question}</div>
-                      </div>
-                      {rq.options.map((opt, oi) => {
-                        let cls = 'quiz-opt opt-' + oi;
-                        if (rAnswered && oi === rq.correct_index) cls += ' correct';
-                        else if (rAnswered && oi === replayQuizAnswers[replayQuizStepIndex]) cls += ' wrong';
-                        return <button key={oi} className={cls} disabled={rAnswered} onClick={() => selectReplayQuizAnswer(replayQuizStepIndex, oi)}>{opt}</button>;
-                      })}
-                      {rAnswered && <div className="quiz-explain">{rq.explanation}</div>}
                     </div>
-                    {rAnswered && (
-                      <button className="btn secondary" onClick={() => setReplayQuizStepIndex((i) => i + 1)}>
-                        {replayQuizStepIndex + 1 < currentWeek.quiz.length ? 'Sonraki Soru' : 'Devam Et'}
-                      </button>
-                    )}
                   </div>
                 )}
               </div>
@@ -742,9 +800,15 @@ export default function Game() {
           {currentWeek && (
             <div className="panel" ref={weekSectionRef}>
               <span className="tag fresh">🗞️ GÜNCEL · BU HAFTA</span>
-              <p className="panel-title">{currentWeek.week_theme || 'Bu haftanın okumaları'}</p>
+              <p className="panel-title">{(currentWeek.week_label || formatWeekRange(currentWeek.created_at))} — Takip Et, Güncel Kal!</p>
+              {currentWeek.week_theme && (
+                <>
+                  <p className="panel-sub" style={{ marginBottom: 2 }}>Bu haftanın öne çıkanlarının özeti:</p>
+                  <p className="panel-sub">{currentWeek.week_theme}</p>
+                </>
+              )}
               <button className="btn ghost" onClick={() => setShowSources((v) => !v)}>
-                {showSources ? 'Kaynakları Gizle' : `📚 Kaynakları Göster (${currentWeek.must_reads.length})`}
+                {showSources ? 'Kaynakları Gizle' : `📚 Bu Haftaya Dair Kaynaklara Hemen Göz At (${currentWeek.must_reads.length})`}
               </button>
               {showSources && currentWeek.must_reads.map((mr, i) => (
                 <div className="read-row" key={i} style={{ marginTop: 10 }}>
@@ -779,6 +843,8 @@ export default function Game() {
             const stepAnswered = stepQ && quizAnswers[quizStepIndex] !== undefined;
             const currentExtra = allQuizAnswered && !weekClosed ? extraStages[extraStepIndex] : undefined;
             const readyToClose = allQuizAnswered && extraStagesAllDone;
+            const speedSecondsForWeek = computeSpeedSecondsForWeek(currentWeek);
+            const hasWeekTestProgress = Object.keys(quizAnswers).length > 0 || numberSubmitted || riskChoice !== null || bossAnswer !== null;
 
             const quizStagePanel = (
               <div className="panel quiz-stage">
@@ -910,29 +976,47 @@ export default function Game() {
 
             return (
               <>
-                {!speedActive && !weekClosed && !allQuizAnswered && speedResult === null && (
+                {!weekClosed && !readyToClose && !weekTestOverlayOpen && (
                   <div className="panel">
-                    <p className="panel-title">⏱ Hız Turu</p>
-                    <p className="panel-sub">{SPEED_SECONDS} saniyede tüm quiz sorularını bitirirsen +30 XP bonus kazanırsın. Tek deneme hakkın var. BONUS etiketli soruların cevabı özetlerde yok — kaynağı önceden okumuş olman gerekir.</p>
-                    <button className="btn secondary" onClick={startSpeedRound}>Hız Turunu Başlat</button>
+                    {!hasWeekTestProgress ? (
+                      <>
+                        <p className="panel-title">🧠 Kendini Test Et</p>
+                        <p className="panel-sub">İstersen süre baskısı olmadan kendi hızında, istersen hız turuyla ekstra XP bonusu için zamana karşı test ol.</p>
+                        <div className="week-test-entry-row">
+                          <button className="btn secondary" onClick={startUntimedWeekTest}>🧠 Kendini Test Et, Ne Kadar Güncelsin?</button>
+                          <button className="btn danger" onClick={startSpeedRound}>⏱ Hız Turu ile Test Et, Daha Çok XP Kazan</button>
+                        </div>
+                        <p className="panel-sub" style={{ marginTop: 8 }}>Hız turunda {Math.round(speedSecondsForWeek)} saniyede tüm soruları (ekstra sorular dahil) bitirirsen +30 XP bonus kazanırsın. Tek deneme hakkın var.</p>
+                      </>
+                    ) : (
+                      <button className="btn secondary" onClick={resumeWeekTest}>▶ Kaldığın Yerden Devam Et</button>
+                    )}
                   </div>
                 )}
 
-                {speedActive ? (
+                {weekTestOverlayOpen && !weekClosed && (
                   <div className="speed-overlay">
-                    <div className="speed-overlay-timer">
-                      <TimerRing seconds={speedTimeLeft} total={SPEED_SECONDS} size={56} />
-                      <span>HIZ TURU — tüm soruları bitir, +30 XP kazan</span>
-                    </div>
+                    <button className="overlay-close-btn" onClick={() => setWeekTestOverlayOpen(false)} aria-label="Kapat">✕ Kapat</button>
+                    {weekTestMode === 'timed' && (
+                      <div className="speed-overlay-timer">
+                        <TimerRing seconds={speedTimeLeft} total={speedSecondsForWeek} size={56} />
+                        <span>HIZ TURU — tüm soruları bitir, +30 XP kazan</span>
+                      </div>
+                    )}
                     <div className="speed-overlay-panel">
-                      {!weekClosed && !allQuizAnswered && stepQ && quizStagePanel}
+                      {!allQuizAnswered && stepQ && quizStagePanel}
+                      {allQuizAnswered && currentExtra && extraStagePanelFor(currentExtra)}
+                      {readyToClose && (
+                        <div className="panel">
+                          <button className="btn secondary" onClick={closeWeek} disabled={saving || (riskChoice === 'bet' && riskAnswer === null)}>
+                            {saving ? 'Kaydediliyor…' : 'Haftayı Bitir ve Bonus Al'}
+                          </button>
+                          <p className="panel-sub" style={{ marginTop: 8 }}>Sorulardan kazandığın XP zaten hesabına işlendi ({sessionXp} XP). Bu buton sadece bitirme bonusunu ekler ve seriyi ilerletir.</p>
+                        </div>
+                      )}
                     </div>
                   </div>
-                ) : (
-                  !weekClosed && !allQuizAnswered && stepQ && quizStagePanel
                 )}
-
-                {!weekClosed && currentExtra && extraStagePanelFor(currentExtra)}
 
                 {weekClosed && (
                   <div className="panel">
@@ -956,27 +1040,18 @@ export default function Game() {
                   </div>
                 )}
 
-                {(readyToClose || weekClosed) && (
+                {weekClosed && (
                   <div className="panel">
-                    {!weekClosed ? (
-                      <>
-                        <button className="btn secondary" onClick={closeWeek} disabled={saving || (riskChoice === 'bet' && riskAnswer === null)}>
-                          {saving ? 'Kaydediliyor…' : 'Haftayı Bitir ve Bonus Al'}
-                        </button>
-                        <p className="panel-sub" style={{ marginTop: 8 }}>Sorulardan kazandığın XP zaten hesabına işlendi ({sessionXp} XP). Bu buton sadece bitirme bonusunu ekler ve seriyi ilerletir.</p>
-                      </>
-                    ) : (
-                      <div>
-                        <div className="closed-stamp">ONAYLANDI · +{lastGain} XP</div>
-                        {lastCritical && <div className="critical-tag">⚡ KRİTİK BAŞARI! 1.5× bonus uygulandı</div>}
-                        {lastFreezeEarned && <div className="critical-tag">❄ Yeni dondurma hakkı kazandın!</div>}
-                        {lastStreakBonus > 0 && <div className="critical-tag">🔥 3 haftalık seri bonusu: +{lastStreakBonus} XP</div>}
-                        {lastRiskResult === true && <div className="critical-tag">🎲 Bahsi kazandın!</div>}
-                        {lastRiskResult === false && <div className="critical-tag">🎲 Bahsi kaybettin.</div>}
-                        {speedResult === true && <div className="critical-tag">⏱ Hız turu bonusu kazandın!</div>}
-                        <p className="panel-sub" style={{ marginTop: 10 }}>Gelecek hafta admin yeni içerik yayınladığında burada görünecek.</p>
-                      </div>
-                    )}
+                    <div>
+                      <div className="closed-stamp">ONAYLANDI · +{lastGain} XP</div>
+                      {lastCritical && <div className="critical-tag">⚡ KRİTİK BAŞARI! 1.5× bonus uygulandı</div>}
+                      {lastFreezeEarned && <div className="critical-tag">❄ Yeni dondurma hakkı kazandın!</div>}
+                      {lastStreakBonus > 0 && <div className="critical-tag">🔥 3 haftalık seri bonusu: +{lastStreakBonus} XP</div>}
+                      {lastRiskResult === true && <div className="critical-tag">🎲 Bahsi kazandın!</div>}
+                      {lastRiskResult === false && <div className="critical-tag">🎲 Bahsi kaybettin.</div>}
+                      {speedResult === true && <div className="critical-tag">⏱ Hız turu bonusu kazandın!</div>}
+                      <p className="panel-sub" style={{ marginTop: 10 }}>Gelecek hafta admin yeni içerik yayınladığında burada görünecek.</p>
+                    </div>
                   </div>
                 )}
               </>

@@ -151,6 +151,9 @@ label.field-label { display: block; font-family: var(--mono); font-size: 10.5px;
 }
 .overlay-close-btn:hover { color: var(--paper); border-color: var(--paper-dim); }
 
+.week-test-entry-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+.week-test-entry-row .btn { margin-top: 0; flex: 1 1 220px; }
+
 .section-divider { margin: 30px 0 14px; padding-top: 18px; border-top: 1px solid var(--hairline); }
 
 .promotion-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.75); z-index: 2100; display: flex; align-items: center; justify-content: center; padding: 20px; }

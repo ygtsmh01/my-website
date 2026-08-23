@@ -33,6 +33,7 @@ export default function History() {
   const [missedStepIndex, setMissedStepIndex] = useState(0);
   const [missedDone, setMissedDone] = useState(false);
   const [missedGain, setMissedGain] = useState(0);
+  const [missedOverlayOpen, setMissedOverlayOpen] = useState(false);
 
   useEffect(() => { document.documentElement.setAttribute('data-theme', theme); }, [theme]);
 
@@ -73,6 +74,11 @@ export default function History() {
     setMissedStepIndex(0);
     setMissedDone(false);
     setMissedGain(0);
+    setMissedOverlayOpen(true);
+  }
+
+  function resumeMissedWeek() {
+    setMissedOverlayOpen(true);
   }
 
   function selectMissedAnswer(qIdx: number, optIdx: number) {
@@ -98,6 +104,7 @@ export default function History() {
     setProfile((p) => (p ? { ...p, total_xp: newXp } : p));
     setMissedGain(gain);
     setMissedDone(true);
+    setMissedOverlayOpen(false);
     refreshHistory();
   }
 
@@ -132,7 +139,7 @@ export default function History() {
             missedWeeksList.map((w) => (
               <div className="history-row" key={w.week_number}>
                 <span className="hw">{w.week_label || formatWeekRange(w.created_at)}</span>
-                <button className="btn secondary" onClick={() => startMissedWeek(w as Week)}>Çöz (yarı XP)</button>
+                <button className="btn secondary" onClick={() => startMissedWeek(w as Week)}>🧠 Kendini Test Et (yarı XP)</button>
               </div>
             ))
           ) : !missedDone ? (
@@ -142,38 +149,53 @@ export default function History() {
               const mAllAnswered = missedWeek.quiz.every((_, i) => missedAnswers[i] !== undefined);
               return (
                 <div>
-                  <button className="btn" onClick={() => setMissedWeek(null)} style={{ marginBottom: 14 }}>← Listeye Dön</button>
+                  <button className="btn" onClick={() => { setMissedWeek(null); setMissedOverlayOpen(false); }} style={{ marginBottom: 14 }}>← Listeye Dön</button>
                   <p className="panel-sub">{missedWeek.week_label || formatWeekRange(missedWeek.created_at)}</p>
-                  {!mAllAnswered && mq && (
-                    <div>
-                      <div className="quiz-progress">Soru {missedStepIndex + 1} / {missedWeek.quiz.length}</div>
-                      {mAnswered && (
-                        <div className={'feedback-banner ' + (missedAnswers[missedStepIndex] === mq.correct_index ? 'correct' : 'wrong')}>
-                          {missedAnswers[missedStepIndex] === mq.correct_index ? '🎉 Doğru!' : '💥 Olmadı.'}
-                        </div>
-                      )}
-                      <div className="quiz-card">
-                        <div className="quiz-q">
-                          {mq.type === 'tf' && <span className="tag tf">DOĞRU/YANLIŞ</span>}
-                          <div>{mq.question}</div>
-                        </div>
-                        {mq.options.map((opt, oi) => {
-                          let cls = 'quiz-opt';
-                          if (mAnswered && oi === mq.correct_index) cls += ' correct';
-                          else if (mAnswered && oi === missedAnswers[missedStepIndex]) cls += ' wrong';
-                          return <button key={oi} className={cls} disabled={mAnswered} onClick={() => selectMissedAnswer(missedStepIndex, oi)}>{opt}</button>;
-                        })}
-                        {mAnswered && <div className="quiz-explain">{mq.explanation}</div>}
-                      </div>
-                      {mAnswered && (
-                        <button className="btn secondary" onClick={() => setMissedStepIndex((i) => i + 1)}>
-                          {missedStepIndex + 1 < missedWeek.quiz.length ? 'Sonraki Soru' : 'Devam Et'}
-                        </button>
-                      )}
-                    </div>
+
+                  {!missedOverlayOpen && (
+                    <button className="btn secondary" onClick={resumeMissedWeek}>▶ Kaldığın Yerden Devam Et</button>
                   )}
-                  {mAllAnswered && (
-                    <button className="btn secondary" onClick={finishMissedWeek}>Bitir ve XP Al</button>
+
+                  {missedOverlayOpen && (
+                    <div className="speed-overlay">
+                      <button className="overlay-close-btn" onClick={() => setMissedOverlayOpen(false)} aria-label="Kapat">✕ Kapat</button>
+                      <div className="speed-overlay-panel">
+                        <div className="panel quiz-stage">
+                          <p className="panel-title" style={{ textAlign: 'center' }}>Kaçırılan Hafta Sınavı (yarı XP)</p>
+                          {!mAllAnswered && mq && (
+                            <div>
+                              <div className="quiz-progress">Soru {missedStepIndex + 1} / {missedWeek.quiz.length}</div>
+                              {mAnswered && (
+                                <div className={'feedback-banner ' + (missedAnswers[missedStepIndex] === mq.correct_index ? 'correct' : 'wrong')}>
+                                  {missedAnswers[missedStepIndex] === mq.correct_index ? '🎉 Doğru!' : '💥 Olmadı.'}
+                                </div>
+                              )}
+                              <div className="quiz-card">
+                                <div className="quiz-q">
+                                  {mq.type === 'tf' && <span className="tag tf">DOĞRU/YANLIŞ</span>}
+                                  <div>{mq.question}</div>
+                                </div>
+                                {mq.options.map((opt, oi) => {
+                                  let cls = 'quiz-opt';
+                                  if (mAnswered && oi === mq.correct_index) cls += ' correct';
+                                  else if (mAnswered && oi === missedAnswers[missedStepIndex]) cls += ' wrong';
+                                  return <button key={oi} className={cls} disabled={mAnswered} onClick={() => selectMissedAnswer(missedStepIndex, oi)}>{opt}</button>;
+                                })}
+                                {mAnswered && <div className="quiz-explain">{mq.explanation}</div>}
+                              </div>
+                              {mAnswered && (
+                                <button className="btn secondary" onClick={() => setMissedStepIndex((i) => i + 1)}>
+                                  {missedStepIndex + 1 < missedWeek.quiz.length ? 'Sonraki Soru' : 'Devam Et'}
+                                </button>
+                              )}
+                            </div>
+                          )}
+                          {mAllAnswered && (
+                            <button className="btn secondary" onClick={finishMissedWeek}>Bitir ve XP Al</button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
                   )}
                 </div>
               );
