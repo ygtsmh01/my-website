@@ -125,15 +125,18 @@ export default function Live() {
     setAnsweredCount(count || 0);
   }
 
-  async function advanceQuestion() {
+  async function advanceQuestion(expectedIdx: number) {
     const r = roomRef.current;
-    if (!r || advancingRef.current) return;
+    if (!r || advancingRef.current || r.current_question_index !== expectedIdx) return;
     advancingRef.current = true;
-    const nextIdx = r.current_question_index + 1;
+    const nextIdx = expectedIdx + 1;
+    // Conditional on the expected index so a second, racing caller (the fallback
+    // timer firing at nearly the same moment as the "everyone answered" advance)
+    // becomes a harmless no-op instead of double-advancing the room.
     if (nextIdx >= r.questions.length) {
-      await sb.from('live_rooms').update({ status: 'finished' }).eq('id', r.id);
+      await sb.from('live_rooms').update({ status: 'finished' }).eq('id', r.id).eq('current_question_index', expectedIdx);
     } else {
-      await sb.from('live_rooms').update({ current_question_index: nextIdx, question_started_at: new Date().toISOString() }).eq('id', r.id);
+      await sb.from('live_rooms').update({ current_question_index: nextIdx, question_started_at: new Date().toISOString() }).eq('id', r.id).eq('current_question_index', expectedIdx);
     }
   }
 
@@ -142,7 +145,8 @@ export default function Live() {
     if (!room || !profile || room.host_id !== profile.id || room.status !== 'active' || !room.question_started_at) return;
     const startedAt = new Date(room.question_started_at).getTime();
     const remaining = QUESTION_SECONDS * 1000 - (Date.now() - startedAt);
-    const t = setTimeout(() => { advanceQuestion(); }, Math.max(0, remaining));
+    const qIdx = room.current_question_index;
+    const t = setTimeout(() => { advanceQuestion(qIdx); }, Math.max(0, remaining));
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [room?.current_question_index, room?.status, room?.host_id, profile?.id]);
@@ -150,7 +154,7 @@ export default function Live() {
   // Host: advance immediately once everyone has answered, instead of waiting out the timer.
   useEffect(() => {
     if (!room || !profile || room.host_id !== profile.id || room.status !== 'active') return;
-    if (participants.length > 0 && answeredCount >= participants.length) advanceQuestion();
+    if (participants.length > 0 && answeredCount >= participants.length) advanceQuestion(room.current_question_index);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [answeredCount, participants.length, room?.status, room?.current_question_index, room?.host_id, profile?.id]);
 
@@ -325,9 +329,13 @@ export default function Live() {
 
   async function leaveRoom() {
     if (room && profile && room.status !== 'finished') {
-      if (!window.confirm('Oyun bitmeden ayrılırsan 15 XP kaybedersin. Emin misin?')) return;
-      const PENALTY = 15;
-      await sb.from('profiles').update({ total_xp: Math.max(0, profile.total_xp - PENALTY) }).eq('id', profile.id);
+      // Only an in-progress match risks the XP penalty — leaving a room that
+      // hasn't started yet (still 'waiting') should always be free and instant.
+      if (room.status === 'active') {
+        if (!window.confirm('Oyun bitmeden ayrılırsan 15 XP kaybedersin. Emin misin?')) return;
+        const PENALTY = 15;
+        await sb.from('profiles').update({ total_xp: Math.max(0, profile.total_xp - PENALTY) }).eq('id', profile.id);
+      }
       const mine = participants.find((p) => p.user_id === profile.id);
       if (mine) await sb.from('live_participants').delete().eq('id', mine.id);
       if (room.host_id === profile.id) {
@@ -425,7 +433,7 @@ export default function Live() {
   if (room.status === 'waiting') {
     return (
       <div className="root wide">
-        <div className="top-bar-row"><button className="btn ghost" onClick={leaveRoom}>Odadan Ayrıl (-15 XP)</button></div>
+        <div className="top-bar-row"><button className="btn ghost" onClick={leaveRoom}>Odadan Ayrıl</button></div>
         <div className="eyebrow">{room.mode === 'duel' ? 'Düello' : 'Canlı Oda'} · Bekleniyor</div>
         <h1>Oda Kodu</h1>
         <div className="panel">

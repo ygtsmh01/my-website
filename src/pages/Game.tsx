@@ -5,7 +5,7 @@ import { useTheme } from '../lib/ThemeContext';
 import type { League, LeagueProgress, Profile, Week } from '../lib/types';
 
 const BOSS_EVERY = 5;
-const SPEED_SECONDS = 45;
+const SPEED_SECONDS = 90;
 const AVATAR_OPTIONS = ['🙂', '🦊', '🐙', '🐼', '🦉', '🐳', '🦁', '🐸', '🤖', '👾', '🦄', '🐢'];
 const ONBOARDING_KEY = 'aitakip_onboarding_seen_v1';
 const ONBOARDING_SLIDES = [
@@ -803,7 +803,7 @@ export default function Game() {
             <div className="quiz-card">
               <div className="quiz-q">
                 {stepQ.type === 'tf' && <span className="tag tf">DOĞRU/YANLIŞ</span>}
-                {stepQ.bonus && <span className="tag bonus">BONUS · +20 XP · linke girmen gerekir</span>}
+                {stepQ.bonus && <span className="tag bonus">BONUS · +20 XP · Cevap özetlerde yok, kaynağı okuman gerekir</span>}
                 <div>{stepQ.question}</div>
               </div>
               {stepQ.options.map((opt, oi) => {
@@ -827,7 +827,7 @@ export default function Game() {
             {!speedActive && !weekClosed && !allQuizAnswered && speedResult === null && (
               <div className="panel">
                 <p className="panel-title">⏱ Hız Turu</p>
-                <p className="panel-sub">{SPEED_SECONDS} saniyede tüm quiz sorularını bitirirsen +30 XP bonus kazanırsın. Tek deneme hakkın var.</p>
+                <p className="panel-sub">{SPEED_SECONDS} saniyede tüm quiz sorularını bitirirsen +30 XP bonus kazanırsın. Tek deneme hakkın var. BONUS etiketli soruların cevabı özetlerde yok — kaynağı önceden okumuş olman gerekir.</p>
                 <button className="btn secondary" onClick={startSpeedRound}>Hız Turunu Başlat</button>
               </div>
             )}
