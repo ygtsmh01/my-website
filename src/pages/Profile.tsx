@@ -112,7 +112,7 @@ export default function Profile() {
       <div className="panel" style={{ textAlign: 'center' }}>
         <div className="avatar-hero">{avatarDraft}</div>
         <p className="panel-title">{profile.username}</p>
-        <p className="panel-sub">Seviye {lvl.level} · {lvl.name}</p>
+        <p className="panel-sub">Unvan {lvl.level} · {lvl.name}</p>
         <div className="avatar-grid">
           {AVATAR_OPTIONS.map((a) => (
             <button key={a} className={'avatar-opt' + (avatarDraft === a ? ' selected' : '')} onClick={() => saveAvatar(a)}>{a}</button>

@@ -34,6 +34,7 @@ export default function History() {
   const [missedDone, setMissedDone] = useState(false);
   const [missedGain, setMissedGain] = useState(0);
   const [missedOverlayOpen, setMissedOverlayOpen] = useState(false);
+  const [missedError, setMissedError] = useState('');
 
   useEffect(() => { document.documentElement.setAttribute('data-theme', theme); }, [theme]);
 
@@ -92,19 +93,26 @@ export default function History() {
 
   async function finishMissedWeek() {
     if (!missedWeek || !profile) return;
+    setMissedError('');
     const quiz = missedWeek.quiz || [];
     const score = quiz.reduce((acc, q, i) => acc + (missedAnswers[i] === q.correct_index ? 1 : 0), 0);
     const gain = quiz.reduce((acc, q, i) => {
       if (missedAnswers[i] !== q.correct_index) return acc;
       return acc + Math.round((q.bonus ? 20 : 10) / 2);
     }, 0);
-    const newXp = Math.max(0, profile.total_xp + gain);
-    await sb.from('profiles').update({ total_xp: newXp }).eq('id', profile.id);
-    await sb.from('history').insert({
+    // Insert first and bail out on failure (e.g. this week was already recorded some other way) —
+    // granting XP before confirming the history row would double-pay on any retry.
+    const { error: histErr } = await sb.from('history').insert({
       user_id: profile.id, week_number: missedWeek.week_number, xp_earned: gain,
       quiz_score: score, quiz_total: quiz.length, week_theme: missedWeek.week_theme,
       critical: false, risk_won: null, boss_cleared: false, frozen: false,
     });
+    if (histErr) {
+      setMissedError('Bu hafta zaten kaydedilmiş görünüyor. Sayfayı yenileyip tekrar dene.');
+      return;
+    }
+    const newXp = Math.max(0, profile.total_xp + gain);
+    await sb.from('profiles').update({ total_xp: newXp }).eq('id', profile.id);
     setProfile((p) => (p ? { ...p, total_xp: newXp } : p));
     setMissedGain(gain);
     setMissedDone(true);
@@ -113,7 +121,10 @@ export default function History() {
   }
 
   const doneWeekNumbers = new Set(history.map((h) => h.week_number));
-  const missedWeeksList = allWeeks.filter((w) => !doneWeekNumbers.has(w.week_number) && w.quiz && w.quiz.length > 0);
+  const currentWeekNumber = allWeeks.reduce((max, w) => Math.max(max, w.week_number), 0);
+  const missedWeeksList = allWeeks.filter((w) =>
+    !doneWeekNumbers.has(w.week_number) && w.quiz && w.quiz.length > 0 && w.week_number !== currentWeekNumber
+  );
 
   if (loading) return <div className="root toppad"><p className="panel-sub">Yükleniyor…</p></div>;
 
@@ -195,7 +206,10 @@ export default function History() {
                             </div>
                           )}
                           {mAllAnswered && (
-                            <button className="btn secondary" onClick={finishMissedWeek}>Bitir ve XP Al</button>
+                            <>
+                              <button className="btn secondary" onClick={finishMissedWeek}>Bitir ve XP Al</button>
+                              {missedError && <div className="error-box">{missedError}</div>}
+                            </>
                           )}
                         </div>
                       </div>

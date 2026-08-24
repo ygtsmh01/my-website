@@ -17,6 +17,50 @@ const ONBOARDING_SLIDES = [
   { emoji: '☰', title: 'Her An Kılavuza Dön', text: 'Sol üstteki menüden Profil, Sıralama, Geçmiş ve Kılavuz sayfalarına ulaşabilirsin.' },
 ];
 
+// Persists the in-progress weekly quiz/extra-stage answers to localStorage, keyed per user+week.
+// Without this, a page reload wipes the in-memory answer guards (quizAnswers, numberSubmitted,
+// riskAnswer, bossAnswer, readBonusGranted) that selectQuizAnswer/submitNumberGuess/etc. rely on
+// to avoid re-granting XP for a question already credited this week — reopening the quiz after a
+// reload would silently let the same correct answers pay out XP again, indefinitely.
+const WEEK_PROGRESS_PREFIX = 'aitakip_week_progress_v1';
+type WeekProgressSnapshot = {
+  quizAnswers: Record<number, number>;
+  quizStepIndex: number;
+  checkedReads: Record<number, boolean>;
+  readBonusGranted: boolean;
+  numberGuess: string;
+  numberSubmitted: boolean;
+  numberCorrectDisplay: boolean;
+  riskChoice: 'bet' | 'skip' | null;
+  riskAnswer: number | null;
+  lastRiskResult: boolean | null;
+  bossAnswer: number | null;
+  extraStepIndex: number;
+  sessionXp: number;
+  weekTestMode: 'none' | 'untimed' | 'timed';
+};
+function weekProgressKey(userId: string, weekNumber: number) {
+  return `${WEEK_PROGRESS_PREFIX}:${userId}:${weekNumber}`;
+}
+function loadWeekProgress(userId: string, weekNumber: number): WeekProgressSnapshot | null {
+  try {
+    const raw = localStorage.getItem(weekProgressKey(userId, weekNumber));
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+function saveWeekProgress(userId: string, weekNumber: number, snapshot: WeekProgressSnapshot) {
+  try {
+    localStorage.setItem(weekProgressKey(userId, weekNumber), JSON.stringify(snapshot));
+  } catch {
+    // ignore (e.g. storage quota/private mode) — worst case, a reload loses local progress again
+  }
+}
+function clearWeekProgress(userId: string, weekNumber: number) {
+  localStorage.removeItem(weekProgressKey(userId, weekNumber));
+}
+
 const TR_MONTHS = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
 function formatWeekRange(createdAt?: string | null) {
   if (!createdAt) return '';
@@ -76,6 +120,7 @@ export default function Game() {
   const [weeklyReplayOverlayOpen, setWeeklyReplayOverlayOpen] = useState(false);
   const [lastRiskResult, setLastRiskResult] = useState<boolean | null>(null);
   const [saving, setSaving] = useState(false);
+  const [closeWeekError, setCloseWeekError] = useState('');
   const [sessionXp, setSessionXp] = useState(0);
   const [readBonusGranted, setReadBonusGranted] = useState(false);
   const [showSources, setShowSources] = useState(false);
@@ -167,14 +212,54 @@ export default function Game() {
     setCapstoneOpen(false);
   }, [profile?.league_tier]);
 
+  // Restores this week's in-progress answers from localStorage (or resets to a clean slate for a
+  // newly-published week) whenever the signed-in user or the active week changes. Only restores
+  // while the week is still open — once last_week_number has caught up, there's nothing left to
+  // resume (the save-effect below also clears storage at that point).
   useEffect(() => {
-    setSessionXp(0);
-    setReadBonusGranted(false);
-    setExtraStepIndex(0);
-    setWeekTestMode('none');
+    if (!profile || !currentWeek) return;
+    const done = profile.last_week_number >= currentWeek.week_number;
+    const saved = !done ? loadWeekProgress(profile.id, currentWeek.week_number) : null;
+    setQuizAnswers(saved?.quizAnswers ?? {});
+    setQuizStepIndex(saved?.quizStepIndex ?? 0);
+    setCheckedReads(saved?.checkedReads ?? {});
+    setReadBonusGranted(saved?.readBonusGranted ?? false);
+    setNumberGuess(saved?.numberGuess ?? '');
+    setNumberSubmitted(saved?.numberSubmitted ?? false);
+    setNumberCorrectDisplay(saved?.numberCorrectDisplay ?? false);
+    setRiskChoice(saved?.riskChoice ?? null);
+    setRiskAnswer(saved?.riskAnswer ?? null);
+    setLastRiskResult(saved?.lastRiskResult ?? null);
+    setBossAnswer(saved?.bossAnswer ?? null);
+    setExtraStepIndex(saved?.extraStepIndex ?? 0);
+    setSessionXp(saved?.sessionXp ?? 0);
+    setWeekTestMode(saved?.weekTestMode ?? 'none');
     setWeekTestOverlayOpen(false);
     setWeeklyReplayOverlayOpen(false);
-  }, [currentWeek?.week_number]);
+  }, [profile?.id, currentWeek?.week_number]);
+
+  // Keeps the localStorage snapshot in sync as the user answers questions, so a reload resumes
+  // instead of silently re-crediting XP for already-answered questions; cleared once the week is
+  // actually closed (last_week_number catches up), since history is now the source of truth.
+  useEffect(() => {
+    if (!profile || !currentWeek) return;
+    if (profile.last_week_number >= currentWeek.week_number) {
+      clearWeekProgress(profile.id, currentWeek.week_number);
+      return;
+    }
+    saveWeekProgress(profile.id, currentWeek.week_number, {
+      quizAnswers, quizStepIndex, checkedReads, readBonusGranted,
+      numberGuess, numberSubmitted, numberCorrectDisplay,
+      riskChoice, riskAnswer, lastRiskResult, bossAnswer,
+      extraStepIndex, sessionXp, weekTestMode,
+    });
+  }, [
+    profile?.id, profile?.last_week_number, currentWeek?.week_number,
+    quizAnswers, quizStepIndex, checkedReads, readBonusGranted,
+    numberGuess, numberSubmitted, numberCorrectDisplay,
+    riskChoice, riskAnswer, lastRiskResult, bossAnswer,
+    extraStepIndex, sessionXp, weekTestMode,
+  ]);
 
   useEffect(() => {
     if (!speedActive || speedTimeLeft <= 0) return;
@@ -368,6 +453,7 @@ export default function Game() {
     if (!currentWeek || !profile) return;
     if (riskChoice === 'bet' && riskAnswer === null) return;
     setSaving(true);
+    setCloseWeekError('');
 
     const quizTotal = currentWeek.quiz.length;
     const quizScore = currentWeek.quiz.reduce((acc, q, i) => acc + (quizAnswers[i] === q.correct_index ? 1 : 0), 0);
@@ -396,14 +482,17 @@ export default function Game() {
       boss_cleared: bossCleared,
       frozen: false,
     });
-    if (!histErr) {
-      await sb.from('profiles').update({
-        total_xp: profile.total_xp + completionBonus + streakBonus,
-        streak: nextStreak,
-        last_week_number: currentWeek.week_number,
-        freezes: (profile.freezes || 0) + (earnedFreeze ? 1 : 0),
-      }).eq('id', profile.id);
+    if (histErr) {
+      setCloseWeekError('Bu hafta zaten kaydedilmiş görünüyor. Sayfayı yenileyip tekrar dene.');
+      setSaving(false);
+      return;
     }
+    await sb.from('profiles').update({
+      total_xp: profile.total_xp + completionBonus + streakBonus,
+      streak: nextStreak,
+      last_week_number: currentWeek.week_number,
+      freezes: (profile.freezes || 0) + (earnedFreeze ? 1 : 0),
+    }).eq('id', profile.id);
 
     setLastGain(totalWeekXp);
     setLastCritical(isCritical);
@@ -1222,6 +1311,7 @@ export default function Game() {
                             {saving ? 'Kaydediliyor…' : 'Haftayı Bitir ve Bonus Al'}
                           </button>
                           <p className="panel-sub" style={{ marginTop: 8 }}>Sorulardan kazandığın XP zaten hesabına işlendi ({sessionXp} XP). Bu buton sadece bitirme bonusunu ekler ve seriyi ilerletir.</p>
+                          {closeWeekError && <div className="error-box">{closeWeekError}</div>}
                         </div>
                       )}
                     </div>
