@@ -75,6 +75,9 @@ export interface Profile {
   avatar: string;
   marketing_consent?: boolean;
   league_tier: number;
+  league_success_streak: number;
+  league_miss_streak: number;
+  league_streak_week_number: number;
   created_at: string;
 }
 

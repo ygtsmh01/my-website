@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { sb } from '../lib/supabase';
+import { evaluateLeagueStreak } from '../lib/leagueStreak';
 import type { League, Profile } from '../lib/types';
 
 export default function Guide() {
@@ -21,7 +22,12 @@ export default function Guide() {
   useEffect(() => {
     if (!session) { setProfile(null); return; }
     sb.from('profiles').select('*').eq('id', session.user.id).single()
-      .then(({ data }) => setProfile(data));
+      .then(async ({ data }) => {
+        if (!data) return;
+        const { data: weekRows } = await sb.from('weeks').select('week_number').order('week_number', { ascending: false }).limit(1);
+        const currentWeekNumber = weekRows && weekRows[0] ? weekRows[0].week_number : 0;
+        setProfile(currentWeekNumber ? await evaluateLeagueStreak(data, currentWeekNumber) : data);
+      });
     sb.from('leagues').select('*').order('tier_index', { ascending: true })
       .then(({ data }) => setLeagues(data || []));
   }, [session]);
@@ -66,7 +72,8 @@ export default function Guide() {
       <div className="panel">
         <div className="emoji">🏅</div>
         <h2>Lig Sistemi</h2>
-        <p className="panel-sub">Her ligin sabit bir rehberi (özet + quiz) var, bir kere tamamlanır. Haftalık quiz de lig puanı verir — üst liglerde çarpanı daha yüksek. Yeterli lig puanına ulaşınca otomatik terfi edersin. Aşağıda tüm liglerin rehberlerini görebilirsin, ama sadece kendi liginin rehberini oyun sayfasında açıp tamamlayabilirsin.</p>
+        <p className="panel-sub">Her ligin sabit bir rehberi (özet + quiz) var, bir kere tamamlanır. Rehberdeki tüm üniteleri ve bitirme sınavını bitirince bir üst lige terfi edersin. Aşağıda tüm liglerin rehberlerini görebilirsin, ama sadece kendi liginin rehberini oyun sayfasında açıp tamamlayabilirsin.</p>
+        <p className="panel-sub">Usta Lig ve üzerinde ek bir şart var: terfi için rehberin yanında son 2 hafta üst üste haftalık quizden %60+ almış olman gerekir. Art arda 3 hafta kaçırır ya da başarısız olursan bir lig düşersin; devam ederse düşmeye devam eder (Usta Lig'in altına inmezsin).</p>
       </div>
 
       <div className="panel">

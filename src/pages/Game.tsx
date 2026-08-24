@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { sb } from '../lib/supabase';
 import TimerRing from '../components/TimerRing';
 import { useTheme } from '../lib/ThemeContext';
+import { evaluateLeagueStreak, LEAGUE_STREAK_FLOOR_TIER, SUCCESS_STREAK_NEEDED } from '../lib/leagueStreak';
 import type { League, LeagueProgress, Profile, QuizQuestion, RiskOrBossQuestion, Week } from '../lib/types';
 
 const BOSS_EVERY = 5;
@@ -135,6 +136,15 @@ export default function Game() {
     sb.from('league_progress').select('*').eq('user_id', profile.id).eq('tier_index', profile.league_tier).maybeSingle()
       .then(({ data }) => setLeagueProgress(data));
   }, [profile?.id, profile?.league_tier]);
+
+  // Usta Lig+ haftalık seri kuralını, hafta içeriği ve profil hazır olduğunda (ya da bu haftanın
+  // quizi kapatılıp last_week_number ilerlediğinde) tembel biçimde işler — terfi/düşüş burada olur.
+  useEffect(() => {
+    if (!profile || !currentWeek) return;
+    evaluateLeagueStreak(profile, currentWeek.week_number).then((updated) => {
+      if (updated !== profile) setProfile(updated);
+    });
+  }, [profile?.id, profile?.last_week_number, currentWeek?.week_number]);
 
   useEffect(() => {
     if (!profile) return;
@@ -504,13 +514,25 @@ export default function Game() {
     if (!progErr) {
       const newTotalXp = Math.max(0, profile.total_xp + completionBonus);
       const isMaxTier = myLeague.tier_index >= leagues.length - 1;
-      const newTier = !isReplay && !isMaxTier ? myLeague.tier_index + 1 : profile.league_tier;
+      // Usta Lig+ (LEAGUE_STREAK_FLOOR_TIER ve üstü) rehberi bitirmek tek başına yetmez — son 2
+      // hafta üst üste %60+ haftalık quiz serisi de gerekir. Seri henüz tamamlanmadıysa
+      // league_progress.completed=true kaydedilir ama terfi ertelenir; evaluateLeagueStreak seri
+      // tamamlanınca otomatik terfi ettirir.
+      const gatedByStreak = myLeague.tier_index >= LEAGUE_STREAK_FLOOR_TIER;
+      const streakReady = profile.league_success_streak >= SUCCESS_STREAK_NEEDED;
+      const canPromote = !isReplay && !isMaxTier && (!gatedByStreak || streakReady);
+      const newTier = canPromote ? myLeague.tier_index + 1 : profile.league_tier;
+      const profileUpdate: Partial<Profile> = { total_xp: newTotalXp, league_tier: newTier };
       if (newTier > profile.league_tier) {
         const promotedTo = leagues.find((l) => l.tier_index === newTier);
         setLastPromotion(promotedTo ? promotedTo.name : null);
+        if (gatedByStreak) {
+          profileUpdate.league_success_streak = 0;
+          profileUpdate.league_miss_streak = 0;
+        }
       }
-      await sb.from('profiles').update({ total_xp: newTotalXp, league_tier: newTier }).eq('id', profile.id);
-      setProfile((p) => (p ? { ...p, total_xp: newTotalXp, league_tier: newTier } : p));
+      await sb.from('profiles').update(profileUpdate).eq('id', profile.id);
+      setProfile((p) => (p ? { ...p, ...profileUpdate } : p));
       setLeagueProgress({ user_id: profile.id, tier_index: myLeague.tier_index, completed: true, quiz_score: score, quiz_total: total, completed_at: new Date().toISOString() });
     }
     setCurriculumSaving(false);
@@ -687,6 +709,17 @@ export default function Game() {
             <p className="panel-sub">En üst ligdesin.</p>
           ) : (
             <p className="panel-sub">Bu lig için henüz rehber içeriği yok.</p>
+          )}
+          {myLeague.tier_index >= LEAGUE_STREAK_FLOOR_TIER && myLeague.tier_index < leagues.length - 1 && (
+            curriculumDone && profile.league_success_streak < SUCCESS_STREAK_NEEDED ? (
+              <p className="one-liner" style={{ marginTop: 6 }}>
+                Rehber tamam! Terfi için art arda 2 hafta %60+ haftalık quiz gerekiyor ({profile.league_success_streak}/{SUCCESS_STREAK_NEEDED}).
+              </p>
+            ) : profile.league_miss_streak > 0 ? (
+              <p className="one-liner" style={{ marginTop: 6 }}>
+                ⚠️ Art arda {profile.league_miss_streak} hafta kaçırdın/başarısız oldun — devam edersen lig düşersin.
+              </p>
+            ) : null
           )}
         </div>
       )}

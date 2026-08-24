@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { sb } from '../lib/supabase';
+import { evaluateLeagueStreak, LEAGUE_STREAK_FLOOR_TIER, SUCCESS_STREAK_NEEDED } from '../lib/leagueStreak';
 import type { HistoryRow, League, Profile as ProfileType } from '../lib/types';
 
 const AVATAR_OPTIONS = ['🙂', '🦊', '🐙', '🐼', '🦉', '🐳', '🦁', '🐸', '🤖', '👾', '🦄', '🐢'];
@@ -50,9 +51,12 @@ export default function Profile() {
 
   useEffect(() => {
     if (!session) return;
-    sb.from('profiles').select('*').eq('id', session.user.id).single().then(({ data }) => {
-      setProfile(data);
-      if (data) { setAvatarDraft(data.avatar); setUsernameDraft(data.username); }
+    sb.from('profiles').select('*').eq('id', session.user.id).single().then(async ({ data }) => {
+      if (!data) { setProfile(data); return; }
+      setAvatarDraft(data.avatar); setUsernameDraft(data.username);
+      const { data: weekRows } = await sb.from('weeks').select('week_number').order('week_number', { ascending: false }).limit(1);
+      const currentWeekNumber = weekRows && weekRows[0] ? weekRows[0].week_number : 0;
+      setProfile(currentWeekNumber ? await evaluateLeagueStreak(data, currentWeekNumber) : data);
     });
     sb.from('history').select('*').eq('user_id', session.user.id).then(({ data }) => setHistory(data || []));
     sb.from('leagues').select('*').order('tier_index', { ascending: true }).then(({ data }) => setLeagues((data as League[]) || []));
@@ -133,6 +137,13 @@ export default function Profile() {
             <p className="panel-sub">Bir sonraki lige terfi etmek için rehberdeki tüm üniteleri ve bitirme sınavını tamamla.</p>
           ) : (
             <p className="panel-sub">En üst ligdesin.</p>
+          )}
+          {myLeague.tier_index >= LEAGUE_STREAK_FLOOR_TIER && myLeague.promote_threshold && (
+            profile.league_miss_streak > 0 ? (
+              <p className="panel-sub">⚠️ Art arda {profile.league_miss_streak} hafta kaçırdın/başarısız oldun — devam edersen lig düşersin.</p>
+            ) : (
+              <p className="panel-sub">Terfi için 2 haftalık başarı serisi: {profile.league_success_streak}/{SUCCESS_STREAK_NEEDED}</p>
+            )
           )}
         </div>
       )}
