@@ -145,7 +145,7 @@ export default function Game() {
   // (the current unlocked lesson, or a previously-passed one clicked for review).
   const [viewedLessonIndex, setViewedLessonIndex] = useState<number | null>(null);
   const [lessonFailInfo, setLessonFailInfo] = useState<{ score: number; total: number } | null>(null);
-  const [lessonPassInfo, setLessonPassInfo] = useState<{ score: number; total: number; xp: number } | null>(null);
+  const [lessonPassInfo, setLessonPassInfo] = useState<{ score: number; total: number; xp: number; saveError?: string } | null>(null);
   const [capstoneAnswers, setCapstoneAnswers] = useState<Record<number, number>>({});
   const [capstoneStepIndex, setCapstoneStepIndex] = useState(0);
   const [capstoneOpen, setCapstoneOpen] = useState(false);
@@ -595,10 +595,15 @@ export default function Game() {
     setLessonPassInfo({ score, total, xp: grantedXp });
     // Persist the resume point immediately (not deferred to "Devam Et") so a
     // logout right after passing still resumes past this lesson, not before it.
+    // Error surfaced directly in the pass card instead of failing silently —
+    // this was previously a fire-and-forget void call with no visibility.
     if (profile && !isReplay) {
-      void sb.from('league_progress').upsert({
+      const { error: progressSaveError } = await sb.from('league_progress').upsert({
         user_id: profile.id, tier_index: myLeague.tier_index, current_lesson_index: lessonIndex + 1,
       }, { onConflict: 'user_id,tier_index' });
+      if (progressSaveError) {
+        setLessonPassInfo({ score, total, xp: grantedXp, saveError: progressSaveError.message });
+      }
     }
   }
 
@@ -1039,6 +1044,9 @@ export default function Game() {
                         <div className="promotion-emoji">🎉</div>
                         <p className="promotion-title">Tebrikler, dersi geçtin!</p>
                         <p className="promotion-text">{lessonPassInfo.score}/{lessonPassInfo.total} doğru · +{lessonPassInfo.xp} XP kazandın</p>
+                        {lessonPassInfo.saveError && (
+                          <div className="error-box" style={{ textAlign: 'left', marginBottom: 12 }}>İlerleme kaydedilemedi: {lessonPassInfo.saveError}</div>
+                        )}
                         <button className="btn secondary" style={{ width: '100%' }} onClick={continueAfterLessonPass}>Devam Et</button>
                       </div>
                     ) : lessonFailInfo ? (
