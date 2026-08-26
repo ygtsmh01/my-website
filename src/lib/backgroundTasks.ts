@@ -245,6 +245,52 @@ async function callClaudeJSON(prompt: string, apiKey: string, maxTokens: number)
   return JSON.parse(cleaned);
 }
 
+// Prompt kuralı ("şıklar yakın uzunlukta olsun") tek başına yeterli
+// çıkmadı — gerçek kullanımda model hâlâ bazen doğru şıkkı diğerlerinden
+// belirgin uzun/detaylı yazdı (2 kez gözlemlendi). Bu yüzden üretimden
+// SONRA kod seviyesinde ölçüp doğruluyoruz: en kısa şık, en uzun şıkkın
+// %70'inden azsa o soru modele geri gönderilip şıkları dengelenmiş olarak
+// tekrar yazdırılıyor (anlam/doğruluk değişmeden). Soyut bir kurala
+// güvenmek yerine somut, ölçülebilir bir doğrulama.
+const OPTION_BALANCE_RATIO = 0.7;
+
+function optionLengthRatio(options: string[]): number {
+  const lens = options.map((o) => o.trim().length);
+  const max = Math.max(...lens);
+  if (max === 0) return 1;
+  return Math.min(...lens) / max;
+}
+
+async function rebalanceOptions(question: string, options: string[], correctIndex: number, apiKey: string): Promise<string[]> {
+  const prompt = `Aşağıdaki çoktan seçmeli sorunun şıkları uzunluk/detay bakımından dengesiz — bu, okuyucunun içeriği hiç bilmeden sırf en uzun/en detaylı şıkkı seçerek doğru cevabı bulmasına yol açar. Şıkların ANLAMINI VE DOĞRULUĞUNU DEĞİŞTİRME (doğru şık ${correctIndex}. index'te kalmalı) — sadece her şıkkı birbirine YAKIN uzunlukta ve YAKIN somut detay seviyesinde yeniden yaz: kısa/genel geçer şıkları doğru şıkla aynı somutluk seviyesine zenginleştir (gerekirse inandırıcı ama yanlış bir detay ekle), gerekirse uzun şıkkı biraz sadeleştir.
+
+Soru: ${question}
+Mevcut şıklar (index'e göre): ${JSON.stringify(options)}
+
+SADECE şu şemaya uyan geçerli JSON döndür, başka açıklama ekleme: { "options": ["...", "...", "...", "..."] } — şık sayısı ve sırası AYNI kalsın, sadece metinleri dengelenmiş olsun.`;
+  try {
+    const parsed = await callClaudeJSON(prompt, apiKey, 4000);
+    return Array.isArray(parsed.options) && parsed.options.length === options.length ? parsed.options : options;
+  } catch {
+    // Düzeltme başarısız olursa orijinal şıklarla devam — üretim durmasın.
+    return options;
+  }
+}
+
+// Bir soru listesindeki (quiz ya da capstone) dengesiz şıklı soruları tek
+// tek modele geri gönderip düzeltir. Sıralı çalışır (paralel değil) — tipik
+// olarak sadece birkaç soru dengesiz çıkıyor, çoğu zaman hiç ek çağrı olmuyor.
+async function enforceOptionBalance<T extends { question: string; options: string[]; correct_index: number }>(questions: T[], apiKey: string): Promise<T[]> {
+  const result = [...questions];
+  for (let i = 0; i < result.length; i++) {
+    if (optionLengthRatio(result[i].options) < OPTION_BALANCE_RATIO) {
+      const newOptions = await rebalanceOptions(result[i].question, result[i].options, result[i].correct_index, apiKey);
+      result[i] = { ...result[i], options: newOptions } as T;
+    }
+  }
+  return result;
+}
+
 // Ünite üretiminin tek gerçek kaynağı: 1-2 kaynak URL'sinden bir must_read +
 // 10 quiz sorusu üretir. Hem taze rehber üretiminde (runLeagueGeneration,
 // ünite ünite) hem tek ünite yenilemede (runUnitRegeneration) kullanılıyor —
@@ -291,7 +337,7 @@ ${combined}`;
     ...(unitParsed.url2 || urlB ? { url2: unitParsed.url2 || urlB } : {}),
     summary: unitParsed.summary,
   };
-  const quiz = (unitParsed.quiz || []).map((q: any) => ({
+  const rawQuiz: Omit<QuizQuestion, 'source_index'>[] = (unitParsed.quiz || []).map((q: any) => ({
     type: q.type,
     bonus: q.bonus,
     question: q.question,
@@ -299,6 +345,7 @@ ${combined}`;
     correct_index: q.correct_index,
     explanation: q.explanation,
   }));
+  const quiz = await enforceOptionBalance<Omit<QuizQuestion, 'source_index'>>(rawQuiz, apiKey);
   return { mustRead, quiz };
 }
 
@@ -324,13 +371,14 @@ SADECE aşağıdaki şemaya uyan geçerli JSON döndür, başka açıklama, mark
 { "capstone": [ { "question": "soru metni", "options": ["seçenek1","seçenek2","seçenek3","seçenek4"], "correct_index": 0, "explanation": "kısa açıklama", "source_indices": [0, 1] } ] }`;
 
   const capstoneParsed = await callClaudeJSON(capstonePrompt, apiKey, Math.min(48000, Math.max(12000, count * 3500)));
-  return (capstoneParsed.capstone || []).map((q: any) => ({
+  const rawCapstone = (capstoneParsed.capstone || []).map((q: any) => ({
     question: q.question,
     options: q.options,
     correct_index: q.correct_index,
     explanation: q.explanation,
     source_indices: q.source_indices || [],
   }));
+  return enforceOptionBalance(rawCapstone, apiKey);
 }
 
 export type LeagueGenerationParams = {
