@@ -283,7 +283,7 @@ function AdminLeaguesContent() {
   // "Düzenlenecek Bölüm" seçimine göre ilgili üretim/düzenleme UI'ını gösterir.
   function renderGuideRow(l: League, isDraft: boolean) {
     const content = isDraft ? l.draft_content : l.content;
-    if (!content) return null;
+    if (!hasContent(content)) return null;
     const isOpen = expandedTier === l.tier_index;
     const focusValue = editFocus === 'overview' ? 'overview' : editFocus === 'capstone' ? 'capstone' : String(editFocus);
     return (
@@ -422,6 +422,14 @@ function AdminLeaguesContent() {
     setLeaguesVersion((v) => v + 1);
   }
 
+  // Bir içerik alanı (content/draft_content) null olmasa bile içi tamamen
+  // boşaltılmış (tüm kaynaklar tek tek silinip "Kaydet" denmiş) olabilir —
+  // bu durumda "dolu" sayılmamalı, aksi halde Yayınlanan/Taslaklar
+  // sekmelerinde boş bir kademe gerçek içerik varmış gibi görünür.
+  function hasContent(c: LeagueContent | null): c is LeagueContent {
+    return !!c && c.must_reads.length > 0;
+  }
+
   function guideSummary(content: LeagueContent) {
     const unitCount = content.must_reads.length;
     const capstoneCount = content.capstone ? content.capstone.length : 0;
@@ -496,25 +504,25 @@ function AdminLeaguesContent() {
 
           <div className="tabs">
             <button className={guideView === 'draft' ? 'btn secondary' : 'btn ghost'} onClick={() => { setGuideView('draft'); setExpandedTier(null); }}>
-              Taslaklar ({leagues.filter((l) => l.draft_content).length})
+              Taslaklar ({leagues.filter((l) => hasContent(l.draft_content)).length})
             </button>
             <button className={guideView === 'published' ? 'btn secondary' : 'btn ghost'} onClick={() => { setGuideView('published'); setExpandedTier(null); }}>
-              Yayınlanan ({leagues.filter((l) => l.content).length})
+              Yayınlanan ({leagues.filter((l) => hasContent(l.content)).length})
             </button>
           </div>
 
           {guideView === 'draft' && (
             <>
-              {leagues.filter((l) => l.draft_content).length === 0 && <p className="panel-sub">Henüz hiçbir kademenin taslağı yok.</p>}
-              {leagues.filter((l) => l.draft_content).map((l) => renderGuideRow(l, true))}
+              {leagues.filter((l) => hasContent(l.draft_content)).length === 0 && <p className="panel-sub">Henüz hiçbir kademenin taslağı yok.</p>}
+              {leagues.filter((l) => hasContent(l.draft_content)).map((l) => renderGuideRow(l, true))}
 
               <div className="section-divider" />
               <p className="panel-title" style={{ fontSize: 15 }}>+ Yeni Rehber Oluştur</p>
               <p className="panel-sub">Henüz hiç taslağı ya da yayınlanmış içeriği olmayan bir kademe için kaynak linklerini girip ilk taslağı başlat.</p>
-              {leagues.filter((l) => !l.draft_content && !l.content).length === 0 && (
+              {leagues.filter((l) => !hasContent(l.draft_content) && !hasContent(l.content)).length === 0 && (
                 <p className="panel-sub">Taslağı/içeriği olmayan kademe kalmadı.</p>
               )}
-              {leagues.filter((l) => !l.draft_content && !l.content).map((l) => {
+              {leagues.filter((l) => !hasContent(l.draft_content) && !hasContent(l.content)).map((l) => {
                 const isOpen = expandedTier === l.tier_index;
                 return (
                   <div key={l.tier_index} style={{ marginBottom: 10 }}>
@@ -541,8 +549,8 @@ function AdminLeaguesContent() {
 
           {guideView === 'published' && (
             <>
-              {leagues.filter((l) => l.content).length === 0 && <p className="panel-sub">Henüz hiçbir kademe yayınlanmamış.</p>}
-              {leagues.filter((l) => l.content).map((l) => renderGuideRow(l, false))}
+              {leagues.filter((l) => hasContent(l.content)).length === 0 && <p className="panel-sub">Henüz hiçbir kademe yayınlanmamış.</p>}
+              {leagues.filter((l) => hasContent(l.content)).map((l) => renderGuideRow(l, false))}
             </>
           )}
         </div>
