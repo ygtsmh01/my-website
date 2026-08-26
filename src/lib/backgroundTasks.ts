@@ -293,7 +293,7 @@ Kurallar:
 - Her ÜNİTE için bir must_reads öğesi oluştur (sırasıyla index 0,1,2,...) — ham içerikteki "Ünite N" gruplamasına göre. İki kaynaklı bir ünitede "url" Kaynak A'nın, "url2" Kaynak B'nin linki olsun ve "summary" ikisini birden birleştirsin; tek kaynaklı bir ünitede "url2" alanını hiç yazma.
 - ${SUMMARY_QUALITY_RULE}
 - Her ünite için quiz'de "source_index" o ünitenin must_reads içindeki index'ine eşit olan ${PER_UNIT_QUIZ_RULE}
-- "capstone": bu ligin TÜM rehberini kapatan final sınavı, tam olarak 3 soru üret:
+- "capstone": bu ligin TÜM rehberini kapatan final sınavı, tam olarak 10 soru üret:
   - En az 2 kaynak varsa, HER capstone sorusu en az İKİ FARKLI kaynaktaki bilgiyi birbirine bağlamayı gerektirmeli — tek bir kaynağın özetinden cevaplanamamalı. Örnek kalıplar: "Kaynak A'daki X kavramı ile Kaynak B'deki Y arasındaki ilişki nedir?", "Bu iki kaynaktaki bilgiler birlikte değerlendirildiğinde en olası sonuç nedir?", "Kaynak A ve Kaynak B'deki yaklaşımlar birleştirilirse ortaya çıkan çıkarım nedir?".
   - Ünite sayısı 1-2 gibi çok azsa (gerçek bir "birden fazla kaynağı birleştirme" sorusu kurulamıyorsa) yine de tam 3 soru üret, ama bu durumda sorular mevcut kaynaklardaki EN DERİN/EN ÖNEMLİ kavramı test etsin (kaynaklar arası sentez zaten mümkün değil).
   - Bu, ligin final sınavı olduğu için rehberdeki EN ZOR sorular bunlar olmalı — quiz'deki bonus sorulardan bile daha zor.
@@ -442,7 +442,7 @@ ${combined}`;
     const newMustReads = currentContent.must_reads.map((m, i) => (i === sourceIndex ? newMustRead : m));
 
     // Merge quiz: drop the old questions for this source_index and splice the
-    // 4 new ones in at the same spot, leaving every other unit's questions
+    // 10 new ones in at the same spot, leaving every other unit's questions
     // untouched and in their original order.
     const newQuiz: QuizQuestion[] = [];
     let insertedUnitQuiz = false;
