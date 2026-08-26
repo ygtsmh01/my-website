@@ -41,6 +41,7 @@ function AdminLeaguesContent() {
   // Rehberler: Taslaklar/Yayınlanan alt-sekmesi + per-tier expand
   const [guideView, setGuideView] = useState<'draft' | 'published'>('draft');
   const [expandedTier, setExpandedTier] = useState<number | null>(null);
+  const [expandedIsDraft, setExpandedIsDraft] = useState(true);
   // Hangi bölüm düzenleniyor: 'overview' (rehber oluştur/kalan üniteleri
   // ekle), bir ünite index'i (o ünitenin manuel düzenleyicisi + YZ ile
   // yenileme formu), ya da 'capstone' (bitirme sınavı).
@@ -110,6 +111,27 @@ function AdminLeaguesContent() {
       }
     }
   }, [capstoneTasks]);
+
+  // Re-sync the manual editor's draft whenever `leagues` is refetched (e.g.
+  // after a unit/capstone regeneration finishes) WHILE a tier is expanded.
+  // Without this, editDraft stays frozen at whatever it was when the row
+  // was first opened — a background task can update draft_content in
+  // Supabase and even show a "capstone güncellendi" success message, but
+  // the on-screen editor keeps showing the stale pre-regeneration content
+  // until the row is manually collapsed and reopened.
+  useEffect(() => {
+    if (expandedTier === null) return;
+    const l = leagues.find((x) => x.tier_index === expandedTier);
+    if (!l) return;
+    const content = expandedIsDraft ? l.draft_content : l.content;
+    if (hasContent(content)) {
+      setEditMode(expandedIsDraft ? 'draft_content' : 'content');
+      setEditDraft(leagueContentToDraft(content));
+    } else {
+      setEditMode(null);
+      setEditDraft(null);
+    }
+  }, [leagues]);
 
   useEffect(() => {
     setTierDrafts((prev) => {
@@ -195,6 +217,7 @@ function AdminLeaguesContent() {
       return;
     }
     setExpandedTier(l.tier_index);
+    setExpandedIsDraft(isDraft);
     setEditFocus('overview');
     setLeagueLinksText('');
     setLeagueError(''); setLeagueOk('');
