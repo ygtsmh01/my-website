@@ -199,9 +199,17 @@ const PER_UNIT_QUIZ_RULE = `Tam olarak 10 soru üret, her biri TAM OLARAK 4 şı
 // Gerçek bir üretim denemesinde gözlemlendi: model doğru şıkkı hep aynı
 // konuma koyuyor veya doğru şıkkı diğerlerinden daha uzun/detaylı yazıyordu —
 // bu, kullanıcının içeriği hiç okumadan kalıba bakarak doğru cevabı tahmin
-// etmesine yol açıyordu. Bu kural bunu engellemek için eklendi ve denemede
-// dengeli bir dağılım ürettiği doğrulandı.
-const ANTI_BIAS_RULE = `ŞIK DAĞILIMI VE UZUNLUK — ÇOK ÖNEMLİ, kesinlikle uy: Bir sorudaki "correct_index" değerinin hep aynı konumda olması veya doğru şıkkın diğerlerinden uzun/detaylı yazılması, kullanıcının içeriği okumadan kalıba bakarak doğru cevabı tahmin etmesine yol açar. Bunu önlemek için: (1) Bir üniteye/sınava ait sorular arasında "correct_index" değerleri (0,1,2,3) dengeli dağılsın, art arda aynı index'i 3'ten fazla tekrarlama. (2) Her sorudaki 4 şık birbirine YAKIN uzunlukta ve YAKIN detay seviyesinde yazılsın — doğru şıkkı fark ettirecek şekilde daha uzun, daha spesifik veya daha "resmi" bir dille yazma. (3) Şıkların sırası konu akışına veya alfabetik sıraya göre olmasın.`;
+// etmesine yol açıyordu. İlk versiyonu ("yakın uzunlukta yaz" gibi yumuşak bir
+// öneri) yetersiz kaldı — canlıda hâlâ "doğru şık 3-4 satır + somut tarih,
+// diğer üçü tek cümlelik saçma/eleyici iddialar" kalıbı üretti (örn. "hesaplama
+// gücü azaldıkça YZ gelişmiştir" gibi mantıksal olarak imkansız bir çeldirici).
+// Bu yüzden somut/ölçülebilir bir uzunluk kısıtı ve "çeldiriciyi zenginleştir"
+// talimatına çevrildi.
+const ANTI_BIAS_RULE = `ŞIK DAĞILIMI, UZUNLUK VE İNANDIRICILIK — ÇOK ÖNEMLİ, kesinlikle uy: Bir sorudaki "correct_index" değerinin hep aynı konumda olması, doğru şıkkın diğerlerinden uzun/detaylı yazılması ya da yanlış şıkların mantıksal olarak imkansız/saçma olması, kullanıcının içeriği hiç okumadan veya konuyu hiç bilmeden salt kalıba bakarak doğru cevabı bulmasına yol açar. Bunu önlemek için:
+  (1) Bir üniteye/sınava ait sorular arasında "correct_index" değerleri (0,1,2,3) dengeli dağılsın, art arda aynı index'i 3'ten fazla tekrarlama.
+  (2) UZUNLUK KURALI (sert kısıt): en kısa şık, en uzun şıkkın karakter sayısının en az %70'i kadar olsun. Bunu şöyle sağla: önce doğru şıkkı yaz, sonra HER yanlış şıkkı da doğru şıkla AYNI seviyede somut detay/gerekçe/sayı içerecek şekilde zenginleştir (gerekirse inandırıcı ama yanlış bir tarih/mekanizma/sayı uydur) — kısa, tek cümlelik, "belli ki yanlış" bir çeldirici YAZMA.
+  (3) İNANDIRICILIK KURALI: yanlış şıklar mantıksal olarak imkansız veya gerçekle açıkça çelişen iddialar OLMASIN (örn. "X azaldıkça Y gelişti" gibi). Bunun yerine konuyu yüzeysel/yanlış anlayan, kısmen haklı ama sonucu yanlış çıkaran birinin gerçekten seçebileceği makul yanlış çıkarımlar olsun.
+  (4) Şıkların sırası konu akışına veya alfabetik sıraya göre olmasın.`;
 
 const QUIZ_QUALITY_RULE = `SORU KALİTESİ — ÇOK ÖNEMLİ, kesinlikle uy (quiz VE capstone için geçerli): Bu bir bilgi yarışması/trivia sınavı DEĞİL, okuyucunun konuyu gerçekten ANLAYIP ANLAMADIĞINI ölçen bir sınav. Şunları KESİNLİKLE YAPMA:
   - Bir sayıyı/istatistiği/ismi/tarihi ezberden sorma (örn. "X ne kadardı?", "Y kaç kişiydi?") — bu bir kalıcı rehber, güncel bir sayıya dayanmak zaten yanlış olur.
