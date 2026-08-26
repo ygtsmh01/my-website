@@ -113,6 +113,11 @@ export interface LeagueProgress {
   quiz_score: number;
   quiz_total: number;
   completed_at: string | null;
+  // Which lesson (source_index into the league's grouped quiz) the player
+  // should resume at — persists across logout/login while the guide is
+  // still in progress (completed=false). Ignored once completed, where
+  // a fresh session always starts the optional half-XP replay at lesson 0.
+  current_lesson_index: number;
 }
 
 export interface HistoryRow {

@@ -145,6 +145,7 @@ export default function Game() {
   // (the current unlocked lesson, or a previously-passed one clicked for review).
   const [viewedLessonIndex, setViewedLessonIndex] = useState<number | null>(null);
   const [lessonFailInfo, setLessonFailInfo] = useState<{ score: number; total: number } | null>(null);
+  const [lessonPassInfo, setLessonPassInfo] = useState<{ score: number; total: number; xp: number } | null>(null);
   const [capstoneAnswers, setCapstoneAnswers] = useState<Record<number, number>>({});
   const [capstoneStepIndex, setCapstoneStepIndex] = useState(0);
   const [capstoneOpen, setCapstoneOpen] = useState(false);
@@ -181,6 +182,20 @@ export default function Game() {
     sb.from('league_progress').select('*').eq('user_id', profile.id).eq('tier_index', profile.league_tier).maybeSingle()
       .then(({ data }) => setLeagueProgress(data));
   }, [profile?.id, profile?.league_tier]);
+
+  // Resume the lesson-path where the player left off — lessonIndex only
+  // lives in React state otherwise, so without this a logout/login (or any
+  // remount) silently restarted the guide from lesson 0 even after passing
+  // several lessons. Only applies while the guide is still in progress —
+  // once completed, a fresh session intentionally starts any optional
+  // half-XP replay back at lesson 0.
+  useEffect(() => {
+    if (leagueProgress && !leagueProgress.completed) {
+      const idx = leagueProgress.current_lesson_index || 0;
+      setLessonIndex(idx);
+      setPassedLessons(new Set(Array.from({ length: idx }, (_, i) => i)));
+    }
+  }, [leagueProgress]);
 
   // "Kullanıcı" (tier_index 4) ve üzeri haftalık seri kuralını, hafta içeriği ve profil hazır
   // olduğunda (ya da bu haftanın quizi kapatılıp last_week_number ilerlediğinde) tembel biçimde
@@ -563,12 +578,27 @@ export default function Game() {
     await grantXp(grantedXp);
     setLessonResults((prev) => ({ ...prev, [lessonIndex]: { score, total } }));
     setPassedLessons((prev) => new Set(prev).add(lessonIndex));
-    setLessonAnswers({});
-    setLessonStepIndex(0);
     setLessonFailInfo(null);
     setGuideTestModeOpen(false);
+    // lessonIndex/viewedLessonIndex stay put here so the just-finished lesson
+    // remains "current"/viewed while the pass banner shows — continueAfterLessonPass
+    // (triggered by the banner's "Devam Et" button) does the actual advance.
+    setLessonPassInfo({ score, total, xp: grantedXp });
+    // Persist the resume point immediately (not deferred to "Devam Et") so a
+    // logout right after passing still resumes past this lesson, not before it.
+    if (profile && !isReplay) {
+      void sb.from('league_progress').upsert({
+        user_id: profile.id, tier_index: myLeague.tier_index, current_lesson_index: lessonIndex + 1,
+      }, { onConflict: 'user_id,tier_index' });
+    }
+  }
+
+  function continueAfterLessonPass() {
+    setLessonAnswers({});
+    setLessonStepIndex(0);
     setViewedLessonIndex(null);
     setLessonIndex((i) => i + 1);
+    setLessonPassInfo(null);
   }
 
   function selectCapstoneAnswer(qIdx: number, optIdx: number) {
@@ -623,7 +653,7 @@ export default function Game() {
       }
       await sb.from('profiles').update(profileUpdate).eq('id', profile.id);
       setProfile((p) => (p ? { ...p, ...profileUpdate } : p));
-      setLeagueProgress({ user_id: profile.id, tier_index: myLeague.tier_index, completed: true, quiz_score: score, quiz_total: total, completed_at: new Date().toISOString() });
+      setLeagueProgress({ user_id: profile.id, tier_index: myLeague.tier_index, completed: true, quiz_score: score, quiz_total: total, completed_at: new Date().toISOString(), current_lesson_index: lessonIndex });
     }
     setCurriculumSaving(false);
     setCapstoneAnswers({});
@@ -964,7 +994,7 @@ export default function Game() {
                 </div>
               )}
 
-              {viewedLesson && isViewingCurrentLesson && !lessonFailInfo && (
+              {viewedLesson && isViewingCurrentLesson && !lessonFailInfo && !lessonPassInfo && (
                 <button className="btn secondary" style={{ marginTop: 14 }} onClick={() => setGuideTestModeOpen(true)}>
                   ✅ Özeti Okudum, Kendimi Test Et
                 </button>
@@ -982,6 +1012,15 @@ export default function Game() {
                     Bu dersi geçemedin ({lessonFailInfo.score}/{lessonFailInfo.total}), özeti tekrar oku ve tekrar dene.
                   </p>
                   <button className="btn danger" onClick={retryLesson}>Tekrar Dene</button>
+                </div>
+              )}
+
+              {viewedLesson && isViewingCurrentLesson && lessonPassInfo && (
+                <div style={{ marginTop: 14 }}>
+                  <p className="panel-sub" style={{ color: 'var(--green)' }}>
+                    🎉 Dersi geçtin! ({lessonPassInfo.score}/{lessonPassInfo.total} doğru) · +{lessonPassInfo.xp} XP kazandın.
+                  </p>
+                  <button className="btn secondary" onClick={continueAfterLessonPass}>Devam Et</button>
                 </div>
               )}
 
