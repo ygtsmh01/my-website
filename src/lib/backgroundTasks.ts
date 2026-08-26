@@ -2,7 +2,7 @@ import { useSyncExternalStore } from 'react';
 import { sb } from './supabase';
 import type { LeagueContent, MustRead, QuizQuestion, CapstoneQuestion } from './types';
 
-export type TaskKind = 'week' | 'league' | 'unit';
+export type TaskKind = 'week' | 'league' | 'unit' | 'capstone';
 export type TaskStatus = 'running' | 'done' | 'error';
 
 export type BackgroundTask = {
@@ -245,124 +245,211 @@ async function callClaudeJSON(prompt: string, apiKey: string, maxTokens: number)
   return JSON.parse(cleaned);
 }
 
-export type LeagueGenerationParams = {
-  urls: string[];
-  apiKey: string;
-  tierIndex: number;
-  leagueName: string;
-};
-
-export async function runLeagueGeneration(params: LeagueGenerationParams): Promise<void> {
-  const { urls, apiKey, tierIndex, leagueName } = params;
-  const id = genId();
-  const label = leagueName;
-
-  upsertTask({ id, kind: 'league', label, status: 'running', message: 'Başlatılıyor…' });
-
-  // Her ünite ardışık İKİ linkten oluşur (A, B, A, B, …) — tek sayıda link
-  // verilirse son ünite tek kaynaklı kalır. Bu, bir ünitenin ders notunu ve
-  // 10 sorusunu iki kaynaktan birden üretebilmek için gerekli; bkz. plan
-  // notu: gerçek bir üretim denemesinde 2 kaynaklı ders notlarının tek
-  // kaynaklıya göre gözle görülür daha zengin çıktığı doğrulandı.
-  const unitCount = Math.ceil(urls.length / 2);
-  let combined = '';
-  for (let u = 0; u < unitCount; u++) {
-    const urlA = urls[u * 2];
-    const urlB = urls[u * 2 + 1];
-    upsertTask({ id, kind: 'league', label, status: 'running', message: `Ünite ${u + 1}/${unitCount} okunuyor: ${urlA}` });
+// Ünite üretiminin tek gerçek kaynağı: 1-2 kaynak URL'sinden bir must_read +
+// 10 quiz sorusu üretir. Hem taze rehber üretiminde (runLeagueGeneration,
+// ünite ünite) hem tek ünite yenilemede (runUnitRegeneration) kullanılıyor —
+// prompt burada bir kere yazılır, ikisi de aynı kalitede üretim yapar.
+async function generateUnit(urlA: string, urlB: string | undefined, apiKey: string): Promise<{ mustRead: MustRead; quiz: Omit<QuizQuestion, 'source_index'>[] }> {
+  let sourceText: string;
+  try {
+    sourceText = await fetchReadable(urlA);
+  } catch (e) {
+    throw new Error('Kaynak okunamadı: ' + urlA);
+  }
+  let combined = `--- Kaynak A: ${urlA} ---\n${sourceText}`;
+  if (urlB) {
     try {
-      const text = await fetchReadable(urlA);
-      combined += `\n\n--- Ünite ${u} - Kaynak A: ${urlA} ---\n${text}`;
+      const sourceText2 = await fetchReadable(urlB);
+      combined += `\n\n--- Kaynak B: ${urlB} ---\n${sourceText2}`;
     } catch (e) {
-      combined += `\n\n--- Ünite ${u} - Kaynak A: ${urlA} (içerik okunamadı, sadece link olarak dahil et) ---`;
-    }
-    if (urlB) {
-      upsertTask({ id, kind: 'league', label, status: 'running', message: `Ünite ${u + 1}/${unitCount} okunuyor: ${urlB}` });
-      try {
-        const text = await fetchReadable(urlB);
-        combined += `\n\n--- Ünite ${u} - Kaynak B: ${urlB} ---\n${text}`;
-      } catch (e) {
-        combined += `\n\n--- Ünite ${u} - Kaynak B: ${urlB} (içerik okunamadı, sadece link olarak dahil et) ---`;
-      }
+      throw new Error('İkinci kaynak okunamadı: ' + urlB);
     }
   }
 
-  upsertTask({ id, kind: 'league', label, status: 'running', message: 'Rehber hazırlanıyor…' });
-  try {
-    // İki ayrı çağrıya bölünmüş: (1) üniteler (must_reads+quiz), (2) bitirme
-    // sınavı. Tek dev çağrıda 8 üniteye kadar 10'ar soru + 10 soruluk bitirme
-    // sınavının hepsi aynı anda isteniyordu ve gerçek kullanımda max_tokens'ı
-    // aşıp yanıtın kesilmesine, dolayısıyla TÜM üretimin (harcanan token dahil)
-    // boşa gitmesine yol açtı. Bölünce hem her çağrı çok daha küçük bir çıktı
-    // üretiyor hem de bitirme sınavı çağrısı başarısız olsa bile üniteler
-    // taslak olarak kaydedilmiş oluyor, kaybolmuyor.
-    const prompt = `Aşağıda "${leagueName}" ligi için TEMEL/SABİT bir rehber oluşturacak ünitelerin ham metni var. Her ünite ardışık "--- Ünite N - Kaynak A: url ---" ve (varsa) "--- Ünite N - Kaynak B: url ---" başlıklarıyla ayrılmış — yani bir ünitenin bir veya iki kaynağı olabilir. Bu içerik bir kere oluşturulacak ve değişmeyecek (haftalık değil). Bunları işleyip SADECE aşağıdaki şemaya uyan geçerli JSON döndür, başka açıklama, markdown işareti ekleme:
+  const unitPrompt = `Aşağıda bir lig rehberindeki TEK BİR ünitenin kaynağının/kaynaklarının ham metni var. Bunu işleyip SADECE aşağıdaki şemaya uyan geçerli JSON döndür, başka açıklama, markdown işareti ekleme:
 
 {
-  "must_reads": [ { "title": "başlık", "url": "Kaynak A linki", "url2": "Kaynak B linki (varsa; yoksa bu alanı hiç ekleme)", "summary": "6-10 cümlelik, doğrudan bilgi aktaran, ünitenin kaynak(lar)ını birleştiren ders notu" } ],
-  "quiz": [ { "source_index": 0, "type": "mc", "bonus": false, "question": "soru metni", "options": ["seçenek1","seçenek2","seçenek3","seçenek4"], "correct_index": 0, "explanation": "kısa açıklama" } ]
+  "title": "başlık",
+  "url": "Kaynak A linki",
+  "url2": "Kaynak B linki (varsa; yoksa bu alanı hiç ekleme)",
+  "summary": "6-10 cümlelik, doğrudan bilgi aktaran, kaynak(lar)ı birleştiren ders notu",
+  "quiz": [ { "type": "mc", "bonus": false, "question": "soru metni", "options": ["seçenek1","seçenek2","seçenek3","seçenek4"], "correct_index": 0, "explanation": "kısa açıklama" } ]
 }
 
 Kurallar:
-- Her ÜNİTE için bir must_reads öğesi oluştur (sırasıyla index 0,1,2,...) — ham içerikteki "Ünite N" gruplamasına göre. İki kaynaklı bir ünitede "url" Kaynak A'nın, "url2" Kaynak B'nin linki olsun ve "summary" ikisini birden birleştirsin; tek kaynaklı bir ünitede "url2" alanını hiç yazma.
 - ${SUMMARY_QUALITY_RULE}
-- Her ünite için quiz'de "source_index" o ünitenin must_reads içindeki index'ine eşit olan ${PER_UNIT_QUIZ_RULE}
+- "quiz" alanında ${PER_UNIT_QUIZ_RULE}
 - ${QUIZ_QUALITY_RULE}
-- Bu ligin seviyesine uygun zorlukta sorular üret ("${leagueName}" ne kadar üst seviyeyse o kadar zor olsun). Bu rehber kalıcı ve temel bir referans olacağı için sorular haftalık değil, o seviyeye özgü genel/kalıcı bilgiyi ölçmeli.
 
 Ham içerik:
 ${combined}`;
 
-    const parsed = await callClaudeJSON(prompt, apiKey, 64000);
+  const unitParsed = await callClaudeJSON(unitPrompt, apiKey, 16000);
+  const mustRead: MustRead = {
+    title: unitParsed.title,
+    url: unitParsed.url || urlA,
+    ...(unitParsed.url2 || urlB ? { url2: unitParsed.url2 || urlB } : {}),
+    summary: unitParsed.summary,
+  };
+  const quiz = (unitParsed.quiz || []).map((q: any) => ({
+    type: q.type,
+    bonus: q.bonus,
+    question: q.question,
+    options: q.options,
+    correct_index: q.correct_index,
+    explanation: q.explanation,
+  }));
+  return { mustRead, quiz };
+}
 
-    // Üniteleri hemen taslak olarak kaydet — bitirme sınavı çağrısı aşağıda
-    // başarısız olsa bile bu kısım kaybolmasın.
-    const { error: unitsUpdateError } = await sb.from('leagues').update({
-      draft_content: { must_reads: parsed.must_reads, quiz: parsed.quiz, capstone: null },
-    }).eq('tier_index', tierIndex);
-    if (unitsUpdateError) throw new Error('Veritabanına yazılamadı: ' + unitsUpdateError.message);
-
-    upsertTask({ id, kind: 'league', label, status: 'running', message: 'Bitirme sınavı hazırlanıyor…' });
-    try {
-      const mustReadsList = (parsed.must_reads || []).map((m: any, i: number) => `Ünite ${i}: ${m.title}\n${m.summary}`).join('\n\n');
-      const capstonePrompt = `Aşağıda "${leagueName}" ligindeki tüm ünitelerin özetleri var. Bu ligin TÜM rehberini kapatan bitirme sınavı için tam olarak 10 soru üret:
+// Bitirme sınavı üretiminin tek gerçek kaynağı: verilen ünite özetlerinden
+// tam olarak `count` soruluk bir sentez sınavı üretir. Taze rehber
+// üretiminde (tüm üniteler bitince), tek ünite yenilemede (silinen capstone
+// sorularını doldururken) ve tek başına "Bitirme Sınavını Üret" aksiyonunda
+// kullanılıyor — üçü de aynı kalite kurallarına tabi olsun diye tek yerde.
+async function generateCapstone(mustReads: MustRead[], count: number, apiKey: string): Promise<CapstoneQuestion[]> {
+  const mustReadsList = mustReads.map((m, i) => `Ünite ${i}: ${m.title}\n${m.summary}`).join('\n\n');
+  const capstonePrompt = `Aşağıda bir lig rehberindeki tüm ünitelerin özetleri var. Bu rehberi kapatan bitirme sınavı için tam olarak ${count} soru üret:
 
 ${mustReadsList}
 
 Kurallar:
 - Ünite sayısı 2 veya daha fazlaysa, HER soru en az İKİ FARKLI üniteden bilgiyi birbirine bağlamayı gerektirmeli — tek bir ünitenin özetinden cevaplanamamalı. Örnek kalıplar: "Ünite A'daki X kavramı ile Ünite B'deki Y arasındaki ilişki nedir?", "Bu iki bilgi birlikte değerlendirildiğinde en olası sonuç nedir?", "A ve B'deki yaklaşımlar birleştirilirse ortaya çıkan çıkarım nedir?".
-- Ünite sayısı 1 gibi çok azsa (gerçek bir "birden fazla üniteyi birleştirme" sorusu kurulamıyorsa) yine de tam 10 soru üret, ama bu durumda sorular mevcut ünitedeki EN DERİN/EN ÖNEMLİ kavramları test etsin.
-- Bu, ligin final sınavı olduğu için rehberdeki EN ZOR sorular bunlar olmalı — normal ünite sorularından bile daha zor.
+- Ünite sayısı 1 gibi çok azsa (gerçek bir "birden fazla üniteyi birleştirme" sorusu kurulamıyorsa) yine de tam ${count} soru üret, ama bu durumda sorular mevcut ünite(ler)deki EN DERİN/EN ÖNEMLİ kavramları test etsin.
+- Bu, rehberin final sınavı olduğu için EN ZOR sorular bunlar olmalı — normal ünite sorularından bile daha zor.
 - Her soru için, o soruyu cevaplamak amacıyla kullandığın ünitelerin (must_reads) index'lerini "source_indices" dizisinde belirt (örn. iki üniteyi birleştiren bir soru için [0, 2]).
 - ${QUIZ_QUALITY_RULE}
 
 SADECE aşağıdaki şemaya uyan geçerli JSON döndür, başka açıklama, markdown işareti ekleme:
 { "capstone": [ { "question": "soru metni", "options": ["seçenek1","seçenek2","seçenek3","seçenek4"], "correct_index": 0, "explanation": "kısa açıklama", "source_indices": [0, 1] } ] }`;
 
-      const capstoneParsed = await callClaudeJSON(capstonePrompt, apiKey, 32000);
-      const { error: capstoneUpdateError } = await sb.from('leagues').update({
-        draft_content: { must_reads: parsed.must_reads, quiz: parsed.quiz, capstone: capstoneParsed.capstone || null },
-      }).eq('tier_index', tierIndex);
-      if (capstoneUpdateError) throw new Error('Bitirme sınavı veritabanına yazılamadı: ' + capstoneUpdateError.message);
+  const capstoneParsed = await callClaudeJSON(capstonePrompt, apiKey, Math.min(48000, Math.max(12000, count * 3500)));
+  return (capstoneParsed.capstone || []).map((q: any) => ({
+    question: q.question,
+    options: q.options,
+    correct_index: q.correct_index,
+    explanation: q.explanation,
+    source_indices: q.source_indices || [],
+  }));
+}
 
+export type LeagueGenerationParams = {
+  // Sadece BU çağrıda üretilecek (yeni) ünitelerin linkleri — resumeContent
+  // varsa, önceden üretilmiş ünitelerin linkleri tekrar gönderilmez.
+  urls: string[];
+  apiKey: string;
+  tierIndex: number;
+  leagueName: string;
+  // Zaten kısmen üretilmiş bir taslağa devam ediliyorsa ("Kalan Üniteleri
+  // Ekle") önceki üniteler burada gelir, yeni üretilenler sonuna eklenir.
+  // Sıfırdan üretimde undefined/null.
+  resumeContent?: LeagueContent | null;
+};
+
+export async function runLeagueGeneration(params: LeagueGenerationParams): Promise<void> {
+  const { urls, apiKey, tierIndex, leagueName, resumeContent } = params;
+  const id = genId();
+  const label = leagueName;
+
+  upsertTask({ id, kind: 'league', label, status: 'running', message: 'Başlatılıyor…' });
+
+  // Her ünite ardışık İKİ linkten oluşur (A, B, A, B, …) — tek sayıda link
+  // verilirse son ünite tek kaynaklı kalır.
+  const newUnitCount = Math.ceil(urls.length / 2);
+  const startIndex = resumeContent?.must_reads.length ?? 0;
+  const totalUnitCount = startIndex + newUnitCount;
+  const accMustReads: MustRead[] = resumeContent ? [...resumeContent.must_reads] : [];
+  const accQuiz: QuizQuestion[] = resumeContent ? [...resumeContent.quiz] : [];
+
+  // Üniteler teker teker üretilir ve HER biri bitince hemen taslağa
+  // kaydedilir — tek bir dev çağrıda 8 üniteye kadar 10'ar soru aynı anda
+  // isteniyordu ve gerçek kullanımda max_tokens'ı aşıp yanıtın kesilmesine,
+  // dolayısıyla o ana kadar başarıyla üretilmiş üniteler dahil TÜM emeğin
+  // boşa gitmesine yol açtı. Bu şekilde bir ünite başarısız olursa önceki
+  // üniteler taslakta kalır ve admin sadece eksik kalanları ("Kalan
+  // Üniteleri Ekle") tamamlayabilir.
+  for (let u = 0; u < newUnitCount; u++) {
+    const unitNumber = startIndex + u;
+    const urlA = urls[u * 2];
+    const urlB = urls[u * 2 + 1];
+    upsertTask({ id, kind: 'league', label, status: 'running', message: `Ünite ${unitNumber + 1}/${totalUnitCount} okunuyor/üretiliyor: ${urlA}` });
+    try {
+      const { mustRead, quiz } = await generateUnit(urlA, urlB, apiKey);
+      accMustReads.push(mustRead);
+      for (const q of quiz) accQuiz.push({ ...q, source_index: unitNumber });
+
+      const { error: unitUpdateError } = await sb.from('leagues').update({
+        draft_content: { must_reads: accMustReads, quiz: accQuiz, capstone: null },
+      }).eq('tier_index', tierIndex);
+      if (unitUpdateError) throw new Error('Veritabanına yazılamadı: ' + unitUpdateError.message);
+
+      upsertTask({ id, kind: 'league', label, status: 'running', message: `Ünite ${unitNumber + 1}/${totalUnitCount} kaydedildi.` });
+    } catch (unitError: any) {
       upsertTask({
         id,
         kind: 'league',
         label,
-        status: 'done',
-        message: `${leagueName} rehberi (bitirme sınavı dahil) taslak olarak kaydedildi. Aşağıdan inceleyip yayınlayabilirsin.`,
+        status: 'error',
+        message: `${unitNumber}/${totalUnitCount} ünite taslağa kaydedildi, "${urlA}" işlenirken hata oldu: ${unitError.message}. Bu ünitenin (ve varsa sonrakilerin) linklerini "Kalan Üniteleri Ekle" ile tekrar gir.`,
       });
-    } catch (capstoneError: any) {
-      upsertTask({
-        id,
-        kind: 'league',
-        label,
-        status: 'done',
-        message: `${leagueName} rehberinin üniteleri taslak olarak kaydedildi, ama bitirme sınavı üretilemedi (${capstoneError.message}). Üniteleri inceleyebilirsin, bitirme sınavı için tekrar dene.`,
-      });
+      return;
     }
+  }
+
+  upsertTask({ id, kind: 'league', label, status: 'running', message: 'Bitirme sınavı hazırlanıyor…' });
+  try {
+    const capstone = await generateCapstone(accMustReads, 10, apiKey);
+    const { error: capstoneUpdateError } = await sb.from('leagues').update({
+      draft_content: { must_reads: accMustReads, quiz: accQuiz, capstone },
+    }).eq('tier_index', tierIndex);
+    if (capstoneUpdateError) throw new Error('Bitirme sınavı veritabanına yazılamadı: ' + capstoneUpdateError.message);
+
+    upsertTask({
+      id,
+      kind: 'league',
+      label,
+      status: 'done',
+      message: `${leagueName} rehberi (${totalUnitCount} ünite + bitirme sınavı) taslak olarak kaydedildi. Aşağıdan inceleyip yayınlayabilirsin.`,
+    });
+  } catch (capstoneError: any) {
+    upsertTask({
+      id,
+      kind: 'league',
+      label,
+      status: 'done',
+      message: `${leagueName} rehberinin ${totalUnitCount} ünitesi taslak olarak kaydedildi, ama bitirme sınavı üretilemedi (${capstoneError.message}). "Bitirme Sınavını Üret" ile tekrar deneyebilirsin.`,
+    });
+  }
+}
+
+export type CapstoneGenerationParams = {
+  apiKey: string;
+  tierIndex: number;
+  leagueName: string;
+  mustReads: MustRead[];
+  quiz: QuizQuestion[];
+};
+
+// Sadece bitirme sınavını (yeniden) üretir — üniteler zaten taslakta/yayında
+// olduğunda, tüm rehberi tekrar üretmeye gerek kalmadan sadece bu son parçayı
+// tazelemek için. Her zaman draft_content'e yazar — yayınlanmış içerik varsa
+// bile doğrudan content'e değil, önce taslağa düşer (incelenip yayınlanana kadar).
+export async function runCapstoneGeneration(params: CapstoneGenerationParams): Promise<void> {
+  const { apiKey, tierIndex, leagueName, mustReads, quiz } = params;
+  const id = genId();
+  const label = `${leagueName} · Bitirme Sınavı`;
+
+  upsertTask({ id, kind: 'capstone', label, status: 'running', message: 'Bitirme sınavı hazırlanıyor…' });
+  try {
+    const capstone = await generateCapstone(mustReads, 10, apiKey);
+    const { error } = await sb.from('leagues').update({
+      draft_content: { must_reads: mustReads, quiz, capstone },
+    }).eq('tier_index', tierIndex);
+    if (error) throw new Error('Veritabanına yazılamadı: ' + error.message);
+
+    upsertTask({ id, kind: 'capstone', label, status: 'done', message: `${leagueName} bitirme sınavı taslak olarak kaydedildi. Aşağıdan inceleyip yayınlayabilirsin.` });
   } catch (e: any) {
-    upsertTask({ id, kind: 'league', label, status: 'error', message: 'Rehber işlenirken bir sorun oldu: ' + e.message });
+    upsertTask({ id, kind: 'capstone', label, status: 'error', message: 'Bitirme sınavı üretilirken bir sorun oldu: ' + e.message });
   }
 }
 
@@ -402,59 +489,9 @@ export async function runUnitRegeneration(params: UnitRegenerationParams): Promi
   upsertTask({ id, kind: 'unit', label, status: 'running', message: 'Başlatılıyor…' });
 
   try {
-    upsertTask({ id, kind: 'unit', label, status: 'running', message: `Kaynak okunuyor: ${url}` });
-    let sourceText: string;
-    try {
-      sourceText = await fetchReadable(url);
-    } catch (e) {
-      throw new Error('Kaynak okunamadı: ' + url);
-    }
-    let combined = `--- Kaynak A: ${url} ---\n${sourceText}`;
-    if (url2) {
-      upsertTask({ id, kind: 'unit', label, status: 'running', message: `İkinci kaynak okunuyor: ${url2}` });
-      try {
-        const sourceText2 = await fetchReadable(url2);
-        combined += `\n\n--- Kaynak B: ${url2} ---\n${sourceText2}`;
-      } catch (e) {
-        throw new Error('İkinci kaynak okunamadı: ' + url2);
-      }
-    }
-
-    upsertTask({ id, kind: 'unit', label, status: 'running', message: 'Ünite hazırlanıyor…' });
-    const unitPrompt = `Aşağıda bir lig rehberindeki TEK BİR ünitenin YENİ kaynağının/kaynaklarının ham metni var. Bu ünite mevcut rehberdeki "${unitTitle}" ünitesinin yerini alacak. Bunu işleyip SADECE aşağıdaki şemaya uyan geçerli JSON döndür, başka açıklama, markdown işareti ekleme:
-
-{
-  "title": "başlık",
-  "url": "Kaynak A linki",
-  "url2": "Kaynak B linki (varsa; yoksa bu alanı hiç ekleme)",
-  "summary": "6-10 cümlelik, doğrudan bilgi aktaran, kaynak(lar)ı birleştiren ders notu",
-  "quiz": [ { "type": "mc", "bonus": false, "question": "soru metni", "options": ["seçenek1","seçenek2","seçenek3","seçenek4"], "correct_index": 0, "explanation": "kısa açıklama" } ]
-}
-
-Kurallar:
-- ${SUMMARY_QUALITY_RULE}
-- "quiz" alanında ${PER_UNIT_QUIZ_RULE}
-- ${QUIZ_QUALITY_RULE}
-
-Ham içerik:
-${combined}`;
-
-    const unitParsed = await callClaudeJSON(unitPrompt, apiKey, 16000);
-    const newMustRead: MustRead = {
-      title: unitParsed.title,
-      url: unitParsed.url || url,
-      ...(unitParsed.url2 || url2 ? { url2: unitParsed.url2 || url2 } : {}),
-      summary: unitParsed.summary,
-    };
-    const newUnitQuiz: QuizQuestion[] = (unitParsed.quiz || []).map((q: any) => ({
-      source_index: sourceIndex,
-      type: q.type,
-      bonus: q.bonus,
-      question: q.question,
-      options: q.options,
-      correct_index: q.correct_index,
-      explanation: q.explanation,
-    }));
+    upsertTask({ id, kind: 'unit', label, status: 'running', message: `Kaynak(lar) okunuyor: ${url}` });
+    const { mustRead: newMustRead, quiz: newUnitQuizBase } = await generateUnit(url, url2, apiKey);
+    const newUnitQuiz: QuizQuestion[] = newUnitQuizBase.map((q) => ({ ...q, source_index: sourceIndex }));
 
     // Merge must_reads: only the target index's entry changes, order/rest untouched.
     const newMustReads = currentContent.must_reads.map((m, i) => (i === sourceIndex ? newMustRead : m));
@@ -486,26 +523,7 @@ ${combined}`;
     let backfillCapstone: CapstoneQuestion[] = [];
     if (removedCount > 0) {
       upsertTask({ id, kind: 'unit', label, status: 'running', message: 'Bitirme sınavı güncelleniyor…' });
-      const mustReadsList = newMustReads.map((m, i) => `Ünite ${i}: ${m.title}\n${m.summary}`).join('\n\n');
-      const capstonePrompt = `İşte şu an mevcut olan tüm ünitelerin özetleri:
-
-${mustReadsList}
-
-Aşağıdaki sayıda YENİ bitirme sınavı sorusu üret: ${removedCount}. Bu sorular önceki bitirme sınavı sorularının silinen kısmının yerini alacak, aynı kalite kurallarına uy (en az 2 farklı üniteyi birleştiren sentez soruları, ezber/trivia yasak), her soru için hangi ünite index'lerini kullandığını "source_indices" dizisi olarak belirt.
-
-SADECE aşağıdaki şemaya uyan geçerli JSON döndür, başka açıklama, markdown işareti ekleme:
-{ "capstone": [ { "question": "soru metni", "options": ["seçenek1","seçenek2","seçenek3","seçenek4"], "correct_index": 0, "explanation": "kısa açıklama", "source_indices": [0, 1] } ] }
-
-- ${QUIZ_QUALITY_RULE}`;
-
-      const capstoneParsed = await callClaudeJSON(capstonePrompt, apiKey, 16000);
-      backfillCapstone = (capstoneParsed.capstone || []).map((q: any) => ({
-        question: q.question,
-        options: q.options,
-        correct_index: q.correct_index,
-        explanation: q.explanation,
-        source_indices: q.source_indices || [],
-      }));
+      backfillCapstone = await generateCapstone(newMustReads, removedCount, apiKey);
     }
 
     const newCapstone: CapstoneQuestion[] = [...keptCapstone, ...backfillCapstone];

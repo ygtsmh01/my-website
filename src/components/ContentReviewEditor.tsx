@@ -48,9 +48,19 @@ interface Props {
   onChange: (draft: ReviewDraft) => void;
   showWeekFields?: boolean;
   isBoss?: boolean;
+  // League editing only: scopes the editor to a single unit's source+quiz,
+  // or to just the capstone section, instead of showing everything at once.
+  // Absent/null keeps the original "show it all" behavior — AdminWeeks.tsx
+  // never passes this, so weekly editing is completely unaffected.
+  focusSourceIndex?: number | 'capstone' | null;
 }
 
-export default function ContentReviewEditor({ draft, onChange, showWeekFields, isBoss }: Props) {
+export default function ContentReviewEditor({ draft, onChange, showWeekFields, isBoss, focusSourceIndex }: Props) {
+  const isFocused = focusSourceIndex !== undefined && focusSourceIndex !== null;
+  const focusUnit = isFocused && focusSourceIndex !== 'capstone' ? (focusSourceIndex as number) : null;
+  const focusCapstone = focusSourceIndex === 'capstone';
+  const showSourcesAndQuiz = !isFocused || focusUnit !== null;
+  const showCapstoneSection = !isFocused || focusCapstone;
   function update(patch: Partial<ReviewDraft>) {
     onChange({ ...draft, ...patch });
   }
@@ -116,7 +126,7 @@ export default function ContentReviewEditor({ draft, onChange, showWeekFields, i
     update({
       quiz: [
         ...draft.quiz,
-        { _key: newKey(), source_index: 0, type: 'mc', bonus: false, question: '', options: ['', '', ''], correct_index: 0, explanation: '' },
+        { _key: newKey(), source_index: focusUnit ?? 0, type: 'mc', bonus: false, question: '', options: ['', '', ''], correct_index: 0, explanation: '' },
       ],
     });
   }
@@ -166,10 +176,13 @@ export default function ContentReviewEditor({ draft, onChange, showWeekFields, i
 
   return (
     <div>
+      {showSourcesAndQuiz && (
       <details className="editor-group">
         <summary className="editor-group-summary">📚 Özetler / Kaynaklar</summary>
         <div className="editor-group-body">
-      {draft.must_reads.map((m, i) => (
+      {draft.must_reads.map((m, i) => {
+        if (focusUnit !== null && i !== focusUnit) return null;
+        return (
         <div className="editor-subrow" key={m._key}>
           <div className="editor-subrow-head">
             <span className="tag">Kaynak {i}</span>
@@ -184,15 +197,20 @@ export default function ContentReviewEditor({ draft, onChange, showWeekFields, i
           <label className="field-label">Özet</label>
           <textarea value={m.summary} onChange={(e) => updateMustRead(m._key, { summary: e.target.value })} />
         </div>
-      ))}
-      <button className="btn ghost" onClick={addMustRead}>+ Kaynak Ekle</button>
+        );
+      })}
+      {focusUnit === null && <button className="btn ghost" onClick={addMustRead}>+ Kaynak Ekle</button>}
         </div>
       </details>
+      )}
 
+      {showSourcesAndQuiz && (
       <details className="editor-group">
         <summary className="editor-group-summary">❓ Quiz Soruları</summary>
         <div className="editor-group-body">
-      {draft.quiz.map((q) => (
+      {draft.quiz.map((q) => {
+        if (focusUnit !== null && q.source_index !== focusUnit) return null;
+        return (
         <div className="editor-subrow" key={q._key}>
           <div className="editor-subrow-head">
             <span>
@@ -233,12 +251,14 @@ export default function ContentReviewEditor({ draft, onChange, showWeekFields, i
           <label className="field-label" style={{ marginTop: 10 }}>Açıklama</label>
           <textarea value={q.explanation} onChange={(e) => updateQuiz(q._key, { explanation: e.target.value })} />
         </div>
-      ))}
+        );
+      })}
       <button className="btn ghost" onClick={addQuiz}>+ Soru Ekle</button>
         </div>
       </details>
+      )}
 
-      {!showWeekFields && (
+      {!showWeekFields && showCapstoneSection && (
         <details className="editor-group">
           <summary className="editor-group-summary">🎓 Bitirme Sınavı</summary>
           <div className="editor-group-body">

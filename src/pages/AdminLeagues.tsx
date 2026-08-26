@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { sb } from '../lib/supabase';
-import type { League } from '../lib/types';
+import type { League, LeagueContent } from '../lib/types';
 import ContentReviewEditor, { keyMustReads, keyQuiz, keyCapstone, stripKeys } from '../components/ContentReviewEditor';
 import type { ReviewDraft } from '../components/ContentReviewEditor';
 import AdminGuard from '../components/AdminGuard';
 import { APIKEY_SESSION_KEY } from './Admin';
-import { runLeagueGeneration, runUnitRegeneration, useBackgroundTasks } from '../lib/backgroundTasks';
+import { runLeagueGeneration, runUnitRegeneration, runCapstoneGeneration, useBackgroundTasks } from '../lib/backgroundTasks';
 
 function leagueContentToDraft(c: { must_reads: any[]; quiz: any[]; capstone?: any[] | null } | null): ReviewDraft {
   return {
@@ -38,19 +38,26 @@ function AdminLeaguesContent() {
   // Kademeler: per-tier expand (settings form)
   const [expandedTierSettings, setExpandedTierSettings] = useState<number | null>(null);
 
-  // Rehberler: per-tier expand
+  // Rehberler: Taslaklar/Yayınlanan alt-sekmesi + per-tier expand
+  const [guideView, setGuideView] = useState<'draft' | 'published'>('draft');
   const [expandedTier, setExpandedTier] = useState<number | null>(null);
+  // Hangi bölüm düzenleniyor: 'overview' (rehber oluştur/kalan üniteleri
+  // ekle), bir ünite index'i (o ünitenin manuel düzenleyicisi + YZ ile
+  // yenileme formu), ya da 'capstone' (bitirme sınavı).
+  const [editFocus, setEditFocus] = useState<number | 'capstone' | 'overview'>('overview');
   const [leagueLinksText, setLeagueLinksText] = useState('');
   const [leagueError, setLeagueError] = useState('');
   const [leagueOk, setLeagueOk] = useState('');
   const bgTasks = useBackgroundTasks();
   const leagueTasks = bgTasks.filter((t) => t.kind === 'league');
   const anyLeagueRunning = leagueTasks.some((t) => t.status === 'running');
+  const capstoneTasks = bgTasks.filter((t) => t.kind === 'capstone');
+  const anyCapstoneRunning = capstoneTasks.some((t) => t.status === 'running');
 
-  // Tek Ünite Yenile: per-tier selected unit index + single URL input.
+  // Bu üniteyi YZ ile yenile: per-tier tek/ikinci URL girişi (hangi ünite
+  // olduğu artık ayrı bir seçici değil, üstteki "Düzenlenecek Bölüm" — editFocus).
   const unitTasks = bgTasks.filter((t) => t.kind === 'unit');
   const anyUnitRunning = unitTasks.some((t) => t.status === 'running');
-  const [unitSourceIndex, setUnitSourceIndex] = useState<Record<number, number>>({});
   const [unitUrlText, setUnitUrlText] = useState<Record<number, string>>({});
   const [unitUrl2Text, setUnitUrl2Text] = useState<Record<number, string>>({});
   const [unitError, setUnitError] = useState<Record<number, string>>({});
@@ -64,14 +71,18 @@ function AdminLeaguesContent() {
     sb.from('leagues').select('*').order('tier_index', { ascending: true }).then(({ data }) => setLeagues((data as League[]) || []));
   }, [leagueOk, leaguesVersion]);
 
-  // Refetch the leagues list whenever a league generation task reaches
-  // 'done', so the new draft content shows up without a manual refresh if
-  // the admin happens to be on this page when it finishes. Tracked by id so
-  // we don't refetch repeatedly for the same finished task on every render.
+  // Refetch the leagues list whenever a league generation task finishes
+  // (done OR error), so the new/partial draft content shows up without a
+  // manual refresh. Error matters too now: runLeagueGeneration saves each
+  // unit to draft_content as it succeeds, so even a task that ends in
+  // 'error' (a later unit failed) has real progress in the DB that this
+  // page needs to pick up — otherwise a tier stuck mid-generation would
+  // keep showing as empty until a full page reload. Tracked by id so we
+  // don't refetch repeatedly for the same finished task on every render.
   const refetchedForLeagueTask = useRef<Set<string>>(new Set());
   useEffect(() => {
     for (const t of leagueTasks) {
-      if (t.status === 'done' && !refetchedForLeagueTask.current.has(t.id)) {
+      if ((t.status === 'done' || t.status === 'error') && !refetchedForLeagueTask.current.has(t.id)) {
         refetchedForLeagueTask.current.add(t.id);
         setLeaguesVersion((v) => v + 1);
       }
@@ -82,12 +93,23 @@ function AdminLeaguesContent() {
   const refetchedForUnitTask = useRef<Set<string>>(new Set());
   useEffect(() => {
     for (const t of unitTasks) {
-      if (t.status === 'done' && !refetchedForUnitTask.current.has(t.id)) {
+      if ((t.status === 'done' || t.status === 'error') && !refetchedForUnitTask.current.has(t.id)) {
         refetchedForUnitTask.current.add(t.id);
         setLeaguesVersion((v) => v + 1);
       }
     }
   }, [unitTasks]);
+
+  // Same pattern for standalone capstone regeneration tasks.
+  const refetchedForCapstoneTask = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    for (const t of capstoneTasks) {
+      if ((t.status === 'done' || t.status === 'error') && !refetchedForCapstoneTask.current.has(t.id)) {
+        refetchedForCapstoneTask.current.add(t.id);
+        setLeaguesVersion((v) => v + 1);
+      }
+    }
+  }, [capstoneTasks]);
 
   useEffect(() => {
     setTierDrafts((prev) => {
@@ -165,7 +187,7 @@ function AdminLeaguesContent() {
     setLeaguesVersion((v) => v + 1);
   }
 
-  function toggleTier(l: League) {
+  function toggleTier(l: League, isDraft: boolean) {
     if (expandedTier === l.tier_index) {
       setExpandedTier(null);
       setEditMode(null);
@@ -173,21 +195,21 @@ function AdminLeaguesContent() {
       return;
     }
     setExpandedTier(l.tier_index);
+    setEditFocus('overview');
     setLeagueLinksText('');
     setLeagueError(''); setLeagueOk('');
     setEditorError('');
-    if (l.draft_content) {
-      setEditMode('draft_content');
-      setEditDraft(leagueContentToDraft(l.draft_content));
-    } else if (l.content) {
-      setEditMode('content');
-      setEditDraft(leagueContentToDraft(l.content));
+    const content = isDraft ? l.draft_content : l.content;
+    if (content) {
+      setEditMode(isDraft ? 'draft_content' : 'content');
+      setEditDraft(leagueContentToDraft(content));
     } else {
       setEditMode(null);
       setEditDraft(null);
     }
   }
 
+  // Sıfırdan üretim: henüz hiç taslağı/içeriği olmayan bir kademe için.
   function buildLeagueContent(l: League) {
     const urls = leagueLinksText.split('\n').map((s) => s.trim()).filter(Boolean);
     if (urls.length === 0 || !apiKey) return;
@@ -201,20 +223,23 @@ function AdminLeaguesContent() {
     setLeagueLinksText('');
   }
 
-  // The tier's "current" content for purposes of picking a unit to regenerate:
-  // draft_content is preferred when both exist (matches how the rest of this
-  // admin surface already treats a draft as the in-progress/current state).
-  function authoritativeContent(l: League) {
-    return l.draft_content || l.content;
+  // Devam ettirme: taslakta zaten bir ya da daha fazla ünite varsa, sadece
+  // eksik kalan ünitelerin linkleri girilip mevcut taslağın sonuna eklenir —
+  // önceki üniteler tekrar üretilmez, tekrar token harcanmaz.
+  function resumeGuideContent(l: League, content: LeagueContent) {
+    const urls = leagueLinksText.split('\n').map((s) => s.trim()).filter(Boolean);
+    if (urls.length === 0 || !apiKey) return;
+    if (urls.length > 16) { setLeagueError('En fazla 8 ünite (16 link) ekleyebilirsin.'); return; }
+    setLeagueError('');
+    void runLeagueGeneration({ urls, apiKey, tierIndex: l.tier_index, leagueName: l.name, resumeContent: content });
+    setLeagueLinksText('');
   }
 
-  function regenerateUnit(l: League) {
-    const content = authoritativeContent(l);
-    const sourceIndex = unitSourceIndex[l.tier_index] ?? 0;
+  function regenerateUnit(l: League, sourceIndex: number, content: LeagueContent) {
     const url = (unitUrlText[l.tier_index] || '').trim();
     const url2 = (unitUrl2Text[l.tier_index] || '').trim();
     setUnitError((prev) => ({ ...prev, [l.tier_index]: '' }));
-    if (!content || !content.must_reads[sourceIndex]) {
+    if (!content.must_reads[sourceIndex]) {
       setUnitError((prev) => ({ ...prev, [l.tier_index]: 'Geçerli bir ünite seçilmedi.' }));
       return;
     }
@@ -237,6 +262,129 @@ function AdminLeaguesContent() {
     });
     setUnitUrlText((prev) => ({ ...prev, [l.tier_index]: '' }));
     setUnitUrl2Text((prev) => ({ ...prev, [l.tier_index]: '' }));
+  }
+
+  function regenerateCapstone(l: League, content: LeagueContent) {
+    if (!apiKey) return;
+    void runCapstoneGeneration({ apiKey, tierIndex: l.tier_index, leagueName: l.name, mustReads: content.must_reads, quiz: content.quiz });
+  }
+
+  function renderTaskMessages(list: { id: string; status: string; message: string }[]) {
+    return list.map((t) => (
+      t.status === 'running'
+        ? <div key={t.id} className="loading-line">{t.message}</div>
+        : t.status === 'error'
+        ? <div key={t.id} className="error-box">{t.message}</div>
+        : <div key={t.id} className="ok-box">{t.message}</div>
+    ));
+  }
+
+  // Taslaklar ve Yayınlanan sekmelerinde ortak satır: kademeyi açıp
+  // "Düzenlenecek Bölüm" seçimine göre ilgili üretim/düzenleme UI'ını gösterir.
+  function renderGuideRow(l: League, isDraft: boolean) {
+    const content = isDraft ? l.draft_content : l.content;
+    if (!content) return null;
+    const isOpen = expandedTier === l.tier_index;
+    const focusValue = editFocus === 'overview' ? 'overview' : editFocus === 'capstone' ? 'capstone' : String(editFocus);
+    return (
+      <div key={l.tier_index} style={{ marginBottom: 10 }}>
+        <div className="week-row" style={{ cursor: 'pointer' }} onClick={() => toggleTier(l, isDraft)}>
+          <span>{isOpen ? '▾' : '▸'} {l.name}{l.tagline ? ' — ' + l.tagline : ''}</span>
+          <span>{guideSummary(content)}</span>
+        </div>
+        {isOpen && (
+          <div className="panel" style={{ marginTop: 8 }}>
+            <label className="field-label">Düzenlenecek Bölüm</label>
+            <select
+              value={focusValue}
+              onChange={(e) => {
+                const v = e.target.value;
+                setEditFocus(v === 'overview' ? 'overview' : v === 'capstone' ? 'capstone' : Number(v));
+              }}
+              style={{ width: '100%', background: 'var(--ink)', border: '1px solid var(--hairline)', color: 'var(--paper)', fontFamily: 'var(--mono)', fontSize: '12.5px', padding: '12px', marginBottom: 14 }}
+            >
+              <option value="overview">Genel Bakış</option>
+              {content.must_reads.map((m, i) => (
+                <option key={i} value={i}>Ünite {i + 1}: {m.title || '(başlıksız)'}</option>
+              ))}
+              <option value="capstone">Bitirme Sınavı</option>
+            </select>
+
+            {editFocus === 'overview' && (
+              <div style={{ marginBottom: 16 }}>
+                {content.must_reads.length > 0 ? (
+                  <>
+                    <p className="panel-sub">Şu an {content.must_reads.length} ünite var. Sadece EKSİK kalan ünitelerin linklerini ardışık ikişer (A,B,A,B) gir — mevcut üniteler tekrar üretilmez, token harcamaz.</p>
+                    <label className="field-label">Kalan Ünitelerin Linkleri</label>
+                    <textarea value={leagueLinksText} onChange={(e) => setLeagueLinksText(e.target.value)} placeholder={'https://... (kaynak A)\nhttps://... (kaynak B)'} />
+                    <button className="btn" onClick={() => resumeGuideContent(l, content)} disabled={anyLeagueRunning || !leagueLinksText.trim() || !apiKey}>
+                      {anyLeagueRunning ? 'İşleniyor…' : 'Kalan Üniteleri Ekle'}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <label className="field-label">Kaynak Linkleri — her ünite için ardışık İKİ link (A, B, A, B, …), en fazla 8 ünite (16 link)</label>
+                    <textarea value={leagueLinksText} onChange={(e) => setLeagueLinksText(e.target.value)} placeholder={'https://... (ünite 1 - kaynak A)\nhttps://... (ünite 1 - kaynak B)'} />
+                    <button className="btn" onClick={() => buildLeagueContent(l)} disabled={anyLeagueRunning || !leagueLinksText.trim() || !apiKey}>
+                      {anyLeagueRunning ? 'İşleniyor…' : 'Rehber Oluştur'}
+                    </button>
+                  </>
+                )}
+                {leagueError && <div className="error-box">{leagueError}</div>}
+                {leagueOk && <div className="ok-box">{leagueOk}</div>}
+                {renderTaskMessages(leagueTasks.filter((t) => t.label === l.name))}
+              </div>
+            )}
+
+            {typeof editFocus === 'number' && (
+              <div style={{ marginBottom: 16 }}>
+                <p className="panel-title" style={{ fontSize: 14 }}>Bu Üniteyi YZ ile Yeniden Üret</p>
+                <label className="field-label">Yeni Kaynak Linki (A)</label>
+                <input type="text" value={unitUrlText[l.tier_index] || ''} onChange={(e) => setUnitUrlText((prev) => ({ ...prev, [l.tier_index]: e.target.value }))} placeholder="https://..." />
+                <label className="field-label">İkinci Kaynak Linki (B, opsiyonel)</label>
+                <input type="text" value={unitUrl2Text[l.tier_index] || ''} onChange={(e) => setUnitUrl2Text((prev) => ({ ...prev, [l.tier_index]: e.target.value }))} placeholder="https://..." />
+                <button className="btn" onClick={() => regenerateUnit(l, editFocus as number, content)} disabled={anyUnitRunning || !(unitUrlText[l.tier_index] || '').trim() || !apiKey}>
+                  {anyUnitRunning ? 'İşleniyor…' : 'Üniteyi Yenile'}
+                </button>
+                {unitError[l.tier_index] && <div className="error-box">{unitError[l.tier_index]}</div>}
+                {renderTaskMessages(unitTasks.filter((t) => t.label.startsWith(l.name + ' ·')))}
+              </div>
+            )}
+
+            {editFocus === 'capstone' && (
+              <div style={{ marginBottom: 16 }}>
+                <p className="panel-title" style={{ fontSize: 14 }}>Bitirme Sınavını YZ ile {content.capstone && content.capstone.length > 0 ? 'Tekrar ' : ''}Üret</p>
+                {content.must_reads.length === 0 ? (
+                  <p className="panel-sub">Önce en az bir ünite gerekiyor.</p>
+                ) : (
+                  <button className="btn" onClick={() => regenerateCapstone(l, content)} disabled={anyCapstoneRunning || !apiKey}>
+                    {anyCapstoneRunning ? 'İşleniyor…' : (content.capstone && content.capstone.length > 0 ? 'Bitirme Sınavını Tekrar Üret' : 'Bitirme Sınavını Üret')}
+                  </button>
+                )}
+                {renderTaskMessages(capstoneTasks.filter((t) => t.label === `${l.name} · Bitirme Sınavı`))}
+              </div>
+            )}
+
+            {editDraft && editMode && (
+              <>
+                <p className="panel-title" style={{ fontSize: 15, marginTop: 20 }}>Manuel Düzenle</p>
+                <ContentReviewEditor draft={editDraft} onChange={setEditDraft} focusSourceIndex={editFocus === 'overview' ? null : editFocus} />
+                <div style={{ display: 'flex', gap: 10, marginTop: 16, flexWrap: 'wrap' }}>
+                  <button className="btn" onClick={() => saveLeagueEditor(l, false)} disabled={editorBusy}>Kaydet</button>
+                  {isDraft && (
+                    <>
+                      <button className="btn secondary" onClick={() => saveLeagueEditor(l, true)} disabled={editorBusy}>Yayınla</button>
+                      <button className="btn danger" onClick={() => discardLeagueDraft(l)} disabled={editorBusy}>Sil Taslağı</button>
+                    </>
+                  )}
+                </div>
+                {editorError && <div className="error-box">{editorError}</div>}
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    );
   }
 
   async function saveLeagueEditor(l: League, publish: boolean) {
@@ -274,10 +422,10 @@ function AdminLeaguesContent() {
     setLeaguesVersion((v) => v + 1);
   }
 
-  function tierStatusBadge(l: League) {
-    if (l.content) return ' — dolu (üzerine yazılır)';
-    if (l.draft_content) return ' — taslak bekliyor';
-    return ' — boş';
+  function guideSummary(content: LeagueContent) {
+    const unitCount = content.must_reads.length;
+    const capstoneCount = content.capstone ? content.capstone.length : 0;
+    return `${unitCount} ünite, ${capstoneCount > 0 ? `${capstoneCount} soruluk bitirme sınavı` : 'bitirme sınavı yok'}`;
   }
 
   return (
@@ -341,102 +489,62 @@ function AdminLeaguesContent() {
       {subTab === 'guides' && (
         <div className="panel">
           <p className="panel-title">Lig Rehberleri</p>
-          <p className="panel-sub">Her lig için bir kere oluşturulan, haftalık değişmeyen sabit içerik. Bir kademeye tıklayınca kaynak linklerini girip rehberi doğrudan o kademe için oluşturabilir, ardından inceleyip yayınlayabilirsin.</p>
+          <p className="panel-sub">Her lig için bir kere oluşturulan, haftalık değişmeyen sabit içerik. Taslaklar burada üretilip incelenir; "Yayınla" dendiğinde Yayınlanan sekmesine geçer.</p>
           {!apiKey && (
-            <p className="panel-sub">API anahtarını önce <Link to="/admin">Admin Paneli sayfasından</Link> gir — anahtar yoksa yeni rehber oluşturulamaz, ama mevcut içerik/taslak yine düzenlenebilir.</p>
+            <p className="panel-sub">API anahtarını önce <Link to="/admin">Admin Paneli sayfasından</Link> gir — anahtar yoksa yeni içerik üretilemez, ama mevcut içerik/taslak yine düzenlenebilir.</p>
           )}
-          {leagues.length === 0 && <p className="panel-sub">Lig yok.</p>}
-          {leagues.map((l) => {
-            const isOpen = expandedTier === l.tier_index;
-            return (
-              <div key={l.tier_index} style={{ marginBottom: 10 }}>
-                <div className="week-row" style={{ cursor: 'pointer' }} onClick={() => toggleTier(l)}>
-                  <span>{isOpen ? '▾' : '▸'} {l.name}{l.tagline ? ' — ' + l.tagline : ''}</span>
-                  <span>{tierStatusBadge(l)}</span>
-                </div>
-                {isOpen && (
-                  <div className="panel" style={{ marginTop: 8 }}>
-                    <p className="panel-title" style={{ fontSize: 15 }}>Rehber Oluştur</p>
-                    <label className="field-label">Kaynak Linkleri — her ünite için ardışık İKİ link (A, B, A, B, …), en fazla 8 ünite (16 link)</label>
-                    <textarea value={leagueLinksText} onChange={(e) => setLeagueLinksText(e.target.value)} placeholder={'https://... (ünite 1 - kaynak A)\nhttps://... (ünite 1 - kaynak B)\nhttps://... (ünite 2 - kaynak A)\nhttps://... (ünite 2 - kaynak B)'} />
-                    <button className="btn" onClick={() => buildLeagueContent(l)} disabled={anyLeagueRunning || !leagueLinksText.trim() || !apiKey}>
-                      {anyLeagueRunning ? 'İşleniyor…' : 'Rehber Oluştur'}
-                    </button>
-                    {leagueError && <div className="error-box">{leagueError}</div>}
-                    {leagueOk && <div className="ok-box">{leagueOk}</div>}
-                    {leagueTasks.filter((t) => t.label === l.name).map((t) => (
-                      t.status === 'running'
-                        ? <div key={t.id} className="loading-line">{t.message}</div>
-                        : t.status === 'error'
-                        ? <div key={t.id} className="error-box">{t.message}</div>
-                        : <div key={t.id} className="ok-box">{t.message}</div>
-                    ))}
 
-                    {authoritativeContent(l) && authoritativeContent(l)!.must_reads.length > 0 && (
-                      <div style={{ marginTop: 20 }}>
-                        <p className="panel-title" style={{ fontSize: 15 }}>Tek Ünite Yenile</p>
-                        <p className="panel-sub">Mevcut rehberdeki tek bir üniteyi, tek bir yeni link ile yenile — diğer üniteler ve bitirme sınavının kalan soruları aynen kalır, sadece bu üniteyi referans alan bitirme soruları yenisiyle değiştirilir.</p>
-                        <label className="field-label">Yenilenecek Ünite</label>
-                        <select
-                          value={unitSourceIndex[l.tier_index] ?? 0}
-                          onChange={(e) => setUnitSourceIndex((prev) => ({ ...prev, [l.tier_index]: Number(e.target.value) }))}
-                          style={{ width: '100%', background: 'var(--ink)', border: '1px solid var(--hairline)', color: 'var(--paper)', fontFamily: 'var(--mono)', fontSize: '12.5px', padding: '12px', marginBottom: 10 }}
-                        >
-                          {authoritativeContent(l)!.must_reads.map((m, i) => (
-                            <option key={i} value={i}>{i}. {m.title || '(başlıksız)'}</option>
-                          ))}
-                        </select>
-                        <label className="field-label">Yeni Kaynak Linki (A)</label>
-                        <input
-                          type="text"
-                          value={unitUrlText[l.tier_index] || ''}
-                          onChange={(e) => setUnitUrlText((prev) => ({ ...prev, [l.tier_index]: e.target.value }))}
-                          placeholder="https://..."
-                        />
-                        <label className="field-label">İkinci Kaynak Linki (B, opsiyonel)</label>
-                        <input
-                          type="text"
-                          value={unitUrl2Text[l.tier_index] || ''}
-                          onChange={(e) => setUnitUrl2Text((prev) => ({ ...prev, [l.tier_index]: e.target.value }))}
-                          placeholder="https://..."
-                        />
-                        <button className="btn" onClick={() => regenerateUnit(l)} disabled={anyUnitRunning || !(unitUrlText[l.tier_index] || '').trim() || !apiKey}>
-                          {anyUnitRunning ? 'İşleniyor…' : 'Üniteyi Yenile'}
+          <div className="tabs">
+            <button className={guideView === 'draft' ? 'btn secondary' : 'btn ghost'} onClick={() => { setGuideView('draft'); setExpandedTier(null); }}>
+              Taslaklar ({leagues.filter((l) => l.draft_content).length})
+            </button>
+            <button className={guideView === 'published' ? 'btn secondary' : 'btn ghost'} onClick={() => { setGuideView('published'); setExpandedTier(null); }}>
+              Yayınlanan ({leagues.filter((l) => l.content).length})
+            </button>
+          </div>
+
+          {guideView === 'draft' && (
+            <>
+              {leagues.filter((l) => l.draft_content).length === 0 && <p className="panel-sub">Henüz hiçbir kademenin taslağı yok.</p>}
+              {leagues.filter((l) => l.draft_content).map((l) => renderGuideRow(l, true))}
+
+              <div className="section-divider" />
+              <p className="panel-title" style={{ fontSize: 15 }}>+ Yeni Rehber Oluştur</p>
+              <p className="panel-sub">Henüz hiç taslağı ya da yayınlanmış içeriği olmayan bir kademe için kaynak linklerini girip ilk taslağı başlat.</p>
+              {leagues.filter((l) => !l.draft_content && !l.content).length === 0 && (
+                <p className="panel-sub">Taslağı/içeriği olmayan kademe kalmadı.</p>
+              )}
+              {leagues.filter((l) => !l.draft_content && !l.content).map((l) => {
+                const isOpen = expandedTier === l.tier_index;
+                return (
+                  <div key={l.tier_index} style={{ marginBottom: 10 }}>
+                    <div className="week-row" style={{ cursor: 'pointer' }} onClick={() => setExpandedTier(isOpen ? null : l.tier_index)}>
+                      <span>{isOpen ? '▾' : '▸'} {l.name}{l.tagline ? ' — ' + l.tagline : ''}</span>
+                    </div>
+                    {isOpen && (
+                      <div className="panel" style={{ marginTop: 8 }}>
+                        <label className="field-label">Kaynak Linkleri — her ünite için ardışık İKİ link (A, B, A, B, …), en fazla 8 ünite (16 link)</label>
+                        <textarea value={leagueLinksText} onChange={(e) => setLeagueLinksText(e.target.value)} placeholder={'https://... (ünite 1 - kaynak A)\nhttps://... (ünite 1 - kaynak B)\nhttps://... (ünite 2 - kaynak A)\nhttps://... (ünite 2 - kaynak B)'} />
+                        <button className="btn" onClick={() => buildLeagueContent(l)} disabled={anyLeagueRunning || !leagueLinksText.trim() || !apiKey}>
+                          {anyLeagueRunning ? 'İşleniyor…' : 'Rehber Oluştur'}
                         </button>
-                        {unitError[l.tier_index] && <div className="error-box">{unitError[l.tier_index]}</div>}
-                        {unitTasks.filter((t) => t.label.startsWith(l.name + ' ·')).map((t) => (
-                          t.status === 'running'
-                            ? <div key={t.id} className="loading-line">{t.message}</div>
-                            : t.status === 'error'
-                            ? <div key={t.id} className="error-box">{t.message}</div>
-                            : <div key={t.id} className="ok-box">{t.message}</div>
-                        ))}
+                        {leagueError && <div className="error-box">{leagueError}</div>}
+                        {leagueOk && <div className="ok-box">{leagueOk}</div>}
+                        {renderTaskMessages(leagueTasks.filter((t) => t.label === l.name))}
                       </div>
                     )}
-
-                    {editDraft && editMode && (
-                      <>
-                        <p className="panel-title" style={{ fontSize: 15, marginTop: 20 }}>
-                          {editMode === 'draft_content' ? 'Taslak İnceleme' : 'Yayınlanan İçerik'}
-                        </p>
-                        <ContentReviewEditor draft={editDraft} onChange={setEditDraft} />
-                        <div style={{ display: 'flex', gap: 10, marginTop: 16, flexWrap: 'wrap' }}>
-                          <button className="btn" onClick={() => saveLeagueEditor(l, false)} disabled={editorBusy}>Kaydet</button>
-                          {editMode === 'draft_content' && (
-                            <>
-                              <button className="btn secondary" onClick={() => saveLeagueEditor(l, true)} disabled={editorBusy}>Yayınla</button>
-                              <button className="btn danger" onClick={() => discardLeagueDraft(l)} disabled={editorBusy}>Sil Taslağı</button>
-                            </>
-                          )}
-                        </div>
-                        {editorError && <div className="error-box">{editorError}</div>}
-                      </>
-                    )}
                   </div>
-                )}
-              </div>
-            );
-          })}
+                );
+              })}
+            </>
+          )}
+
+          {guideView === 'published' && (
+            <>
+              {leagues.filter((l) => l.content).length === 0 && <p className="panel-sub">Henüz hiçbir kademe yayınlanmamış.</p>}
+              {leagues.filter((l) => l.content).map((l) => renderGuideRow(l, false))}
+            </>
+          )}
         </div>
       )}
     </div>
