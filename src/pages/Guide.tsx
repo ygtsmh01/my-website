@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { sb } from '../lib/supabase';
 import { evaluateLeagueStreak } from '../lib/leagueStreak';
+import PracticeQuiz from '../components/PracticeQuiz';
 import type { League, Profile } from '../lib/types';
 
 export default function Guide() {
@@ -8,6 +9,7 @@ export default function Guide() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [leagues, setLeagues] = useState<League[]>([]);
   const [expandedTier, setExpandedTier] = useState<number | null>(null);
+  const [practiceLeague, setPracticeLeague] = useState<League | null>(null);
 
   const [feedbackCategory, setFeedbackCategory] = useState<'general' | 'content_suggestion'>('general');
   const [feedbackMessage, setFeedbackMessage] = useState('');
@@ -79,11 +81,12 @@ export default function Guide() {
       <div className="panel">
         <div className="emoji">📚</div>
         <h2>Tüm Lig Rehberleri</h2>
-        <p className="panel-sub">Her ligin kaynak başlıklarını ve özetlerini burada inceleyebilirsin. Quiz çözmek için kendi liginin rehberine oyun sayfasından girmen gerekir.</p>
+        <p className="panel-sub">Her ligin kaynak başlıklarını ve özetlerini burada inceleyebilirsin. Quiz çözüp XP kazanmak için kendi liginin rehberine oyun sayfasından girmen gerekir — geçmiş (zaten terfi ettiğin) liglerin sorularını ise burada, XP kazandırmayan bir pratik modunda tekrar çözebilirsin.</p>
         {!session && <p className="empty-hint">Ligleri görmek için önce giriş yapman gerekiyor.</p>}
         {session && leagues.length === 0 && <p className="empty-hint">Yükleniyor…</p>}
         {leagues.map((l) => {
           const isMine = !!profile && l.tier_index === profile.league_tier;
+          const isPast = !!profile && l.tier_index < profile.league_tier;
           const reads = l.content && l.content.must_reads ? l.content.must_reads : [];
           const isOpen = expandedTier === l.tier_index;
           return (
@@ -108,12 +111,25 @@ export default function Guide() {
                       </div>
                     ))
                   )}
+                  {isPast && l.content && l.content.quiz.length > 0 && (
+                    <button className="btn secondary" style={{ marginTop: 10 }} onClick={() => setPracticeLeague(l)}>
+                      🎯 Pratik Yap (XP kazandırmaz)
+                    </button>
+                  )}
                 </div>
               )}
             </div>
           );
         })}
       </div>
+
+      {practiceLeague && practiceLeague.content && (
+        <PracticeQuiz
+          leagueName={practiceLeague.name}
+          content={practiceLeague.content}
+          onClose={() => setPracticeLeague(null)}
+        />
+      )}
 
       <div className="panel">
         <div className="emoji">⚡</div>
