@@ -200,14 +200,16 @@ const PER_UNIT_QUIZ_RULE = `Tam olarak 10 soru üret, her biri TAM OLARAK 4 şı
 // konuma koyuyor veya doğru şıkkı diğerlerinden daha uzun/detaylı yazıyordu —
 // bu, kullanıcının içeriği hiç okumadan kalıba bakarak doğru cevabı tahmin
 // etmesine yol açıyordu. İlk versiyonu ("yakın uzunlukta yaz" gibi yumuşak bir
-// öneri) yetersiz kaldı — canlıda hâlâ "doğru şık 3-4 satır + somut tarih,
-// diğer üçü tek cümlelik saçma/eleyici iddialar" kalıbı üretti (örn. "hesaplama
-// gücü azaldıkça YZ gelişmiştir" gibi mantıksal olarak imkansız bir çeldirici).
-// Bu yüzden somut/ölçülebilir bir uzunluk kısıtı ve "çeldiriciyi zenginleştir"
-// talimatına çevrildi.
-const ANTI_BIAS_RULE = `ŞIK DAĞILIMI, UZUNLUK VE İNANDIRICILIK — ÇOK ÖNEMLİ, kesinlikle uy: Bir sorudaki "correct_index" değerinin hep aynı konumda olması, doğru şıkkın diğerlerinden uzun/detaylı yazılması ya da yanlış şıkların mantıksal olarak imkansız/saçma olması, kullanıcının içeriği hiç okumadan veya konuyu hiç bilmeden salt kalıba bakarak doğru cevabı bulmasına yol açar. Bunu önlemek için:
+// öneri) yetersiz kaldı. İkinci versiyonu ("en kısa, en uzunun %70'i olsun")
+// da YENİ bir kalıp yarattı: doğru şık hep TAVAN (en uzun) kaldı, diğer üçü
+// o tavana yaklaşmaya çalışıp hep aynı alt sınıra kümelendi — yani "en uzun
+// olan doğrudur" yine belli oluyordu. Kök sorun: doğru şıkkı sabit bir
+// referans/tavan noktası olarak bırakmak. Bu yüzden ORTALAMAYA göre
+// simetrik bir hedef getirildi — doğru şıkkın da kısaltılabileceği açıkça
+// belirtiliyor.
+const ANTI_BIAS_RULE = `ŞIK DAĞILIMI, UZUNLUK VE İNANDIRICILIK — ÇOK ÖNEMLİ, kesinlikle uy: Bir sorudaki "correct_index" değerinin hep aynı konumda olması, doğru şıkkın diğerlerinden uzun/detaylı yazılması (VEYA diğerlerinin doğru şıkka yaklaşmaya çalışıp kendi aralarında daha kısa kümelenmesi) ya da yanlış şıkların mantıksal olarak imkansız/saçma olması, kullanıcının içeriği hiç okumadan veya konuyu hiç bilmeden salt kalıba bakarak doğru cevabı bulmasına yol açar. Bunu önlemek için:
   (1) Bir üniteye/sınava ait sorular arasında "correct_index" değerleri (0,1,2,3) dengeli dağılsın, art arda aynı index'i 3'ten fazla tekrarlama.
-  (2) UZUNLUK KURALI (sert kısıt): en kısa şık, en uzun şıkkın karakter sayısının en az %70'i kadar olsun. Bunu şöyle sağla: önce doğru şıkkı yaz, sonra HER yanlış şıkkı da doğru şıkla AYNI seviyede somut detay/gerekçe/sayı içerecek şekilde zenginleştir (gerekirse inandırıcı ama yanlış bir tarih/mekanizma/sayı uydur) — kısa, tek cümlelik, "belli ki yanlış" bir çeldirici YAZMA.
+  (2) UZUNLUK KURALI (sert kısıt): DÖRT şıkkın da karakter sayısı birbirine yaklaşık eşit olsun (aralarındaki fark ortalamanın %20'sini geçmesin) — DOĞRU ŞIK DA DAHİL, onu sabit bir tavan/referans olarak görme, gerekirse doğru şıkkı KISALT/sadeleştir, yanlış şıkları da doğru şıkla aynı somutluk seviyesine zenginleştir (gerekirse inandırıcı ama yanlış bir tarih/mekanizma/sayı uydur). Hiçbiri "belli ki en uzun/en detaylı" ya da "belli ki en kısa/genel geçer" olmasın.
   (3) İNANDIRICILIK KURALI: yanlış şıklar mantıksal olarak imkansız veya gerçekle açıkça çelişen iddialar OLMASIN (örn. "X azaldıkça Y gelişti" gibi). Bunun yerine konuyu yüzeysel/yanlış anlayan, kısmen haklı ama sonucu yanlış çıkaran birinin gerçekten seçebileceği makul yanlış çıkarımlar olsun.
   (4) Şıkların sırası konu akışına veya alfabetik sıraya göre olmasın.`;
 
@@ -246,28 +248,39 @@ async function callClaudeJSON(prompt: string, apiKey: string, maxTokens: number)
 }
 
 // Prompt kuralı ("şıklar yakın uzunlukta olsun") tek başına yeterli
-// çıkmadı — gerçek kullanımda model hâlâ bazen doğru şıkkı diğerlerinden
-// belirgin uzun/detaylı yazdı (2 kez gözlemlendi). Bu yüzden üretimden
-// SONRA kod seviyesinde ölçüp doğruluyoruz: en kısa şık, en uzun şıkkın
-// %70'inden azsa o soru modele geri gönderilip şıkları dengelenmiş olarak
-// tekrar yazdırılıyor (anlam/doğruluk değişmeden). Soyut bir kurala
-// güvenmek yerine somut, ölçülebilir bir doğrulama.
-const OPTION_BALANCE_RATIO = 0.7;
+// çıkmadı — model hâlâ doğru şıkkı diğerlerinden belirgin uzun/detaylı
+// yazdı. İlk kod-seviyeli düzeltme de ("en kısa, en uzunun %70'i olsun")
+// YENİ bir kalıp yarattı: doğru şık hep TAVAN (en uzun) kaldı, diğer üçü de
+// o tavana yaklaşmaya çalışıp hep aynı alt sınıra kümelendi — yani "en uzun
+// olan doğrudur" yine belli oluyordu, sadece oran değişmişti. Kök sorun:
+// "kısaları uzat" talimatı doğru şıkkı sabit bir tavan/referans noktası
+// olarak bırakıyor. Bunun yerine ORTALAMAYA göre, SİMETRİK bir bant
+// kullanıyoruz — hiçbir şık (doğru olan dahil) ortalamadan %20'den fazla
+// sapamaz; düzeltirken doğru şıkkın KISALTILMASINA da izin veriliyor, tavan
+// olmaktan çıkarılıyor.
+const OPTION_BALANCE_DEVIATION = 0.2; // ortalamadan izin verilen sapma
 
-function optionLengthRatio(options: string[]): number {
+function optionLengthDeviation(options: string[]): number {
   const lens = options.map((o) => o.trim().length);
-  const max = Math.max(...lens);
-  if (max === 0) return 1;
-  return Math.min(...lens) / max;
+  const mean = lens.reduce((a, b) => a + b, 0) / lens.length;
+  if (mean === 0) return 0;
+  return Math.max(...lens.map((l) => Math.abs(l - mean) / mean));
 }
 
 async function rebalanceOptions(question: string, options: string[], correctIndex: number, apiKey: string): Promise<string[]> {
-  const prompt = `Aşağıdaki çoktan seçmeli sorunun şıkları uzunluk/detay bakımından dengesiz — bu, okuyucunun içeriği hiç bilmeden sırf en uzun/en detaylı şıkkı seçerek doğru cevabı bulmasına yol açar. Şıkların ANLAMINI VE DOĞRULUĞUNU DEĞİŞTİRME (doğru şık ${correctIndex}. index'te kalmalı) — sadece her şıkkı birbirine YAKIN uzunlukta ve YAKIN somut detay seviyesinde yeniden yaz: kısa/genel geçer şıkları doğru şıkla aynı somutluk seviyesine zenginleştir (gerekirse inandırıcı ama yanlış bir detay ekle), gerekirse uzun şıkkı biraz sadeleştir.
+  const targetLen = Math.round(options.reduce((a, o) => a + o.trim().length, 0) / options.length);
+  const prompt = `Aşağıdaki çoktan seçmeli sorunun şıkları uzunluk/detay bakımından dengesiz — hangi şıkkın en uzun/en detaylı (ya da en kısa) olduğuna bakarak, içeriği hiç bilmeyen biri bile doğru cevabı tahmin edebiliyor. Bunu KESİN olarak düzelt:
 
 Soru: ${question}
 Mevcut şıklar (index'e göre): ${JSON.stringify(options)}
+Doğru şık index'i: ${correctIndex} (bu bilgiyi SADECE anlamı bozmamak için kullan, çıktıda belli etme)
 
-SADECE şu şemaya uyan geçerli JSON döndür, başka açıklama ekleme: { "options": ["...", "...", "...", "..."] } — şık sayısı ve sırası AYNI kalsın, sadece metinleri dengelenmiş olsun.`;
+Kurallar:
+- DÖRT şıkkın da (doğru olan DAHİL — doğru şıkkı "referans/tavan" olarak sabit bırakma, gerekirse onu da kısalt/sadeleştir) karakter sayısı birbirine YAKLAŞIK EŞİT olsun — hedef: her şık yaklaşık ${targetLen} karakter (±%15 tolerans).
+- Hiçbir şık diğerlerinden daha "kesin/emin/resmi" bir dille yazılmasın — dördü de aynı özgüven/somutluk seviyesinde, aynı cümle yapısında olsun.
+- Anlamı ve hangi şıkkın doğru olduğunu DEĞİŞTİRME — sadece ifade/uzunluk dengelensin.
+
+SADECE şu şemaya uyan geçerli JSON döndür, başka açıklama ekleme: { "options": ["...", "...", "...", "..."] } — şık sayısı ve sırası AYNI kalsın.`;
   try {
     const parsed = await callClaudeJSON(prompt, apiKey, 4000);
     return Array.isArray(parsed.options) && parsed.options.length === options.length ? parsed.options : options;
@@ -278,12 +291,14 @@ SADECE şu şemaya uyan geçerli JSON döndür, başka açıklama ekleme: { "opt
 }
 
 // Bir soru listesindeki (quiz ya da capstone) dengesiz şıklı soruları tek
-// tek modele geri gönderip düzeltir. Sıralı çalışır (paralel değil) — tipik
-// olarak sadece birkaç soru dengesiz çıkıyor, çoğu zaman hiç ek çağrı olmuyor.
+// tek modele geri gönderip düzeltir. En fazla 2 deneme yapılır (tek seferde
+// tam yakınsamayabiliyor); hâlâ dengesizse elimizdeki en iyi sonuçla devam
+// edilir. Sıralı çalışır (paralel değil) — tipik olarak sadece birkaç soru
+// dengesiz çıkıyor, çoğu zaman hiç ek çağrı olmuyor.
 async function enforceOptionBalance<T extends { question: string; options: string[]; correct_index: number }>(questions: T[], apiKey: string): Promise<T[]> {
   const result = [...questions];
   for (let i = 0; i < result.length; i++) {
-    if (optionLengthRatio(result[i].options) < OPTION_BALANCE_RATIO) {
+    for (let attempt = 0; attempt < 2 && optionLengthDeviation(result[i].options) > OPTION_BALANCE_DEVIATION; attempt++) {
       const newOptions = await rebalanceOptions(result[i].question, result[i].options, result[i].correct_index, apiKey);
       result[i] = { ...result[i], options: newOptions } as T;
     }
