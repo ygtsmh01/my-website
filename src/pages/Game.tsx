@@ -568,8 +568,9 @@ export default function Game() {
     const score = lesson.reduce((acc, q, i) => acc + (lessonAnswers[i] === q.correct_index ? 1 : 0), 0);
     const passed = total > 0 && score / total >= 0.6;
     if (!passed) {
+      // Overlay stays open — the result card (pop-up feel) replaces the quiz
+      // stage inside it instead of closing and showing a message behind it.
       setLessonFailInfo({ score, total });
-      setGuideTestModeOpen(false);
       return;
     }
     const fullBonus = myLeague.promote_threshold ? Math.round(myLeague.promote_threshold * 0.4) : 150;
@@ -579,10 +580,9 @@ export default function Game() {
     setLessonResults((prev) => ({ ...prev, [lessonIndex]: { score, total } }));
     setPassedLessons((prev) => new Set(prev).add(lessonIndex));
     setLessonFailInfo(null);
-    setGuideTestModeOpen(false);
-    // lessonIndex/viewedLessonIndex stay put here so the just-finished lesson
-    // remains "current"/viewed while the pass banner shows — continueAfterLessonPass
-    // (triggered by the banner's "Devam Et" button) does the actual advance.
+    // lessonIndex/viewedLessonIndex/overlay stay put here so the celebratory
+    // result card shows in place of the quiz — continueAfterLessonPass
+    // (triggered by the card's "Devam Et" button) closes the overlay and advances.
     setLessonPassInfo({ score, total, xp: grantedXp });
     // Persist the resume point immediately (not deferred to "Devam Et") so a
     // logout right after passing still resumes past this lesson, not before it.
@@ -599,6 +599,7 @@ export default function Game() {
     setViewedLessonIndex(null);
     setLessonIndex((i) => i + 1);
     setLessonPassInfo(null);
+    setGuideTestModeOpen(false);
   }
 
   function selectCapstoneAnswer(qIdx: number, optIdx: number) {
@@ -994,7 +995,7 @@ export default function Game() {
                 </div>
               )}
 
-              {viewedLesson && isViewingCurrentLesson && !lessonFailInfo && !lessonPassInfo && (
+              {viewedLesson && isViewingCurrentLesson && (
                 <button className="btn secondary" style={{ marginTop: 14 }} onClick={() => setGuideTestModeOpen(true)}>
                   ✅ Özeti Okudum, Kendimi Test Et
                 </button>
@@ -1004,24 +1005,6 @@ export default function Game() {
                 <p className="panel-sub" style={{ marginTop: 10 }}>
                   Bu dersi geçtin ✓{lessonResults[effectiveViewedIndex] ? ` (${lessonResults[effectiveViewedIndex].score}/${lessonResults[effectiveViewedIndex].total})` : ''}
                 </p>
-              )}
-
-              {viewedLesson && isViewingCurrentLesson && lessonFailInfo && (
-                <div style={{ marginTop: 14 }}>
-                  <p className="panel-sub" style={{ color: 'var(--coral)' }}>
-                    Bu dersi geçemedin ({lessonFailInfo.score}/{lessonFailInfo.total}), özeti tekrar oku ve tekrar dene.
-                  </p>
-                  <button className="btn danger" onClick={retryLesson}>Tekrar Dene</button>
-                </div>
-              )}
-
-              {viewedLesson && isViewingCurrentLesson && lessonPassInfo && (
-                <div style={{ marginTop: 14 }}>
-                  <p className="panel-sub" style={{ color: 'var(--green)' }}>
-                    🎉 Dersi geçtin! ({lessonPassInfo.score}/{lessonPassInfo.total} doğru) · +{lessonPassInfo.xp} XP kazandın.
-                  </p>
-                  <button className="btn secondary" onClick={continueAfterLessonPass}>Devam Et</button>
-                </div>
               )}
 
               {allLessonsPassed && hasCapstone && (
@@ -1042,9 +1025,27 @@ export default function Game() {
                 <button className="overlay-close-btn" onClick={() => setGuideTestModeOpen(false)} aria-label="Kapat">✕ Kapat</button>
                 <div className="speed-overlay-panel">
                   <div className="panel quiz-stage">
-                    <span className="tag static">📘 DERS {lessonIndex + 1} · TEST MODU</span>
-                    <p className="panel-title" style={{ textAlign: 'center' }}>{content.must_reads[currentLesson.sourceIndex] ? content.must_reads[currentLesson.sourceIndex].title : ''}</p>
-                    {lessonTestStage}
+                    {lessonPassInfo ? (
+                      <div style={{ textAlign: 'center', padding: '16px 0' }}>
+                        <div className="promotion-emoji">🎉</div>
+                        <p className="promotion-title">Tebrikler, dersi geçtin!</p>
+                        <p className="promotion-text">{lessonPassInfo.score}/{lessonPassInfo.total} doğru · +{lessonPassInfo.xp} XP kazandın</p>
+                        <button className="btn secondary" style={{ width: '100%' }} onClick={continueAfterLessonPass}>Devam Et</button>
+                      </div>
+                    ) : lessonFailInfo ? (
+                      <div style={{ textAlign: 'center', padding: '16px 0' }}>
+                        <div className="promotion-emoji">💥</div>
+                        <p className="promotion-title" style={{ color: 'var(--coral)' }}>Olmadı, bir dahakine!</p>
+                        <p className="promotion-text">{lessonFailInfo.score}/{lessonFailInfo.total} doğru — özeti tekrar oku ve tekrar dene.</p>
+                        <button className="btn danger" style={{ width: '100%' }} onClick={retryLesson}>Tekrar Dene</button>
+                      </div>
+                    ) : (
+                      <>
+                        <span className="tag static">📘 DERS {lessonIndex + 1} · TEST MODU</span>
+                        <p className="panel-title" style={{ textAlign: 'center' }}>{content.must_reads[currentLesson.sourceIndex] ? content.must_reads[currentLesson.sourceIndex].title : ''}</p>
+                        {lessonTestStage}
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
