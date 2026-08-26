@@ -177,8 +177,10 @@ export default function ContentReviewEditor({ draft, onChange, showWeekFields, i
           </div>
           <label className="field-label">Başlık</label>
           <input type="text" value={m.title} onChange={(e) => updateMustRead(m._key, { title: e.target.value })} />
-          <label className="field-label">URL</label>
+          <label className="field-label">URL (Kaynak A)</label>
           <input type="text" value={m.url || ''} onChange={(e) => updateMustRead(m._key, { url: e.target.value })} />
+          <label className="field-label">URL (Kaynak B, opsiyonel)</label>
+          <input type="text" value={m.url2 || ''} onChange={(e) => updateMustRead(m._key, { url2: e.target.value })} />
           <label className="field-label">Özet</label>
           <textarea value={m.summary} onChange={(e) => updateMustRead(m._key, { summary: e.target.value })} />
         </div>

@@ -1,7 +1,7 @@
 import { sb } from './supabase';
 import type { Profile } from './types';
 
-// Usta Lig ve üzerinde (tier_index >= bu değer) rehber tamamlama tek başına yetmiyor: terfi
+// "Kullanıcı" (tier_index 4) ve üzerinde rehber tamamlama tek başına yetmiyor: terfi
 // ayrıca son 2 hafta üst üste haftalık quiz başarısı istiyor, art arda kaçırılan haftalar ise
 // lig düşürüyor. 0-3 arası ligler bundan etkilenmez.
 export const LEAGUE_STREAK_FLOOR_TIER = 4;

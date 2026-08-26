@@ -4,6 +4,10 @@
 export interface MustRead {
   title: string;
   url?: string;
+  // Second source for a unit built from two combined sources (curriculum
+  // guides only — weekly must_reads never set this). Absent on older,
+  // single-source content.
+  url2?: string;
   summary: string;
 }
 

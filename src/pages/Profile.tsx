@@ -6,20 +6,6 @@ import type { HistoryRow, League, Profile as ProfileType } from '../lib/types';
 
 const AVATAR_OPTIONS = ['🙂', '🦊', '🐙', '🐼', '🦉', '🐳', '🦁', '🐸', '🤖', '👾', '🦄', '🐢'];
 
-const LEVEL_TITLES = [
-  { min: 0, name: 'Çırak' },
-  { min: 100, name: 'Pratisyen' },
-  { min: 250, name: 'Kıdemli Pratisyen' },
-  { min: 450, name: 'Uzman' },
-  { min: 700, name: 'Stratejist' },
-  { min: 1000, name: 'Risk + AI Mimarı' },
-];
-function levelFor(xp: number) {
-  let idx = 0;
-  for (let i = 0; i < LEVEL_TITLES.length; i++) if (xp >= LEVEL_TITLES[i].min) idx = i;
-  return { level: idx + 1, name: LEVEL_TITLES[idx].name, floor: LEVEL_TITLES[idx].min, next: LEVEL_TITLES[idx + 1] as { min: number; name: string } | undefined };
-}
-
 const BADGE_DEFS: { id: string; label: string; check: (p: ProfileType, h: HistoryRow[]) => boolean }[] = [
   { id: 'ilk-hafta', label: 'İlk Hafta', check: (_p, h) => h.length >= 1 },
   { id: 'seri-3', label: '3 Hafta Seri', check: (p) => p.streak >= 3 },
@@ -99,9 +85,6 @@ export default function Profile() {
 
   if (!profile) return <div className="root toppad"><p className="panel-sub">Profil yükleniyor…</p></div>;
 
-  const lvl = levelFor(profile.total_xp);
-  const xpSpan = lvl.next ? lvl.next.min - lvl.floor : 1;
-  const xpPct = lvl.next ? Math.min(100, Math.round(((profile.total_xp - lvl.floor) / xpSpan) * 100)) : 100;
   const myLeague = leagues.find((l) => l.tier_index === profile.league_tier);
 
   return (
@@ -112,7 +95,6 @@ export default function Profile() {
       <div className="panel" style={{ textAlign: 'center' }}>
         <div className="avatar-hero">{avatarDraft}</div>
         <p className="panel-title">{profile.username}</p>
-        <p className="panel-sub">Unvan {lvl.level} · {lvl.name}</p>
         <div className="avatar-grid">
           {AVATAR_OPTIONS.map((a) => (
             <button key={a} className={'avatar-opt' + (avatarDraft === a ? ' selected' : '')} onClick={() => saveAvatar(a)}>{a}</button>
@@ -152,7 +134,6 @@ export default function Profile() {
         <div className="stat-cell">
           <div className="stat-label">Toplam XP</div>
           <div className="stat-value">{profile.total_xp}</div>
-          <div className="xp-track"><div className="xp-fill" style={{ width: xpPct + '%' }} /></div>
         </div>
         <div className="stat-cell">
           <div className="stat-label">Aktif Seri</div>

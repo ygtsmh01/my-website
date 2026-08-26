@@ -73,7 +73,7 @@ export default function Guide() {
         <div className="emoji">🏅</div>
         <h2>Lig Sistemi</h2>
         <p className="panel-sub">Her ligin sabit bir rehberi (özet + quiz) var, bir kere tamamlanır. Rehberdeki tüm üniteleri ve bitirme sınavını bitirince bir üst lige terfi edersin. Aşağıda tüm liglerin rehberlerini görebilirsin, ama sadece kendi liginin rehberini oyun sayfasında açıp tamamlayabilirsin.</p>
-        <p className="panel-sub">Usta Lig ve üzerinde ek bir şart var: terfi için rehberin yanında son 2 hafta üst üste haftalık quizden %60+ almış olman gerekir. Art arda 3 hafta kaçırır ya da başarısız olursan bir lig düşersin; devam ederse düşmeye devam eder (Usta Lig'in altına inmezsin).</p>
+        <p className="panel-sub">Kullanıcı ve üzerinde ek bir şart var: terfi için rehberin yanında son 2 hafta üst üste haftalık quizden %60+ almış olman gerekir. Art arda 3 hafta kaçırır ya da başarısız olursan bir lig düşersin; devam ederse düşmeye devam eder (Kullanıcı'nın altına inmezsin).</p>
       </div>
 
       <div className="panel">
@@ -102,6 +102,7 @@ export default function Guide() {
                       <div className="read-row" key={i}>
                         <div>
                           {mr.url ? <a href={mr.url} target="_blank" rel="noopener noreferrer">{mr.title}</a> : <strong>{mr.title}</strong>}
+                          {mr.url2 && <> · <a href={mr.url2} target="_blank" rel="noopener noreferrer">İkinci Kaynak</a></>}
                           <div className="one-liner">{mr.summary}</div>
                         </div>
                       </div>

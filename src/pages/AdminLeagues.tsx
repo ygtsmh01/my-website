@@ -52,6 +52,7 @@ function AdminLeaguesContent() {
   const anyUnitRunning = unitTasks.some((t) => t.status === 'running');
   const [unitSourceIndex, setUnitSourceIndex] = useState<Record<number, number>>({});
   const [unitUrlText, setUnitUrlText] = useState<Record<number, string>>({});
+  const [unitUrl2Text, setUnitUrl2Text] = useState<Record<number, string>>({});
   const [unitError, setUnitError] = useState<Record<number, string>>({});
 
   const [editMode, setEditMode] = useState<'draft_content' | 'content' | null>(null);
@@ -190,7 +191,7 @@ function AdminLeaguesContent() {
   function buildLeagueContent(l: League) {
     const urls = leagueLinksText.split('\n').map((s) => s.trim()).filter(Boolean);
     if (urls.length === 0 || !apiKey) return;
-    if (urls.length > 15) { setLeagueError('En fazla 15 link ekleyebilirsin.'); return; }
+    if (urls.length > 16) { setLeagueError('En fazla 8 ünite (16 link) ekleyebilirsin.'); return; }
     setLeagueError('');
     // Fire-and-forget: runs in the shared background-task store, independent
     // of this component's lifecycle, so it keeps going if the admin navigates
@@ -211,6 +212,7 @@ function AdminLeaguesContent() {
     const content = authoritativeContent(l);
     const sourceIndex = unitSourceIndex[l.tier_index] ?? 0;
     const url = (unitUrlText[l.tier_index] || '').trim();
+    const url2 = (unitUrl2Text[l.tier_index] || '').trim();
     setUnitError((prev) => ({ ...prev, [l.tier_index]: '' }));
     if (!content || !content.must_reads[sourceIndex]) {
       setUnitError((prev) => ({ ...prev, [l.tier_index]: 'Geçerli bir ünite seçilmedi.' }));
@@ -225,6 +227,7 @@ function AdminLeaguesContent() {
     // via the shared background-task store.
     void runUnitRegeneration({
       url,
+      url2: url2 || undefined,
       apiKey,
       tierIndex: l.tier_index,
       leagueName: l.name,
@@ -233,6 +236,7 @@ function AdminLeaguesContent() {
       currentContent: content,
     });
     setUnitUrlText((prev) => ({ ...prev, [l.tier_index]: '' }));
+    setUnitUrl2Text((prev) => ({ ...prev, [l.tier_index]: '' }));
   }
 
   async function saveLeagueEditor(l: League, publish: boolean) {
@@ -353,8 +357,8 @@ function AdminLeaguesContent() {
                 {isOpen && (
                   <div className="panel" style={{ marginTop: 8 }}>
                     <p className="panel-title" style={{ fontSize: 15 }}>Rehber Oluştur</p>
-                    <label className="field-label">Kaynak Linkleri (en fazla 15)</label>
-                    <textarea value={leagueLinksText} onChange={(e) => setLeagueLinksText(e.target.value)} placeholder={'https://...\nhttps://...\nhttps://...'} />
+                    <label className="field-label">Kaynak Linkleri — her ünite için ardışık İKİ link (A, B, A, B, …), en fazla 8 ünite (16 link)</label>
+                    <textarea value={leagueLinksText} onChange={(e) => setLeagueLinksText(e.target.value)} placeholder={'https://... (ünite 1 - kaynak A)\nhttps://... (ünite 1 - kaynak B)\nhttps://... (ünite 2 - kaynak A)\nhttps://... (ünite 2 - kaynak B)'} />
                     <button className="btn" onClick={() => buildLeagueContent(l)} disabled={anyLeagueRunning || !leagueLinksText.trim() || !apiKey}>
                       {anyLeagueRunning ? 'İşleniyor…' : 'Rehber Oluştur'}
                     </button>
@@ -382,11 +386,18 @@ function AdminLeaguesContent() {
                             <option key={i} value={i}>{i}. {m.title || '(başlıksız)'}</option>
                           ))}
                         </select>
-                        <label className="field-label">Yeni Kaynak Linki (tek link)</label>
+                        <label className="field-label">Yeni Kaynak Linki (A)</label>
                         <input
                           type="text"
                           value={unitUrlText[l.tier_index] || ''}
                           onChange={(e) => setUnitUrlText((prev) => ({ ...prev, [l.tier_index]: e.target.value }))}
+                          placeholder="https://..."
+                        />
+                        <label className="field-label">İkinci Kaynak Linki (B, opsiyonel)</label>
+                        <input
+                          type="text"
+                          value={unitUrl2Text[l.tier_index] || ''}
+                          onChange={(e) => setUnitUrl2Text((prev) => ({ ...prev, [l.tier_index]: e.target.value }))}
                           placeholder="https://..."
                         />
                         <button className="btn" onClick={() => regenerateUnit(l)} disabled={anyUnitRunning || !(unitUrlText[l.tier_index] || '').trim() || !apiKey}>

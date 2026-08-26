@@ -182,8 +182,9 @@ export default function Game() {
       .then(({ data }) => setLeagueProgress(data));
   }, [profile?.id, profile?.league_tier]);
 
-  // Usta Lig+ haftalık seri kuralını, hafta içeriği ve profil hazır olduğunda (ya da bu haftanın
-  // quizi kapatılıp last_week_number ilerlediğinde) tembel biçimde işler — terfi/düşüş burada olur.
+  // "Kullanıcı" (tier_index 4) ve üzeri haftalık seri kuralını, hafta içeriği ve profil hazır
+  // olduğunda (ya da bu haftanın quizi kapatılıp last_week_number ilerlediğinde) tembel biçimde
+  // işler — terfi/düşüş burada olur.
   useEffect(() => {
     if (!profile || !currentWeek) return;
     evaluateLeagueStreak(profile, currentWeek.week_number).then((updated) => {
@@ -603,7 +604,7 @@ export default function Game() {
     if (!progErr) {
       const newTotalXp = Math.max(0, profile.total_xp + completionBonus);
       const isMaxTier = myLeague.tier_index >= leagues.length - 1;
-      // Usta Lig+ (LEAGUE_STREAK_FLOOR_TIER ve üstü) rehberi bitirmek tek başına yetmez — son 2
+      // "Kullanıcı" (LEAGUE_STREAK_FLOOR_TIER) ve üstü rehberi bitirmek tek başına yetmez — son 2
       // hafta üst üste %60+ haftalık quiz serisi de gerekir. Seri henüz tamamlanmadıysa
       // league_progress.completed=true kaydedilir ama terfi ertelenir; evaluateLeagueStreak seri
       // tamamlanınca otomatik terfi ettirir.
@@ -957,6 +958,7 @@ export default function Game() {
                 <div className="read-row" style={{ marginTop: 12 }}>
                   <div>
                     {viewedMustRead.url ? <a href={viewedMustRead.url} target="_blank" rel="noopener noreferrer">{viewedMustRead.title}</a> : <strong>{viewedMustRead.title}</strong>}
+                    {viewedMustRead.url2 && <> · <a href={viewedMustRead.url2} target="_blank" rel="noopener noreferrer">İkinci Kaynak</a></>}
                     <div className="one-liner">{viewedMustRead.summary}</div>
                   </div>
                 </div>

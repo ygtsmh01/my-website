@@ -115,7 +115,7 @@ export async function runWeekGeneration(params: WeekGenerationParams): Promise<v
 
 Kurallar:
 - Her kaynak için bir must_reads öğesi oluştur (sırasıyla index 0,1,2,...).
-- "summary" alanı bir "makale tanıtımı" DEĞİL, doğrudan bilgi aktaran bir ders notu olmalı — kaynağı okumadan da o bilgiye sahip olacak şekilde yaz. "Bu makale ... anlatıyor", "Yazar ... belirtiyor", "Bu yazı ... ele alıyor" gibi meta-anlatım KULLANMA; doğrudan olguyu, kavramı, sonucu ver — sanki okuyucuya konuyu sen öğretiyormuşsun gibi yaz. ODAK NOKTASI SAYILAR/İSTATİSTİKLER DEĞİL, ANLAM olmalı: neden oldu, ne anlama geliyor, sonucu/etkisi ne olacak — bunları öne çıkar. Kaynakta geçen bir rakam gerçekten haberin özüyse elbette geçebilir, ama özeti bir rakam listesine indirgeme; asıl mesaj her zaman "bu gelişme neden önemli ve ne anlama geliyor" olsun.
+- "summary" alanı bir "makale tanıtımı" DEĞİL, doğrudan bilgi aktaran bir ders notu olmalı — kaynağı okumadan da o bilgiye sahip olacak şekilde yaz. "Bu makale ... anlatıyor", "Yazar ... belirtiyor", "Bu yazı ... ele alıyor" gibi meta-anlatım KULLANMA; doğrudan olguyu, kavramı, sonucu ver — sanki okuyucuya konuyu sen öğretiyormuşsun gibi yaz. ODAK NOKTASI SAYILAR/İSTATİSTİKLER DEĞİL, ANLAM olmalı: neden oldu, ne anlama geliyor, sonucu/etkisi ne olacak — bunları öne çıkar. Kaynakta geçen bir rakam gerçekten haberin özüyse elbette geçebilir, ama özeti bir rakam listesine indirgeme; asıl mesaj her zaman "bu gelişme neden önemli ve ne anlama geliyor" olsun. JSON'UN KIRILMAMASI İÇİN: metnin içinde düz tırnak işareti (") KULLANMA — bir terimi vurgulamak istersen tırnaksız yaz ya da tek tırnak (') kullan.
 - Sorular ve özetler gereksiz sektör içi jargon kullanmadan, konuya yeni başlayan sıradan birinin de anlayabileceği şekilde yazılsın — ama bilgiyi basitleştirirken yanlış veya belirsiz hale getirme, doğruluktan ödün verme.
 - Her kaynak için quiz'de "source_index" o kaynağın must_reads içindeki index'ine eşit olan tam olarak 4 soru olsun:
   - 2 tanesi "type": "mc", "bonus": false — cevabı summary'den çıkarılabilecek, genel anlama soruları, farklı yönlere odaklansın, 3 seçenekli.
@@ -125,7 +125,7 @@ Kurallar:
   - "X ne kadardı/kaçtı?", "Y'nin rakamı neydi?" gibi salt bir sayıyı/istatistiği ezberden sorma soruları YASAK — sayı sorusu SADECE "number_challenge" alanında olur, quiz'de asla tekrar sorulmaz.
   - Birbiriyle ilgisiz 2-3 olguyu yan yana koyup "aşağıdakilerden hangisi doğrudur?" diye sorma — bu şans/ezber sorusu üretir, anlama ölçmez.
   - Bir ismi, tarihi veya terimi salt hatırlamayı test eden soru yazma.
-  Bunun yerine şu kalıplarda sorular kur: "Bu gelişme neden önemli/riskli?", "Bu iki bilgi arasındaki ilişki/çelişki nedir?", "Bu durumun en olası sonucu/etkisi nedir?", "Kaynağa göre bu neden böyle oldu/olacak?", "Bu bilgi [ilgili kavram] açısından ne ifade ediyor?" — yani NEDEN, SONUÇ, ÖNEM veya İLİŞKİ soran sorular yaz. Yanlış şıklar rastgele değil, konuyu yüzeysel/yanlış anlayan birinin makul şekilde seçebileceği çeldiriciler olsun.
+  Bunun yerine şu kalıplarda sorular kur: "Bu gelişme neden önemli/riskli?", "Bu iki bilgi arasındaki ilişki/çelişki nedir?", "Bu durumun en olası sonucu/etkisi nedir?", "Kaynağa göre bu neden böyle oldu/olacak?", "Bu bilgi [ilgili kavram] açısından ne ifade ediyor?" — yani NEDEN, SONUÇ, ÖNEM veya İLİŞKİ soran sorular yaz. Yanlış şıklar rastgele değil, konuyu yüzeysel/yanlış anlayan birinin makul şekilde seçebileceği çeldiriciler olsun. Doğru şıkkın konumu ("correct_index") sorular arasında dengeli dağılsın (hep aynı konumda olmasın) ve şıklar birbirine yakın uzunlukta yazılsın — doğru şık sırf daha uzun/detaylı olduğu için belli olmasın.
 - "number_challenge": haftada sadece 1 tane, kaynaklardan birinde geçen somut bir sayıyı/istatistiği sorsun (rakam sorusu SADECE burada olur), makul bir "tolerance" belirle.
 - "risk_question": kaynaklardan herhangi birine dayanan, yukarıdaki SORU KALİTESİ kuralına uyan (neden/sonuç/ilişki soran, ezber değil), normal sorulardan biraz daha zor, 3 seçenekli tek bir soru.
 ${isBossWeek ? '- "boss_question": bu bir BOSS HAFTASI, birden fazla kaynaktaki bilgiyi birlikte kullanmayı ve aralarındaki ilişkiyi/sonucu kavramayı gerektiren, yukarıdaki SORU KALİTESİ kuralına uyan en zor soruyu üret.' : ''}
@@ -185,17 +185,29 @@ ${combined}`;
 // Shared prompt fragments — reused verbatim by both the full-guide generation
 // (runLeagueGeneration) and the single-unit regeneration (runUnitRegeneration)
 // so wording never drifts between the two entry points.
-const SUMMARY_QUALITY_RULE = `"summary" alanı bir "makale tanıtımı" DEĞİL, doğrudan bilgi aktaran bir ders notu olmalı — kaynağı okumadan da o bilgiye sahip olacak şekilde yaz. "Bu makale ... anlatıyor", "Yazar ... belirtiyor" gibi meta-anlatım KULLANMA; doğrudan olguyu, kavramı, sonucu ver. ODAK NOKTASI SAYILAR/İSTATİSTİKLER DEĞİL, ANLAM olmalı: bu kavram neden önemli, ne işe yarar, nasıl kullanılır — bunları öne çıkar. Bir rakam gerçekten konunun özüyse geçebilir, ama özeti bir rakam listesine indirgeme.`;
+const SUMMARY_QUALITY_RULE = `"summary" alanı bir "makale tanıtımı" DEĞİL, doğrudan bilgi aktaran bir ders notu olmalı — kaynağı okumadan da o bilgiye sahip olacak şekilde yaz. "Bu makale ... anlatıyor", "Yazar ... belirtiyor" gibi meta-anlatım KULLANMA; doğrudan olguyu, kavramı, sonucu ver. ODAK NOKTASI SAYILAR/İSTATİSTİKLER DEĞİL, ANLAM olmalı: bu kavram neden önemli, ne işe yarar, nasıl kullanılır — bunları öne çıkar. Bir rakam gerçekten konunun özüyse geçebilir, ama özeti bir rakam listesine indirgeme. JSON'UN KIRILMAMASI İÇİN: metnin içinde düz tırnak işareti (") KULLANMA — bir terimi vurgulamak istersen tırnaksız yaz ya da tek tırnak (') kullan.`;
 
-const PER_UNIT_QUIZ_RULE = `Tam olarak 4 soru üret:
-  - 2 tanesi "type": "mc", "bonus": false — cevabı summary'den çıkarılabilecek, genel anlama soruları, farklı yönlere odaklansın, 3 seçenekli.
-  - 1 tanesi "type": "tf", "bonus": true — Doğru/Yanlış formatında bir ifade, SADECE kaynağın tam metnindeki spesifik bir detaya dayanmalı, summary'den cevaplanamamalı; "options" tam olarak ["Doğru","Yanlış"] olmalı, "correct_index" 0 (Doğru) veya 1 (Yanlış).
-  - 1 tanesi "type": "mc", "bonus": true — yine kaynağın tam metnindeki bir detaya dayanmalı, summary'den cevaplanamamalı, 3 seçenekli.`;
+// Ünite başına 10 soru: 6'sı özetten/genel anlamadan çıkarılabilecek, 4'ü (2+2)
+// iki kaynağın tam metnindeki detaylara dayanan daha zor sorular. Gerçek bir
+// üretim denemesinde doğrulandı: bu oranla hem özetten çıkan genel anlama hem
+// tam metne dayalı derinlik dengeleniyor.
+const PER_UNIT_QUIZ_RULE = `Tam olarak 10 soru üret, her biri TAM OLARAK 4 şıklı olsun:
+  - 6 tanesi "type": "mc", "bonus": false — cevabı summary'den çıkarılabilecek, genel anlama soruları, farklı yönlere odaklansın.
+  - 2 tanesi "type": "mc", "bonus": true — Kaynak A'nın tam metnindeki spesifik bir detaya dayanmalı, summary'den cevaplanamamalı.
+  - 2 tanesi "type": "mc", "bonus": true — Kaynak B'nin tam metnindeki spesifik bir detaya dayanmalı, summary'den cevaplanamamalı. (Tek kaynaklı bir ünite ise bu 4 soru da o tek kaynağın tam metninden gelsin.)`;
+
+// Gerçek bir üretim denemesinde gözlemlendi: model doğru şıkkı hep aynı
+// konuma koyuyor veya doğru şıkkı diğerlerinden daha uzun/detaylı yazıyordu —
+// bu, kullanıcının içeriği hiç okumadan kalıba bakarak doğru cevabı tahmin
+// etmesine yol açıyordu. Bu kural bunu engellemek için eklendi ve denemede
+// dengeli bir dağılım ürettiği doğrulandı.
+const ANTI_BIAS_RULE = `ŞIK DAĞILIMI VE UZUNLUK — ÇOK ÖNEMLİ, kesinlikle uy: Bir sorudaki "correct_index" değerinin hep aynı konumda olması veya doğru şıkkın diğerlerinden uzun/detaylı yazılması, kullanıcının içeriği okumadan kalıba bakarak doğru cevabı tahmin etmesine yol açar. Bunu önlemek için: (1) Bir üniteye/sınava ait sorular arasında "correct_index" değerleri (0,1,2,3) dengeli dağılsın, art arda aynı index'i 3'ten fazla tekrarlama. (2) Her sorudaki 4 şık birbirine YAKIN uzunlukta ve YAKIN detay seviyesinde yazılsın — doğru şıkkı fark ettirecek şekilde daha uzun, daha spesifik veya daha "resmi" bir dille yazma. (3) Şıkların sırası konu akışına veya alfabetik sıraya göre olmasın.`;
 
 const QUIZ_QUALITY_RULE = `SORU KALİTESİ — ÇOK ÖNEMLİ, kesinlikle uy (quiz VE capstone için geçerli): Bu bir bilgi yarışması/trivia sınavı DEĞİL, okuyucunun konuyu gerçekten ANLAYIP ANLAMADIĞINI ölçen bir sınav. Şunları KESİNLİKLE YAPMA:
   - Bir sayıyı/istatistiği/ismi/tarihi ezberden sorma (örn. "X ne kadardı?", "Y kaç kişiydi?") — bu bir kalıcı rehber, güncel bir sayıya dayanmak zaten yanlış olur.
   - Birbiriyle ilgisiz 2-3 olguyu yan yana koyup "aşağıdakilerden hangisi doğrudur?" diye sorma — bu şans/ezber sorusu üretir, anlama ölçmez.
-  Bunun yerine şu kalıplarda sorular kur: "Bu neden önemli?", "Bu iki kavram arasındaki ilişki/fark nedir?", "Bu, [ilgili kavram] açısından ne ifade eder?", "Bu bilgiye göre en olası sonuç/uygulama nedir?" — yani NEDEN, SONUÇ, ÖNEM veya İLİŞKİ soran, o seviyeye özgü kavramsal anlayışı test eden sorular. Yanlış şıklar rastgele değil, konuyu yüzeysel anlayan birinin makul şekilde seçebileceği çeldiriciler olsun.`;
+  Bunun yerine şu kalıplarda sorular kur: "Bu neden önemli?", "Bu iki kavram arasındaki ilişki/fark nedir?", "Bu, [ilgili kavram] açısından ne ifade eder?", "Bu bilgiye göre en olası sonuç/uygulama nedir?" — yani NEDEN, SONUÇ, ÖNEM veya İLİŞKİ soran, o seviyeye özgü kavramsal anlayışı test eden sorular. Yanlış şıklar rastgele değil, konuyu yüzeysel anlayan birinin makul şekilde seçebileceği çeldiriciler olsun.
+  ${ANTI_BIAS_RULE}`;
 
 // Shared Anthropic call + robust JSON extraction, used by the single-unit
 // regeneration flow below (kept separate from the two full-generation
@@ -239,34 +251,51 @@ export async function runLeagueGeneration(params: LeagueGenerationParams): Promi
 
   upsertTask({ id, kind: 'league', label, status: 'running', message: 'Başlatılıyor…' });
 
+  // Her ünite ardışık İKİ linkten oluşur (A, B, A, B, …) — tek sayıda link
+  // verilirse son ünite tek kaynaklı kalır. Bu, bir ünitenin ders notunu ve
+  // 10 sorusunu iki kaynaktan birden üretebilmek için gerekli; bkz. plan
+  // notu: gerçek bir üretim denemesinde 2 kaynaklı ders notlarının tek
+  // kaynaklıya göre gözle görülür daha zengin çıktığı doğrulandı.
+  const unitCount = Math.ceil(urls.length / 2);
   let combined = '';
-  for (let i = 0; i < urls.length; i++) {
-    upsertTask({ id, kind: 'league', label, status: 'running', message: `${i + 1}/${urls.length} okunuyor: ${urls[i]}` });
+  for (let u = 0; u < unitCount; u++) {
+    const urlA = urls[u * 2];
+    const urlB = urls[u * 2 + 1];
+    upsertTask({ id, kind: 'league', label, status: 'running', message: `Ünite ${u + 1}/${unitCount} okunuyor: ${urlA}` });
     try {
-      const text = await fetchReadable(urls[i]);
-      combined += `\n\n--- Kaynak ${i}: ${urls[i]} ---\n${text}`;
+      const text = await fetchReadable(urlA);
+      combined += `\n\n--- Ünite ${u} - Kaynak A: ${urlA} ---\n${text}`;
     } catch (e) {
-      combined += `\n\n--- Kaynak ${i}: ${urls[i]} (içerik okunamadı, sadece link olarak dahil et) ---`;
+      combined += `\n\n--- Ünite ${u} - Kaynak A: ${urlA} (içerik okunamadı, sadece link olarak dahil et) ---`;
+    }
+    if (urlB) {
+      upsertTask({ id, kind: 'league', label, status: 'running', message: `Ünite ${u + 1}/${unitCount} okunuyor: ${urlB}` });
+      try {
+        const text = await fetchReadable(urlB);
+        combined += `\n\n--- Ünite ${u} - Kaynak B: ${urlB} ---\n${text}`;
+      } catch (e) {
+        combined += `\n\n--- Ünite ${u} - Kaynak B: ${urlB} (içerik okunamadı, sadece link olarak dahil et) ---`;
+      }
     }
   }
 
   upsertTask({ id, kind: 'league', label, status: 'running', message: 'Rehber hazırlanıyor…' });
   try {
-    const prompt = `Aşağıda "${leagueName}" ligi için TEMEL/SABİT bir rehber oluşturacak kaynakların ham metni var, her biri "--- Kaynak N: url ---" başlığıyla ayrılmış. Bu içerik bir kere oluşturulacak ve değişmeyecek (haftalık değil). Bunları işleyip SADECE aşağıdaki şemaya uyan geçerli JSON döndür, başka açıklama, markdown işareti ekleme:
+    const prompt = `Aşağıda "${leagueName}" ligi için TEMEL/SABİT bir rehber oluşturacak ünitelerin ham metni var. Her ünite ardışık "--- Ünite N - Kaynak A: url ---" ve (varsa) "--- Ünite N - Kaynak B: url ---" başlıklarıyla ayrılmış — yani bir ünitenin bir veya iki kaynağı olabilir. Bu içerik bir kere oluşturulacak ve değişmeyecek (haftalık değil). Bunları işleyip SADECE aşağıdaki şemaya uyan geçerli JSON döndür, başka açıklama, markdown işareti ekleme:
 
 {
-  "must_reads": [ { "title": "başlık", "url": "kaynağın orijinal linki", "summary": "4-6 cümlelik, doğrudan bilgi aktaran ders notu" } ],
-  "quiz": [ { "source_index": 0, "type": "mc", "bonus": false, "question": "soru metni", "options": ["seçenek1","seçenek2","seçenek3"], "correct_index": 0, "explanation": "kısa açıklama" } ],
-  "capstone": [ { "question": "soru metni", "options": ["seçenek1","seçenek2","seçenek3"], "correct_index": 0, "explanation": "kısa açıklama", "source_indices": [0, 1] } ]
+  "must_reads": [ { "title": "başlık", "url": "Kaynak A linki", "url2": "Kaynak B linki (varsa; yoksa bu alanı hiç ekleme)", "summary": "6-10 cümlelik, doğrudan bilgi aktaran, ünitenin kaynak(lar)ını birleştiren ders notu" } ],
+  "quiz": [ { "source_index": 0, "type": "mc", "bonus": false, "question": "soru metni", "options": ["seçenek1","seçenek2","seçenek3","seçenek4"], "correct_index": 0, "explanation": "kısa açıklama" } ],
+  "capstone": [ { "question": "soru metni", "options": ["seçenek1","seçenek2","seçenek3","seçenek4"], "correct_index": 0, "explanation": "kısa açıklama", "source_indices": [0, 1] } ]
 }
 
 Kurallar:
-- Her kaynak için bir must_reads öğesi oluştur (sırasıyla index 0,1,2,...).
+- Her ÜNİTE için bir must_reads öğesi oluştur (sırasıyla index 0,1,2,...) — ham içerikteki "Ünite N" gruplamasına göre. İki kaynaklı bir ünitede "url" Kaynak A'nın, "url2" Kaynak B'nin linki olsun ve "summary" ikisini birden birleştirsin; tek kaynaklı bir ünitede "url2" alanını hiç yazma.
 - ${SUMMARY_QUALITY_RULE}
-- Her kaynak için quiz'de "source_index" o kaynağın must_reads içindeki index'ine eşit olan ${PER_UNIT_QUIZ_RULE}
+- Her ünite için quiz'de "source_index" o ünitenin must_reads içindeki index'ine eşit olan ${PER_UNIT_QUIZ_RULE}
 - "capstone": bu ligin TÜM rehberini kapatan final sınavı, tam olarak 3 soru üret:
   - En az 2 kaynak varsa, HER capstone sorusu en az İKİ FARKLI kaynaktaki bilgiyi birbirine bağlamayı gerektirmeli — tek bir kaynağın özetinden cevaplanamamalı. Örnek kalıplar: "Kaynak A'daki X kavramı ile Kaynak B'deki Y arasındaki ilişki nedir?", "Bu iki kaynaktaki bilgiler birlikte değerlendirildiğinde en olası sonuç nedir?", "Kaynak A ve Kaynak B'deki yaklaşımlar birleştirilirse ortaya çıkan çıkarım nedir?".
-  - Kaynak sayısı 1-2 gibi çok azsa (gerçek bir "birden fazla kaynağı birleştirme" sorusu kurulamıyorsa) yine de tam 3 soru üret, ama bu durumda sorular mevcut tek kaynaktaki EN DERİN/EN ÖNEMLİ kavramı test etsin (kaynaklar arası sentez zaten mümkün değil).
+  - Ünite sayısı 1-2 gibi çok azsa (gerçek bir "birden fazla kaynağı birleştirme" sorusu kurulamıyorsa) yine de tam 3 soru üret, ama bu durumda sorular mevcut kaynaklardaki EN DERİN/EN ÖNEMLİ kavramı test etsin (kaynaklar arası sentez zaten mümkün değil).
   - Bu, ligin final sınavı olduğu için rehberdeki EN ZOR sorular bunlar olmalı — quiz'deki bonus sorulardan bile daha zor.
   - Aşağıdaki SORU KALİTESİ kuralına (trivia/ezber/sayı sorusu yasak, rastgele olgu yan yana koyma yasak) capstone için de aynen uy.
   - Her capstone sorusu için, o soruyu cevaplamak amacıyla kullandığın kaynakların (must_reads) index'lerini "source_indices" dizisinde belirt (örn. iki kaynağı birleştiren bir soru için [0, 2]).
@@ -284,7 +313,7 @@ ${combined}`;
         'anthropic-version': '2023-06-01',
         'anthropic-dangerous-direct-browser-access': 'true',
       },
-      body: JSON.stringify({ model: MODEL, max_tokens: 48000, messages: [{ role: 'user', content: prompt }] }),
+      body: JSON.stringify({ model: MODEL, max_tokens: 64000, messages: [{ role: 'user', content: prompt }] }),
     });
     const data = await response.json();
     if (data.error) throw new Error(data.error.message || 'api-error');
@@ -321,6 +350,7 @@ ${combined}`;
 
 export type UnitRegenerationParams = {
   url: string;
+  url2?: string;
   apiKey: string;
   tierIndex: number;
   leagueName: string;
@@ -347,7 +377,7 @@ export type UnitRegenerationParams = {
 // calls is simpler to reason about and cheaper than always paying for a
 // combined mega-call.
 export async function runUnitRegeneration(params: UnitRegenerationParams): Promise<void> {
-  const { url, apiKey, tierIndex, leagueName, sourceIndex, unitTitle, currentContent } = params;
+  const { url, url2, apiKey, tierIndex, leagueName, sourceIndex, unitTitle, currentContent } = params;
   const id = genId();
   const label = `${leagueName} · Ünite ${sourceIndex + 1}: ${unitTitle}`;
 
@@ -361,15 +391,26 @@ export async function runUnitRegeneration(params: UnitRegenerationParams): Promi
     } catch (e) {
       throw new Error('Kaynak okunamadı: ' + url);
     }
+    let combined = `--- Kaynak A: ${url} ---\n${sourceText}`;
+    if (url2) {
+      upsertTask({ id, kind: 'unit', label, status: 'running', message: `İkinci kaynak okunuyor: ${url2}` });
+      try {
+        const sourceText2 = await fetchReadable(url2);
+        combined += `\n\n--- Kaynak B: ${url2} ---\n${sourceText2}`;
+      } catch (e) {
+        throw new Error('İkinci kaynak okunamadı: ' + url2);
+      }
+    }
 
     upsertTask({ id, kind: 'unit', label, status: 'running', message: 'Ünite hazırlanıyor…' });
-    const unitPrompt = `Aşağıda bir lig rehberindeki TEK BİR ünitenin YENİ kaynağının ham metni var. Bu ünite mevcut rehberdeki "${unitTitle}" ünitesinin yerini alacak. Bunu işleyip SADECE aşağıdaki şemaya uyan geçerli JSON döndür, başka açıklama, markdown işareti ekleme:
+    const unitPrompt = `Aşağıda bir lig rehberindeki TEK BİR ünitenin YENİ kaynağının/kaynaklarının ham metni var. Bu ünite mevcut rehberdeki "${unitTitle}" ünitesinin yerini alacak. Bunu işleyip SADECE aşağıdaki şemaya uyan geçerli JSON döndür, başka açıklama, markdown işareti ekleme:
 
 {
   "title": "başlık",
-  "url": "kaynağın orijinal linki",
-  "summary": "4-6 cümlelik, doğrudan bilgi aktaran ders notu",
-  "quiz": [ { "type": "mc", "bonus": false, "question": "soru metni", "options": ["seçenek1","seçenek2","seçenek3"], "correct_index": 0, "explanation": "kısa açıklama" } ]
+  "url": "Kaynak A linki",
+  "url2": "Kaynak B linki (varsa; yoksa bu alanı hiç ekleme)",
+  "summary": "6-10 cümlelik, doğrudan bilgi aktaran, kaynak(lar)ı birleştiren ders notu",
+  "quiz": [ { "type": "mc", "bonus": false, "question": "soru metni", "options": ["seçenek1","seçenek2","seçenek3","seçenek4"], "correct_index": 0, "explanation": "kısa açıklama" } ]
 }
 
 Kurallar:
@@ -378,12 +419,13 @@ Kurallar:
 - ${QUIZ_QUALITY_RULE}
 
 Ham içerik:
-${sourceText}`;
+${combined}`;
 
     const unitParsed = await callClaudeJSON(unitPrompt, apiKey, 16000);
     const newMustRead: MustRead = {
       title: unitParsed.title,
       url: unitParsed.url || url,
+      ...(unitParsed.url2 || url2 ? { url2: unitParsed.url2 || url2 } : {}),
       summary: unitParsed.summary,
     };
     const newUnitQuiz: QuizQuestion[] = (unitParsed.quiz || []).map((q: any) => ({
@@ -434,7 +476,7 @@ ${mustReadsList}
 Aşağıdaki sayıda YENİ bitirme sınavı sorusu üret: ${removedCount}. Bu sorular önceki bitirme sınavı sorularının silinen kısmının yerini alacak, aynı kalite kurallarına uy (en az 2 farklı üniteyi birleştiren sentez soruları, ezber/trivia yasak), her soru için hangi ünite index'lerini kullandığını "source_indices" dizisi olarak belirt.
 
 SADECE aşağıdaki şemaya uyan geçerli JSON döndür, başka açıklama, markdown işareti ekleme:
-{ "capstone": [ { "question": "soru metni", "options": ["seçenek1","seçenek2","seçenek3"], "correct_index": 0, "explanation": "kısa açıklama", "source_indices": [0, 1] } ] }
+{ "capstone": [ { "question": "soru metni", "options": ["seçenek1","seçenek2","seçenek3","seçenek4"], "correct_index": 0, "explanation": "kısa açıklama", "source_indices": [0, 1] } ] }
 
 - ${QUIZ_QUALITY_RULE}`;
 
