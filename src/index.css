@@ -1,33 +1,43 @@
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 
+/* Yaz — açık tema, varsayılan: taze yeşil + güneş sarısı, "içi açılan" bir zemin. */
 :root {
-  --ink: #14151f;
-  --panel: #1c1e2c;
-  --hairline: #33364c;
-  --hairline-soft: #262838;
-  --paper: #edebe4;
-  --paper-dim: #9698ac;
-  --brass: #c9a34e;
-  --brass-dim: #8a744a;
-  --coral: #e2604a;
-  --azure: #6f97f0;
-  --green: #5fbf7a;
+  --ink: #f2faf3;
+  --panel: #ffffff;
+  --hairline: #dceedf;
+  --hairline-soft: #e9f5ea;
+  --paper: #1e2b22;
+  --paper-dim: #71857a;
+  --brass: #2e9b5c;
+  --brass-dim: #1f7a47;
+  --brass-rgb: 46, 155, 92;
+  --coral: #c6684f;
+  --coral-rgb: 198, 104, 79;
+  --azure: #3e8298;
+  --azure-rgb: 62, 130, 152;
+  --green: #2fb873;
+  --green-rgb: 47, 184, 115;
   --mono: 'IBM Plex Mono', monospace;
   --serif: 'Fraunces', Georgia, serif;
   --sans: 'IBM Plex Sans', -apple-system, sans-serif;
 }
-:root[data-theme="light"] {
-  --ink: #f3f1e9;
-  --panel: #ffffff;
-  --hairline: #d9d5c6;
-  --hairline-soft: #e9e6da;
-  --paper: #1b1c26;
-  --paper-dim: #6b6d80;
-  --brass: #9c7a2e;
-  --brass-dim: #8a744a;
-  --coral: #c2402b;
-  --azure: #3457c9;
-  --green: #2c8c4f;
+/* Kış — koyu tema: gece/buz mavisi, yaz paletinin soğuk karşılığı. */
+:root[data-theme="dark"] {
+  --ink: #131a20;
+  --panel: #1c242b;
+  --hairline: #2c3640;
+  --hairline-soft: #242d34;
+  --paper: #e9f1f5;
+  --paper-dim: #8b99a3;
+  --brass: #3e8fb0;
+  --brass-dim: #2e7089;
+  --brass-rgb: 62, 143, 176;
+  --coral: #c97a66;
+  --coral-rgb: 201, 122, 102;
+  --azure: #5aa0b8;
+  --azure-rgb: 90, 160, 184;
+  --green: #63d3f2;
+  --green-rgb: 99, 211, 242;
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--ink); color: var(--paper); font-family: var(--sans); }
@@ -92,8 +102,8 @@ textarea:focus, input:focus { outline: 1px solid var(--azure); }
 .quiz-opt.opt-1 { border-left-color: var(--azure); }
 .quiz-opt.opt-2 { border-left-color: var(--green); }
 .quiz-opt.opt-3 { border-left-color: var(--brass); }
-.quiz-opt.correct { border-color: var(--green); background: rgba(95,191,122,.15); }
-.quiz-opt.wrong { border-color: var(--coral); background: rgba(226,96,74,.15); }
+.quiz-opt.correct { border-color: var(--green); background: rgba(var(--green-rgb),.15); }
+.quiz-opt.wrong { border-color: var(--coral); background: rgba(var(--coral-rgb),.15); }
 .quiz-explain { font-size: 12.5px; color: var(--paper-dim); margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--hairline); }
 .tag { display: inline-block; font-family: var(--mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; margin-bottom: 6px; margin-right: 6px; padding: 2px 6px; border: 1px solid currentColor; }
 .tag.bonus { color: var(--coral); }
@@ -103,7 +113,7 @@ textarea:focus, input:focus { outline: 1px solid var(--azure); }
 .tag.static { color: var(--azure); }
 .tag.fresh { color: var(--brass); }
 .tag.missed { color: var(--coral); }
-.panel.static-curriculum { border-color: var(--azure); background: rgba(111,151,240,.05); }
+.panel.static-curriculum { border-color: var(--azure); background: rgba(var(--azure-rgb),.06); }
 
 .closed-stamp { display: inline-block; border: 2px solid var(--brass); color: var(--brass); font-family: var(--mono); font-size: 13px; letter-spacing: .1em; padding: 6px 14px; transform: rotate(-4deg); margin-top: 10px; }
 .critical-tag { font-family: var(--mono); font-size: 12px; color: var(--azure); margin-top: 8px; }
@@ -172,8 +182,8 @@ label.field-label { display: block; font-family: var(--mono); font-size: 10.5px;
 @keyframes popWrong { 0% { transform: scale(.5); opacity: 0; } 55% { transform: scale(1.08); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
 @keyframes shakeX { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-10px); } 40% { transform: translateX(10px); } 60% { transform: translateX(-6px); } 80% { transform: translateX(6px); } }
 .feedback-banner { text-align: center; font-family: var(--mono); font-size: 14px; padding: 14px; margin-bottom: 14px; border-radius: 2px; }
-.feedback-banner.correct { color: var(--green); border: 1px solid var(--green); background: rgba(95,191,122,.1); animation: popCorrect .5s ease; }
-.feedback-banner.wrong { color: var(--coral); border: 1px solid var(--coral); background: rgba(226,96,74,.1); animation: popWrong .3s ease, shakeX .4s ease .1s; }
+.feedback-banner.correct { color: var(--green); border: 1px solid var(--green); background: rgba(var(--green-rgb),.12); animation: popCorrect .5s ease; }
+.feedback-banner.wrong { color: var(--coral); border: 1px solid var(--coral); background: rgba(var(--coral-rgb),.12); animation: popWrong .3s ease, shakeX .4s ease .1s; }
 
 /* Lesson path (league guide academy) — sequential course rows with a status icon. */
 .lesson-path { display: flex; flex-direction: column; gap: 8px; margin: 14px 0; }
@@ -207,7 +217,7 @@ label.field-label { display: block; font-family: var(--mono); font-size: 10.5px;
 .avatar-hero { font-size: 64px; text-align: center; margin-bottom: 6px; }
 .avatar-grid { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-bottom: 4px; }
 .avatar-opt { font-size: 22px; padding: 8px 12px; border: 1px solid var(--hairline); background: var(--ink); cursor: pointer; }
-.avatar-opt.selected { border-color: var(--brass); background: rgba(201,163,78,.12); }
+.avatar-opt.selected { border-color: var(--brass); background: rgba(var(--brass-rgb),.12); }
 .badge-wall { display: flex; flex-wrap: wrap; gap: 10px; }
 .badge { display: flex; align-items: center; gap: 8px; border: 1px solid var(--hairline); padding: 8px 12px; font-family: var(--mono); font-size: 11.5px; color: var(--paper-dim); }
 .badge.earned { border-color: var(--brass); color: var(--brass); }

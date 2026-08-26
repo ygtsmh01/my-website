@@ -8,10 +8,10 @@ interface ThemeCtx {
   toggleTheme: () => void;
 }
 
-const Ctx = createContext<ThemeCtx>({ theme: 'dark', toggleTheme: () => {} });
+const Ctx = createContext<ThemeCtx>({ theme: 'light', toggleTheme: () => {} });
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem(THEME_KEY) as Theme) || 'dark');
+  const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem(THEME_KEY) as Theme) || 'light');
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);

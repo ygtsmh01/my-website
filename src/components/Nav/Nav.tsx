@@ -86,7 +86,7 @@ export default function Nav() {
         )}
         <div className="aitakip-nav-sep" />
         <button className="aitakip-item" onClick={toggleTheme}>
-          {theme === 'dark' ? '☀ Aydınlık Tema' : '🌙 Karanlık Tema'}
+          {theme === 'dark' ? '☀️ Yaz Tema' : '❄️ Kış Tema'}
         </button>
         <button className="aitakip-item" onClick={logout}>🚪 Çıkış Yap</button>
       </div>
