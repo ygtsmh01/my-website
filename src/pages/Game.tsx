@@ -640,7 +640,7 @@ export default function Game() {
       <div className="root">
         <div className="ledger-head" style={{ paddingLeft: 0 }}>
           <div><div className="eyebrow">AI Takip Defteri</div><h1>Giriş</h1></div>
-          <button className="btn ghost" onClick={toggleTheme}>{theme === 'dark' ? '☀️ Yaz' : '❄️ Kış'}</button>
+          <button className="btn ghost" onClick={toggleTheme}>{theme === 'dark' ? '☀ Aydınlık' : '🌙 Karanlık'}</button>
         </div>
         <div className="panel">
           <div className="tabs">
