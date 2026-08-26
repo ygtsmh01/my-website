@@ -189,12 +189,22 @@ export default function Game() {
   // several lessons. Only applies while the guide is still in progress —
   // once completed, a fresh session intentionally starts any optional
   // half-XP replay back at lesson 0.
+  // This is the ONLY place lessonIndex/passedLessons get set from outside a
+  // direct user action — it used to also be zeroed by a separate "reset on
+  // tier change" effect below, which raced with this one (both depend on
+  // profile loading/changing) and could silently wipe a just-restored
+  // resume point back to lesson 0. No progress row yet, or a completed
+  // guide, both mean "start this tier's lesson path at 0" (a completed
+  // guide's optional replay intentionally always starts fresh).
   useEffect(() => {
-    if (leagueProgress && !leagueProgress.completed) {
-      const idx = leagueProgress.current_lesson_index || 0;
-      setLessonIndex(idx);
-      setPassedLessons(new Set(Array.from({ length: idx }, (_, i) => i)));
+    if (!leagueProgress || leagueProgress.completed) {
+      setLessonIndex(0);
+      setPassedLessons(new Set());
+      return;
     }
+    const idx = leagueProgress.current_lesson_index || 0;
+    setLessonIndex(idx);
+    setPassedLessons(new Set(Array.from({ length: idx }, (_, i) => i)));
   }, [leagueProgress]);
 
   // "Kullanıcı" (tier_index 4) ve üzeri haftalık seri kuralını, hafta içeriği ve profil hazır
@@ -212,11 +222,10 @@ export default function Game() {
     if (!localStorage.getItem(ONBOARDING_KEY)) setOnboardingStep(0);
   }, [profile?.id]);
 
-  // Reset the lesson-path (academy) progress whenever the active league tier changes —
-  // a fresh tier always starts from lesson 0 with nothing passed yet.
+  // Reset the in-progress quiz-taking UI state whenever the active league tier changes.
+  // lessonIndex/passedLessons are NOT reset here — that's the league_progress-driven
+  // effect above, which knows whether this tier already has a resume point.
   useEffect(() => {
-    setLessonIndex(0);
-    setPassedLessons(new Set());
     setLessonResults({});
     setLessonAnswers({});
     setLessonStepIndex(0);
