@@ -267,17 +267,37 @@ function optionLengthDeviation(options: string[]): number {
   return Math.max(...lens.map((l) => Math.abs(l - mean) / mean));
 }
 
+// Modele "karakterleri dengele" demek onun kendi kafasında uzunluk tahmin
+// etmesini gerektiriyordu — LLM'ler bunda zayıf, sonuç genelde toleransın
+// hemen dışında kalıyordu. Bunun yerine gerçek karakter sayılarını KOD
+// tarafında ölçüp, her şık için tam olarak kaç karakter kısaltılıp/
+// uzatılacağını somut sayılarla veriyoruz — model artık tahmin değil, basit
+// bir düzenleme talimatı uyguluyor.
+function rebalanceInstructions(options: string[]): string {
+  const lens = options.map((o) => o.trim().length);
+  const target = Math.round(lens.reduce((a, b) => a + b, 0) / lens.length);
+  return options
+    .map((o, i) => {
+      const delta = target - lens[i];
+      const action = delta > 10 ? `yaklaşık ${delta} karakter UZAT` : delta < -10 ? `yaklaşık ${-delta} karakter KISALT` : 'uzunluğu zaten uygun, olduğu gibi bırak';
+      return `  - Şık ${i} (şu an ${lens[i]} karakter, hedef ~${target}): ${action}`;
+    })
+    .join('\n');
+}
+
 async function rebalanceOptions(question: string, options: string[], correctIndex: number, apiKey: string): Promise<string[]> {
-  const targetLen = Math.round(options.reduce((a, o) => a + o.trim().length, 0) / options.length);
-  const prompt = `Aşağıdaki çoktan seçmeli sorunun şıkları uzunluk/detay bakımından dengesiz — hangi şıkkın en uzun/en detaylı (ya da en kısa) olduğuna bakarak, içeriği hiç bilmeyen biri bile doğru cevabı tahmin edebiliyor. Bunu KESİN olarak düzelt:
+  const prompt = `Aşağıdaki çoktan seçmeli sorunun şıkları uzunluk/detay bakımından dengesiz — hangi şıkkın en uzun/en detaylı (ya da en kısa) olduğuna bakarak, içeriği hiç bilmeyen biri bile doğru cevabı tahmin edebiliyor. Karakter sayıları ölçüldü, her şık için tam olarak ne yapman gerektiği aşağıda — bunu harfiyen uygula:
 
 Soru: ${question}
 Mevcut şıklar (index'e göre): ${JSON.stringify(options)}
-Doğru şık index'i: ${correctIndex} (bu bilgiyi SADECE anlamı bozmamak için kullan, çıktıda belli etme)
+Doğru şık index'i: ${correctIndex} (bu bilgiyi SADECE anlamı bozmamak için kullan, çıktıda belli etme — doğru şıkkı "referans/tavan" olarak sabit bırakma, gerekirse onu da kısalt)
 
-Kurallar:
-- DÖRT şıkkın da (doğru olan DAHİL — doğru şıkkı "referans/tavan" olarak sabit bırakma, gerekirse onu da kısalt/sadeleştir) karakter sayısı birbirine YAKLAŞIK EŞİT olsun — hedef: her şık yaklaşık ${targetLen} karakter (±%15 tolerans).
-- Hiçbir şık diğerlerinden daha "kesin/emin/resmi" bir dille yazılmasın — dördü de aynı özgüven/somutluk seviyesinde, aynı cümle yapısında olsun.
+Yapılacaklar (ölçülmüş karakter sayılarına göre):
+${rebalanceInstructions(options)}
+
+Diğer kurallar:
+- Uzatırken inandırıcı ama yanlış bir detay/mekanizma/sayı ekleyerek zenginleştir; kısaltırken anlamı bozmadan sadeleştir.
+- Hiçbir şık diğerlerinden daha "kesin/emin/resmi" bir dille yazılmasın — dördü de aynı özgüven seviyesinde, benzer cümle yapısında olsun.
 - Anlamı ve hangi şıkkın doğru olduğunu DEĞİŞTİRME — sadece ifade/uzunluk dengelensin.
 
 SADECE şu şemaya uyan geçerli JSON döndür, başka açıklama ekleme: { "options": ["...", "...", "...", "..."] } — şık sayısı ve sırası AYNI kalsın.`;
@@ -291,17 +311,25 @@ SADECE şu şemaya uyan geçerli JSON döndür, başka açıklama ekleme: { "opt
 }
 
 // Bir soru listesindeki (quiz ya da capstone) dengesiz şıklı soruları tek
-// tek modele geri gönderip düzeltir. En fazla 2 deneme yapılır (tek seferde
-// tam yakınsamayabiliyor); hâlâ dengesizse elimizdeki en iyi sonuçla devam
-// edilir. Sıralı çalışır (paralel değil) — tipik olarak sadece birkaç soru
-// dengesiz çıkıyor, çoğu zaman hiç ek çağrı olmuyor.
+// tek modele geri gönderip düzeltir. En fazla 3 deneme yapılır ve HER
+// denemede sapma azaldıysa sonuç güncellenir (kötüleşirse önceki, daha iyi
+// sonuç korunur) — "en son deneme" değil "görülen en iyi deneme" kullanılır.
+// Sıralı çalışır (paralel değil) — tipik olarak sadece birkaç soru dengesiz
+// çıkıyor, çoğu zaman hiç ek çağrı olmuyor.
 async function enforceOptionBalance<T extends { question: string; options: string[]; correct_index: number }>(questions: T[], apiKey: string): Promise<T[]> {
   const result = [...questions];
   for (let i = 0; i < result.length; i++) {
-    for (let attempt = 0; attempt < 2 && optionLengthDeviation(result[i].options) > OPTION_BALANCE_DEVIATION; attempt++) {
-      const newOptions = await rebalanceOptions(result[i].question, result[i].options, result[i].correct_index, apiKey);
-      result[i] = { ...result[i], options: newOptions } as T;
+    let bestOptions = result[i].options;
+    let bestDeviation = optionLengthDeviation(bestOptions);
+    for (let attempt = 0; attempt < 3 && bestDeviation > OPTION_BALANCE_DEVIATION; attempt++) {
+      const candidate = await rebalanceOptions(result[i].question, bestOptions, result[i].correct_index, apiKey);
+      const candidateDeviation = optionLengthDeviation(candidate);
+      if (candidateDeviation < bestDeviation) {
+        bestOptions = candidate;
+        bestDeviation = candidateDeviation;
+      }
     }
+    result[i] = { ...result[i], options: bestOptions } as T;
   }
   return result;
 }
