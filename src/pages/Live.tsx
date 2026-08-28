@@ -87,7 +87,10 @@ export default function Live() {
     if (!room) return;
     const channel = sb.channel('room-' + room.id)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'live_rooms', filter: `id=eq.${room.id}` }, (payload: any) => {
-        setRoom(payload.new);
+        // Realtime drops oversized columns (the `questions` jsonb) from the change
+        // payload, so merge the delta onto the row we already hold instead of
+        // replacing it — questions never change after the room is created.
+        setRoom((prev) => (prev ? { ...prev, ...payload.new } : payload.new));
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'live_participants', filter: `room_id=eq.${room.id}` }, () => {
         refreshParticipants(room.id);
