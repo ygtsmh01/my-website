@@ -2,31 +2,18 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { sb } from '../lib/supabase';
 import TimerRing from '../components/TimerRing';
+import { fetchQuestionPool, generateCode } from '../lib/liveQuestions';
+import { useQuickMatch } from '../lib/useQuickMatch';
 import type { League, LiveParticipant, LiveRoom, Profile } from '../lib/types';
 
 const QUESTION_SECONDS = 15;
-const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const LIVE_ROOM_STORAGE_KEY = 'aitakip_live_room_id';
-
-function shuffle<T>(arr: T[]): T[] {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-}
-function generateCode() {
-  let s = '';
-  for (let i = 0; i < 5; i++) s += CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)];
-  return s;
-}
 
 export default function Live() {
   const [session, setSession] = useState<any>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState<'menu' | 'room'>('menu');
+  const [view, setView] = useState<'menu' | 'queue' | 'room'>('menu');
   const [error, setError] = useState('');
   const [joinCodeInput, setJoinCodeInput] = useState('');
   const [duelBetChoice, setDuelBetChoice] = useState(0);
@@ -43,6 +30,19 @@ export default function Live() {
   const advancingRef = useRef(false);
   useEffect(() => { roomRef.current = room; }, [room]);
   useEffect(() => { advancingRef.current = false; setAnsweredCount(0); }, [room?.current_question_index]);
+
+  const [fromQuickMatch, setFromQuickMatch] = useState(false);
+  const qm = useQuickMatch(profile);
+  // Quick-match found a room for us: drop into the normal room flow.
+  useEffect(() => {
+    if (qm.status === 'matched' && qm.room) {
+      setRoom(qm.room);
+      setFromQuickMatch(true);
+      localStorage.setItem(LIVE_ROOM_STORAGE_KEY, qm.room.id);
+      setView('room');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [qm.status, qm.room?.id]);
 
   useEffect(() => {
     sb.auth.getSession().then(({ data }) => { setSession(data.session); setLoading(false); });
@@ -199,27 +199,6 @@ export default function Live() {
     setParticipants(data || []);
   }
 
-  async function fetchQuestionPool(leagueTier: number) {
-    // Cap how many past weeks we pull questions from — without this, the pool
-    // (and the network payload) grows without bound as weeks accumulate.
-    const { data } = await sb.from('weeks').select('quiz').eq('status', 'published')
-      .order('week_number', { ascending: false }).limit(26);
-    let all: any[] = [];
-    (data || []).forEach((w: any) => {
-      (w.quiz || []).forEach((q: any) => {
-        all.push({ question: q.question, options: q.options, correct_index: q.correct_index, explanation: q.explanation });
-      });
-    });
-    const { data: league } = await sb.from('leagues').select('content').eq('tier_index', leagueTier).single();
-    const leagueContent = (league as any)?.content;
-    if (leagueContent && leagueContent.quiz) {
-      (leagueContent.quiz || []).forEach((q: any) => {
-        all.push({ question: q.question, options: q.options, correct_index: q.correct_index, explanation: q.explanation });
-      });
-    }
-    return shuffle(all);
-  }
-
   async function createRoom(mode: 'room' | 'duel') {
     setError('');
     const pool = await fetchQuestionPool(profile!.league_tier);
@@ -320,6 +299,7 @@ export default function Live() {
     setMyAnswer(null);
     setAwardedBonus(null);
     setBetResult(null);
+    setFromQuickMatch(false);
     setView('menu');
   }
 
@@ -346,6 +326,15 @@ export default function Live() {
         <div className="eyebrow" style={{ paddingLeft: 46 }}>AI Takip Defteri · {profile.avatar} {profile.username}</div>
         <h1 style={{ paddingLeft: 46 }}>Canlı Yarışma</h1>
         <p className="panel-sub">Ligin: <strong>{leagues.find((l) => l.tier_index === profile.league_tier)?.name || '—'}</strong>. Herkesle yarışabilirsin.</p>
+
+        <div className="panel live-quickmatch">
+          <p className="panel-title">⚡ Hızlı Eşleş</p>
+          <p className="panel-sub">
+            Kod paylaşmana gerek yok. Butona bas, sıraya gir; en az 2 kişi birikince yarışma otomatik başlar.
+            Haftalık ve lig sorularından karışık 12 soru, bahissiz.
+          </p>
+          <button className="btn" onClick={() => { qm.join(); setView('queue'); }}>Hızlı Eşleş</button>
+        </div>
 
         <div className="mode-row">
           <div className="panel" style={{ cursor: 'default' }}>
@@ -396,6 +385,35 @@ export default function Live() {
     );
   }
 
+  if (view === 'queue') {
+    const secs = qm.startsInMs != null ? Math.ceil(qm.startsInMs / 1000) : null;
+    return (
+      <div className="root wide">
+        <div className="top-bar-row">
+          <button className="btn ghost" onClick={() => { qm.cancel(); setView('menu'); }}>Sıradan Çık</button>
+        </div>
+        <div className="eyebrow">Hızlı Eşleş</div>
+        <h1>Rakip Aranıyor</h1>
+        <div className="panel" style={{ textAlign: 'center' }}>
+          <div className="code-display">{qm.waiting}</div>
+          <p className="panel-sub">{qm.waiting === 1 ? 'kişi sırada (sadece sen)' : 'kişi sırada'}</p>
+          {qm.status === 'starting' && secs != null && (
+            <p className="panel-title" style={{ marginTop: 8 }}>
+              {secs > 0 ? `Yarışma ${secs} sn içinde başlıyor…` : 'Yarışma başlıyor…'}
+            </p>
+          )}
+          {qm.status === 'queued' && (
+            <p className="panel-sub" style={{ marginTop: 8 }}>En az 2 kişi bekleniyor. Sen sıradayken başkaları da katılabilir.</p>
+          )}
+        </div>
+        {qm.error && <div className="error-box">{qm.error}</div>}
+        {qm.status === 'error' && (
+          <button className="btn secondary" onClick={() => { qm.cancel(); setView('menu'); }}>Menüye Dön</button>
+        )}
+      </div>
+    );
+  }
+
   if (!room) return <div className="root wide"><p className="panel-sub">Oda yükleniyor…</p></div>;
 
   const isHost = room.host_id === profile.id;
@@ -405,11 +423,13 @@ export default function Live() {
     return (
       <div className="root wide">
         <div className="top-bar-row"><button className="btn ghost" onClick={leaveRoom}>Odadan Ayrıl</button></div>
-        <div className="eyebrow">{room.mode === 'duel' ? 'Düello' : 'Canlı Oda'} · Bekleniyor</div>
-        <h1>Oda Kodu</h1>
+        <div className="eyebrow">{fromQuickMatch ? 'Hızlı Eşleş' : room.mode === 'duel' ? 'Düello' : 'Canlı Oda'} · Bekleniyor</div>
+        <h1>{fromQuickMatch ? 'Yarışma Başlıyor' : 'Oda Kodu'}</h1>
         <div className="panel">
-          <div className="code-display">{room.code}</div>
-          <p className="panel-sub" style={{ textAlign: 'center' }}>Bu kodu paylaş, katılanlar burada görünecek.</p>
+          {!fromQuickMatch && <div className="code-display">{room.code}</div>}
+          <p className="panel-sub" style={{ textAlign: 'center' }}>
+            {fromQuickMatch ? 'Eşleştin! Yarışma birkaç saniye içinde otomatik başlayacak.' : 'Bu kodu paylaş, katılanlar burada görünecek.'}
+          </p>
           {room.mode === 'duel' && (
             <p className="panel-sub" style={{ textAlign: 'center' }}>
               {room.bet_amount > 0 ? `⚔ Bahis: ${room.bet_amount} XP — kaybeden bu kadar XP'sini kazanana kaptırır.` : 'Bahissiz düello.'}
@@ -429,7 +449,9 @@ export default function Live() {
             </div>
           ))}
         </div>
-        {isHost ? (
+        {fromQuickMatch ? (
+          <p className="panel-sub">Otomatik başlıyor…</p>
+        ) : isHost ? (
           room.mode === 'duel' ? (
             <button className="btn secondary" onClick={startGame} disabled={participants.length < 2}>
               {participants.length < 2 ? 'Düello için 2 katılımcı gerekli' : 'Yarışmayı Başlat'}

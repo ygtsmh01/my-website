@@ -263,6 +263,9 @@ label.field-label { display: block; font-family: var(--mono); font-size: 10.5px;
 .participant-row.me { color: var(--brass); }
 .participant-row .rank { display: inline-block; width: 26px; color: var(--paper-dim); }
 .timer-badge { display: inline-block; font-family: var(--mono); font-size: 20px; color: var(--coral); border: 2px solid var(--coral); border-radius: 50%; width: 46px; height: 46px; text-align: center; line-height: 42px; margin-bottom: 14px; }
+.live-quickmatch { border-color: var(--brass); background: linear-gradient(135deg, rgba(var(--brass-rgb),.12), rgba(var(--brass-rgb),.04)); }
+.live-quickmatch .btn { margin-top: 4px; }
+
 .mode-row { display: flex; gap: 12px; flex-wrap: wrap; }
 .mode-row .panel { flex: 1; min-width: 220px; cursor: pointer; }
 .mode-row .panel:hover { border-color: var(--azure); }
