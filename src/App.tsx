@@ -3,6 +3,7 @@ import { HashRouter, Routes, Route } from 'react-router-dom';
 import { ThemeProvider } from './lib/ThemeContext';
 import Nav from './components/Nav/Nav';
 import Game from './pages/Game';
+import ErrorBoundary from './components/ErrorBoundary';
 import BackgroundTaskToasts from './lib/BackgroundTaskToasts';
 
 const Admin = lazy(() => import('./pages/Admin'));
@@ -19,22 +20,24 @@ export default function App() {
   return (
     <ThemeProvider>
       <HashRouter>
-        <Nav />
-        <BackgroundTaskToasts />
-        <Suspense fallback={<div className="root"><p className="panel-sub">Yükleniyor…</p></div>}>
-          <Routes>
-            <Route path="/" element={<Game />} />
-            <Route path="/admin" element={<Admin />} />
-            <Route path="/admin/haftalik-icerik" element={<AdminWeeks />} />
-            <Route path="/admin/lig-yonetimi" element={<AdminLeagues />} />
-            <Route path="/admin/kullanicilar" element={<AdminUsers />} />
-            <Route path="/live" element={<Live />} />
-            <Route path="/profile" element={<Profile />} />
-            <Route path="/history" element={<History />} />
-            <Route path="/leaderboard" element={<Leaderboard />} />
-            <Route path="/guide" element={<Guide />} />
-          </Routes>
-        </Suspense>
+        <ErrorBoundary>
+          <Nav />
+          <BackgroundTaskToasts />
+          <Suspense fallback={<div className="root"><p className="panel-sub">Yükleniyor…</p></div>}>
+            <Routes>
+              <Route path="/" element={<Game />} />
+              <Route path="/admin" element={<Admin />} />
+              <Route path="/admin/haftalik-icerik" element={<AdminWeeks />} />
+              <Route path="/admin/lig-yonetimi" element={<AdminLeagues />} />
+              <Route path="/admin/kullanicilar" element={<AdminUsers />} />
+              <Route path="/live" element={<Live />} />
+              <Route path="/profile" element={<Profile />} />
+              <Route path="/history" element={<History />} />
+              <Route path="/leaderboard" element={<Leaderboard />} />
+              <Route path="/guide" element={<Guide />} />
+            </Routes>
+          </Suspense>
+        </ErrorBoundary>
       </HashRouter>
     </ThemeProvider>
   );
