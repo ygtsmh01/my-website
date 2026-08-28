@@ -2,15 +2,18 @@ import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { sb } from '../../lib/supabase';
 import { useTheme } from '../../lib/ThemeContext';
+import { useOnlinePresence } from '../../lib/useOnlinePresence';
 import './nav.css';
 
+// Canlı Yarışma leads the list — it's the app's flagship feature, everything else
+// (practice, academy) supports it rather than the other way around.
 const LINKS = [
-  { to: '/', label: '🎮 Oyun' },
+  { to: '/live', label: '⚡ Canlı Yarışma' },
+  { to: '/', label: '🏋️ Antrenman' },
   { to: '/profile', label: '👤 Profil' },
   { to: '/leaderboard', label: '🏆 Sıralama' },
   { to: '/history', label: '📚 Geçmiş' },
-  { to: '/live', label: '⚡ Canlı Yarışma' },
-  { to: '/guide', label: '❓ Kılavuz' },
+  { to: '/guide', label: '🎓 Akademi' },
 ];
 
 const ADMIN_SUBLINKS = [
@@ -27,6 +30,7 @@ export default function Nav() {
   const { theme, toggleTheme } = useTheme();
   const location = useLocation();
   const navigate = useNavigate();
+  const onlineCount = useOnlinePresence(uid);
 
   useEffect(() => {
     sb.auth.getSession().then(({ data }) => {
@@ -60,6 +64,9 @@ export default function Nav() {
         {LINKS.map((l) => (
           <Link key={l.to} to={l.to} className={location.pathname === l.to ? 'active' : ''} onClick={() => setOpen(false)}>
             {l.label}
+            {l.to === '/live' && onlineCount > 0 && (
+              <span className="aitakip-online-badge"><span className="aitakip-online-dot" />{onlineCount} çevrimiçi</span>
+            )}
           </Link>
         ))}
         {isAdmin && (

@@ -56,7 +56,7 @@ export default function Guide() {
   return (
     <div className="root toppad" id="root">
       <div className="eyebrow" style={{ textAlign: 'center' }}>AI Takip Defteri</div>
-      <h1 style={{ textAlign: 'center' }}>📖 Kılavuz</h1>
+      <h1 style={{ textAlign: 'center' }}>🎓 Akademi</h1>
 
       <div className="panel">
         <div className="emoji">🎮</div>

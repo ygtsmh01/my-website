@@ -20,6 +20,11 @@
 .aitakip-nav-drawer a.active { color: var(--brass); }
 .aitakip-nav-sep { height: 1px; background: var(--hairline); margin: 10px 0; }
 
+.aitakip-online-badge {
+  display: flex; align-items: center; gap: 5px; margin-top: 3px;
+  font-size: 10.5px; letter-spacing: .03em; color: var(--brass);
+}
+
 .aitakip-admin-row { display: flex; align-items: stretch; }
 .aitakip-admin-link { flex: 1; }
 .aitakip-admin-toggle {

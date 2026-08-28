@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { sb } from '../lib/supabase';
 import TimerRing from '../components/TimerRing';
 import { useTheme } from '../lib/ThemeContext';
+import { useOnlinePresence } from '../lib/useOnlinePresence';
 import { evaluateLeagueStreak, LEAGUE_STREAK_FLOOR_TIER, SUCCESS_STREAK_NEEDED } from '../lib/leagueStreak';
 import type { League, LeagueProgress, Profile, QuizQuestion, RiskOrBossQuestion, Week } from '../lib/types';
 
@@ -11,10 +13,10 @@ const AVATAR_OPTIONS = ['🙂', '🦊', '🐙', '🐼', '🦉', '🐳', '🦁', 
 const ONBOARDING_KEY = 'aitakip_onboarding_seen_v1';
 const SWIPE_THRESHOLD = 45;
 const ONBOARDING_SLIDES = [
-  { emoji: '🎮', title: 'Haftalık Oyun', text: 'Her hafta yeni kaynaklar gelir. Okuyup soru soru ilerleyen sınavı çöz, XP kazan.' },
-  { emoji: '🏅', title: 'Lig Sistemi', text: 'Sabit rehberindeki tüm üniteleri ve bitirme sınavını tamamla, ligini yükselt.' },
-  { emoji: '⚡', title: 'Canlı Yarışma', text: "Arkadaşlarınla oda kur ya da düello yap, gerçek zamanlı yarış." },
-  { emoji: '☰', title: 'Her An Kılavuza Dön', text: 'Sol üstteki menüden Profil, Sıralama, Geçmiş ve Kılavuz sayfalarına ulaşabilirsin.' },
+  { emoji: '⚡', title: 'Canlı Yarışma', text: 'Kalbi burada atıyor: oda kur ya da düello yap, gerçek zamanlı yarış, XP için bahse gir.' },
+  { emoji: '🏋️', title: 'Antrenman', text: 'Her hafta yeni kaynaklar gelir. Okuyup soru soru ilerleyen sınavı çöz, yarışmaya hazırlan.' },
+  { emoji: '🎓', title: 'Akademi', text: 'Sabit müfredattaki tüm üniteleri ve bitirme sınavını tamamla, ligini yükselt.' },
+  { emoji: '☰', title: 'Her An Menüye Dön', text: 'Sol üstteki menüden Profil, Sıralama, Geçmiş ve Akademi sayfalarına ulaşabilirsin.' },
 ];
 
 // Persists the in-progress weekly quiz/extra-stage answers to localStorage, keyed per user+week.
@@ -80,6 +82,7 @@ export default function Game() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
   const { theme, toggleTheme } = useTheme();
+  const onlineCount = useOnlinePresence(profile?.id ?? null);
 
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [loginIdentifier, setLoginIdentifier] = useState('');
@@ -810,6 +813,16 @@ export default function Game() {
           <button className="btn ghost" onClick={() => setOnboardingStep(0)}>❔ Nasıl Kullanılır</button>
         </div>
       </div>
+
+      <Link to="/live" className="live-cta-banner">
+        <div className="live-cta-text">
+          <span className="live-cta-title">⚡ Canlı Yarışma</span>
+          <span className="live-cta-sub">
+            {onlineCount > 0 ? <><span className="aitakip-online-dot" /> {onlineCount} kişi çevrimiçi — hemen bir oda kur ya da düello iste</> : 'Oda kur ya da düello başlat, gerçek zamanlı yarış'}
+          </span>
+        </div>
+        <span className="live-cta-arrow">→</span>
+      </Link>
 
       <div className="stat-strip">
         <div className="stat-cell">
